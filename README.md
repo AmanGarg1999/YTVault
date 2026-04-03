@@ -46,9 +46,7 @@ YouTube is the world's largest repository of human expertise, but it's optimized
 ### 💾 Hybrid Three-Layer Storage
 - **Relational (SQLite)** — Structured metadata, triage status, pipeline checkpoints, claims, quotes
 - **Vector (ChromaDB)** — Semantic embeddings with sliding-window or semantic-boundary chunking
-- **Graph (Neo4j)** — Entity relationships: Guests ↔ Videos ↔ Topics ↔ Claims ↔ Channels
-
-### 🧠 Intelligence Layer
+- **Graph (Neo4j)** — Entity relationships: Gu### 🧠 Intelligence Layer
 - **Hybrid RAG Engine** — Reciprocal Rank Fusion (RRF) combining ChromaDB semantic vectors with SQLite FTS5 exact full-text search.
 - **Per-Chunk Deep Analysis** — Every transcript chunk is independently analyzed for topics, entities, claims, and quotes — not just the first few minutes.
 - **Claim/Assertion Extraction** — Automatically identifies who said what: "Naval argues that specific knowledge can't be taught." Stored as structured graph data.
@@ -63,14 +61,15 @@ YouTube is the world's largest repository of human expertise, but it's optimized
 - **Entity Resolution** — Fuzzy matching + LLM disambiguation for guest deduplication across channels.
 - **Tiered Model Strategy** — Fast 3B model for triage/NER, deep 8B model for synthesis/claims.
 
-### 🛡️ Local-First Privacy
-- **Zero cloud dependencies** — All LLM inference via Ollama (Llama 3.2 / 3.1)
-- **No media downloads** — Only metadata and transcripts (storage-efficient)
-- **Your data stays yours** — No API keys, no telemetry
-
-### ⚡ Resilience
-- **Crash-safe Checkpoints** — Resume interrupted scans from exact point of failure
-- **Per-video stage tracking** — Each video independently tracks its pipeline progress
+### ⚡ Resilience & Control
+- **Real-Time Logging** — Comprehensive event tracking with SUCCESS/INFO/WARNING/ERROR levels and full tracebacks.
+- **Pipeline Control** — Pause, resume, or stop ingestion scans gracefully at any safe point (between videos).
+- **Crash-safe Checkpoints** — Resume interrupted scans from the exact point of failure.
+- **Video Queue Management** — Pre-processing queue control (skip/remove discovered videos).
+- **Data Management** — Safe deletion of video/channel data with cascading cleanup and audit trail.
+- **Per-video stage tracking** — Each video independently tracks its 10-stage pipeline progress.
+- **Graceful degradation** — Neo4j/SponsorBlock failures don't break the pipeline.
+ pipeline progress
 - **Graceful degradation** — Neo4j/SponsorBlock failures don't break the pipeline
 
 ---
@@ -210,6 +209,9 @@ Launch with `kvault ui` and open `http://localhost:8501`:
 | **👤 Guest Intelligence** | Cross-channel guest appearances, topic evolution, mention tracking. |
 | **🧠 Knowledge Explorer** | Interactive graph visualization, topic spotlights, entity connections. |
 | **📊 Pipeline Monitor** | Real-time multi-stage process pipeline tracking with channel health. |
+| **📋 Logs & Activity** | Real-time pipeline events, error analysis, and event timeline for troubleshooting. |
+| **🎮 Pipeline Control** | Central hub for pausing/resuming scans and managing the discovery queue. |
+| **🗑️ Data Management** | Safe data deletion tools with preview capability and audit history. |
 | **📤 Export Center** | Export graph structures in Markdown/JSON/CSV. |
 
 ---
@@ -286,31 +288,32 @@ knowledgeVault-YT/
 │   │   ├── transcript.py          # Transcript fetching
 │   │   └── refinement.py          # SponsorBlock + LLM normalization
 │   ├── storage/                   # Data layer
-│   │   ├── sqlite_store.py        # Relational storage (9 migrations)
+│   │   ├── sqlite_store.py        # Relational storage (12 migrations)
 │   │   ├── vector_store.py        # ChromaDB embeddings
 │   │   └── graph_store.py         # Neo4j graph + Claim nodes
 │   ├── intelligence/              # AI features
-│   │   ├── chunk_analyzer.py      # NEW: per-chunk deep analysis
-│   │   ├── semantic_chunker.py    # NEW: topic-boundary chunking
+│   │   ├── chunk_analyzer.py      # Per-chunk deep analysis
+│   │   ├── semantic_chunker.py    # Topic-boundary chunking
 │   │   ├── rag_engine.py          # Hybrid RAG query pipeline
 │   │   ├── summarizer.py          # Map-reduce summarization
 │   │   ├── epiphany_engine.py     # Cross-channel insights
 │   │   ├── entity_resolver.py     # Guest NER + deduplication
-│   │   ├── taxonomy_builder.py    # NEW: topic hierarchy
+│   │   ├── taxonomy_builder.py    # Topic hierarchy
 │   │   ├── explorer.py            # Graph traversal + visualization
 │   │   ├── query_parser.py        # Structured query syntax
 │   │   └── export.py              # Multi-format export
 │   ├── pipeline/                  # Orchestration
 │   │   ├── orchestrator.py        # 10-stage pipeline coordinator
 │   │   ├── checkpoint.py          # Crash-safe resume
-│   │   └── worker.py              # Process-based background worker
+│   │   └── worker.py              # Multiprocessing background worker
 │   ├── utils/
 │   │   ├── llm_pool.py            # Concurrent LLM batch executor
 │   │   ├── retry.py               # Retry + circuit breaker
-│   │   └── health.py              # Service health checks
+│   │   ├── health.py              # Service health checks
+│   │   └── eta.py                 # Time estimates for ingestion
 │   └── ui/
 │       ├── app.py                 # Streamlit shell + routing
-│       └── pages/                 # 8 page modules
+│       └── pages/                 # 11 page modules
 │           ├── dashboard.py
 │           ├── harvest.py
 │           ├── ambiguity.py
@@ -318,6 +321,9 @@ knowledgeVault-YT/
 │           ├── guest_intel.py
 │           ├── explorer.py
 │           ├── pipeline_monitor.py
+│           ├── logs_monitor.py
+│           ├── pipeline_control.py
+│           ├── data_management.py
 │           └── export_center.py
 ├── tests/                         # Test suite (110+ tests)
 ├── docker-compose.yml

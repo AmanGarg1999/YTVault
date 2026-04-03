@@ -1,7 +1,7 @@
 # knowledgeVault-YT: Technical Specification Document
 
-> **Version:** 1.0.0-MVP  
-> **Date:** 2026-03-30  
+> **Version:** 1.1.0-Stabilized  
+> **Date:** 2026-04-04  
 > **Classification:** Local-First Research Intelligence System  
 
 ---
@@ -24,81 +24,76 @@ Every architectural decision in this document directly addresses three core fric
 
 ```mermaid
 graph TB
-    subgraph "User Layer"
-        UI["Streamlit Command Center"]
-        AQ["Ambiguity Queue UI"]
-        QI["Research Query Interface"]
+    subgraph "User Layer (Streamlit)"
+        UI["Command Center Shell"]
+        AQ["Ambiguity Queue"]
+        QI["Research Console"]
+        PM["Pipeline Monitor"]
+        PC["Pipeline Control Center"]
+        LM["Logs & Activity"]
+    end
+
+    subgraph "Orchestration Layer"
+        WK["Multiprocessing Worker"]
+        OR["10-Stage Orchestrator"]
+        CP["Checkpoint Manager"]
     end
 
     subgraph "Ingestion Pipeline"
-        DL["Discovery Logic<br/>(yt-dlp metadata)"]
-        TE["Triage Engine<br/>(Ollama/Llama-3)"]
-        RF["Refinement Layer<br/>(SponsorBlock + NLP)"]
-    end
-
-    subgraph "Data Architecture"
-        subgraph "Layer 1: Relational"
-            PG["SQLite<br/>(Channels, Videos, Guests)"]
-        end
-        subgraph "Layer 2: Vector"
-            CH["ChromaDB<br/>(Transcript Chunks + Embeddings)"]
-        end
-        subgraph "Layer 3: Graph"
-            NE["Neo4j<br/>(Entity Relationships)"]
-        end
+        DL["Discovery (yt-dlp stream)"]
+        TE["Triage Engine (Rules+LLM)"]
+        TR["Transcript Fetcher"]
+        RF["Normalization (SponsorBlock+LLM)"]
     end
 
     subgraph "Intelligence Layer"
-        RAG["RAG Engine<br/>(Retrieval-Augmented Generation)"]
-        CCM["Cross-Channel Mapper<br/>(Entity Resolution)"]
-        EXP["Export Module<br/>(MD / JSON / CSV)"]
+        CA["Chunk Analyzer (Claims/Quotes)"]
+        SC["Semantic Chunker"]
+        RAG["Hybrid RAG Engine"]
+        CCM["Entity Resolver"]
+    end
+
+    subgraph "Storage Layer"
+        SQ["SQLite (Relational + Logs)"]
+        CH["ChromaDB (Vector)"]
+        NE["Neo4j (Graph)"]
     end
 
     subgraph "Infrastructure"
-        OL["Ollama Runtime<br/>(Llama-3-8B-Instruct)"]
-        CP["Checkpoint Manager<br/>(SQLite WAL)"]
-        EMB["Embedding Model<br/>(nomic-embed-text)"]
+        OL["Ollama Runtime"]
     end
 
-    UI --> DL
-    AQ --> TE
-    QI --> RAG
-
+    UI --> WK
+    WK --> OR
+    OR --> DL
     DL --> TE
-    TE -->|"Knowledge-Dense"| RF
-    TE -->|"Ambiguous"| AQ
-    TE -->|"Noise"| PG
+    TE --> TR
+    TR --> RF
+    RF --> SC
+    SC --> CA
+    CA --> SQ
+    CA --> CH
+    CA --> NE
 
-    RF --> PG
-    RF --> CH
-    RF --> NE
-
-    RAG --> CH
-    RAG --> PG
-    RAG --> OL
-    CCM --> NE
-    CCM --> PG
+    OR --> CP
+    OR --> SQ
+    PC --> SQ
+    LM --> SQ
+    SQ --> OR
 
     TE --> OL
     RF --> OL
-    RF --> EMB
-    CP --> PG
+    CA --> OL
+    RAG --> OL
 
     style UI fill:#6366f1,stroke:#4f46e5,color:#fff
-    style AQ fill:#6366f1,stroke:#4f46e5,color:#fff
-    style QI fill:#6366f1,stroke:#4f46e5,color:#fff
+    style WK fill:#8b5cf6,stroke:#7c3aed,color:#fff
+    style OR fill:#f59e0b,stroke:#d97706,color:#000
     style DL fill:#f59e0b,stroke:#d97706,color:#000
-    style TE fill:#f59e0b,stroke:#d97706,color:#000
-    style RF fill:#f59e0b,stroke:#d97706,color:#000
-    style PG fill:#10b981,stroke:#059669,color:#fff
+    style SQ fill:#10b981,stroke:#059669,color:#fff
     style CH fill:#10b981,stroke:#059669,color:#fff
     style NE fill:#10b981,stroke:#059669,color:#fff
-    style RAG fill:#ec4899,stroke:#db2777,color:#fff
-    style CCM fill:#ec4899,stroke:#db2777,color:#fff
-    style EXP fill:#ec4899,stroke:#db2777,color:#fff
     style OL fill:#64748b,stroke:#475569,color:#fff
-    style CP fill:#64748b,stroke:#475569,color:#fff
-    style EMB fill:#64748b,stroke:#475569,color:#fff
 ```
 
 ---
@@ -493,6 +488,44 @@ CREATE TABLE IF NOT EXISTS scan_checkpoints (
     started_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Version 10: Pipeline activity logging
+CREATE TABLE IF NOT EXISTS pipeline_logs (
+    log_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    scan_id     TEXT DEFAULT '',
+    video_id    TEXT DEFAULT '',
+    channel_id  TEXT DEFAULT '',
+    level       TEXT DEFAULT 'INFO',
+    stage       TEXT DEFAULT '',
+    message     TEXT NOT NULL,
+    error_detail TEXT DEFAULT '',
+    timestamp   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Version 11: Pipeline control state
+CREATE TABLE IF NOT EXISTS pipeline_control (
+    control_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+    scan_id     TEXT NOT NULL UNIQUE,
+    status      TEXT DEFAULT 'RUNNING',
+    pause_reason TEXT DEFAULT '',
+    resumed_at  DATETIME,
+    stopped_at  DATETIME,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Version 12: Video deletion history
+CREATE TABLE IF NOT EXISTS deletion_history (
+    deletion_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    deletion_type TEXT NOT NULL,
+    channel_id TEXT DEFAULT '',
+    video_id TEXT DEFAULT '',
+    deleted_by TEXT DEFAULT 'user',
+    reason TEXT DEFAULT '',
+    data_deleted TEXT DEFAULT '[]',
+    deleted_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
 ### 3.3 Layer 2 — Vector (ChromaDB)
@@ -802,6 +835,9 @@ SET r.timestamp = $timestamp, r.context = $context_snippet;
 | **Ambiguity Queue** | Manual review of uncertain classifications | Card grid with Accept/Reject/Batch actions |
 | **Research Console** | Semantic search interface | Query input, cited answer display, timestamp links |
 | **Knowledge Graph Explorer** | Visual graph navigation | Interactive Neo4j visualization (via `streamlit-agraph`) |
+| **Logs & Activity** | Pipeline event monitoring | Live feed, error analysis, and per-video timelines |
+| **Pipeline Control** | Active scan management | Pause/Resume/Stop controls and queue management |
+| **Data Management** | Data deletion and audit | Safe cascading deletion with impact preview |
 | **Export Center** | Data export | Format selector (MD/JSON/CSV), scope filters |
 
 **Pipeline Monitor Widget:**
@@ -840,12 +876,10 @@ The Checkpoint System guarantees that a scan of 500+ videos can survive interrup
 
 **Design Principle:** Every state transition in the pipeline is committed to SQLite before proceeding to the next step. The `checkpoint_stage` column on the Videos table acts as a per-video state machine.
 
-**Checkpoint Stages:**
+**Checkpoint Stages (10-Stage Pipeline):**
 
 ```mermaid
 flowchart LR
-    A["METADATA_HARVESTED"] --> B["TRIAGE_COMPLETE"]
-    B --> C["TRANSCRIPT_FETCHED"]
     C --> D["SPONSOR_FILTERED"]
     D --> E["TEXT_NORMALIZED"]
     E --> F["CHUNKED"]
@@ -981,19 +1015,17 @@ class RetryableOperation:
 |---|---|---|---|
 | **Runtime** | Python | 3.11+ | Core application language |
 | **LLM Runtime** | Ollama | Latest | Local model serving |
-| **LLM Model** | Llama-3-8B-Instruct | 8B Q4_K_M | Triage, normalization, NER, RAG synthesis |
-| **Embedding** | nomic-embed-text | 1.5 | 768-dim local embeddings |
+| **LLM Models** | Llama 3.2 / 3.1 | 3B & 8B | Triage (3B) and Synthesis/Refinement (8B) |
+| **Embedding** | nomic-embed-text | Latest | 768-dim local embeddings |
 | **Metadata** | yt-dlp | Latest | YouTube metadata & transcript extraction |
 | **Transcripts** | youtube-transcript-api | 0.6+ | Caption/subtitle fetching |
 | **Ad Filtering** | SponsorBlock API | v1 | Crowd-sourced sponsor segment data |
-| **Relational DB** | SQLite | 3.40+ | Structured metadata, checkpoints, state |
+| **Relational DB** | SQLite | 3.40+ | Metadata, logs, control state (12 migrations) |
 | **Vector DB** | ChromaDB | 0.4+ | Semantic chunk storage & retrieval |
 | **Graph DB** | Neo4j Community | 5.x | Entity relationship mapping |
 | **UI Framework** | Streamlit | 1.30+ | Command Center dashboard |
-| **Graph Viz** | streamlit-agraph | 0.0.45+ | Interactive graph rendering |
-| **NLP Utils** | rapidfuzz | 3.0+ | Fuzzy string matching for entity resolution |
-| **Task Queue** | Python asyncio | stdlib | Concurrent pipeline orchestration |
-| **Containerization** | Docker Compose | Latest | Service orchestration (SQLite + ChromaDB + Neo4j + Ollama) |
+| **Concurrency** | Multiprocessing | stdlib | Background worker isolation |
+| **Networking** | Requests/httpx | Latest | API interactions (Ollama, SponsorBlock) |
 
 ---
 

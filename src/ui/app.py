@@ -25,6 +25,7 @@ from src.storage.sqlite_store import SQLiteStore
 from src.ui.pages import (
     dashboard, harvest, ambiguity, research,
     guest_intel, explorer, pipeline_monitor, export_center,
+    logs_monitor, pipeline_control, data_management,
 )
 
 # ---------------------------------------------------------------------------
@@ -119,16 +120,26 @@ if not hasattr(st, "_global_orchestrators"):
 
 
 def run_pipeline_background(url: str, db: SQLiteStore, scan_id: Optional[str] = None):
-    """Run the pipeline in a background thread."""
+    """Run the pipeline in a background thread.
+    
+    IMPORTANT: Creates a fresh SQLiteStore for the background thread since 
+    SQLite connections are thread-specific and cannot be shared across threads.
+    """
     from src.pipeline.orchestrator import PipelineOrchestrator
     import threading
 
-    orchestrator = PipelineOrchestrator()
     unique_id = scan_id or url
 
     def target():
+        # Create a fresh SQLiteStore in this thread - cannot reuse the one from main thread
+        thread_db = None
+        orchestrator = None
         current_scan_id = scan_id
         try:
+            settings = get_settings()
+            thread_db = SQLiteStore(settings["sqlite"]["path"])
+            orchestrator = PipelineOrchestrator()
+            
             if scan_id:
                 orchestrator.resume(scan_id)
             else:
@@ -142,12 +153,15 @@ def run_pipeline_background(url: str, db: SQLiteStore, scan_id: Optional[str] = 
                 del st._global_orchestrators[unique_id]
             if current_scan_id and current_scan_id in st._global_orchestrators:
                 del st._global_orchestrators[current_scan_id]
-            orchestrator.close()
+            if orchestrator:
+                orchestrator.close()
+            if thread_db:
+                thread_db.close()
 
     thread = threading.Thread(target=target, daemon=True)
     st._global_orchestrators[unique_id] = {
         "thread": thread,
-        "orchestrator": orchestrator,
+        "orchestrator": None,
         "start_time": time.time(),
     }
     thread.start()
@@ -168,7 +182,8 @@ page = st.sidebar.radio(
     "Navigate",
     ["🏠 Dashboard", "🌾 Harvest Manager", "📋 Ambiguity Queue",
      "🔍 Research Console", "👤 Guest Intelligence", "🧠 Knowledge Explorer",
-     "📊 Pipeline Monitor", "📤 Export Center"],
+     "📊 Pipeline Monitor", "📤 Export Center", "📋 Logs & Activity",
+     "🎮 Pipeline Control", "🗑️ Data Management"],
     label_visibility="collapsed",
 )
 
@@ -186,6 +201,9 @@ PAGE_MAP = {
     "🧠 Knowledge Explorer": lambda: explorer.render(db),
     "📊 Pipeline Monitor": lambda: pipeline_monitor.render(db, run_pipeline_background),
     "📤 Export Center": lambda: export_center.render(db),
+    "📋 Logs & Activity": lambda: logs_monitor.render(db),
+    "🎮 Pipeline Control": lambda: pipeline_control.render(db, run_pipeline_background),
+    "🗑️ Data Management": lambda: data_management.render(db),
 }
 
 PAGE_MAP[page]()

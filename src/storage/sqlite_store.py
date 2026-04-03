@@ -137,6 +137,34 @@ class Quote:
     created_at: str = ""
 
 
+@dataclass
+class PipelineLog:
+    """Pipeline activity log entry."""
+    log_id: int = 0
+    scan_id: str = ""
+    video_id: str = ""
+    channel_id: str = ""
+    level: str = "INFO"  # INFO, WARNING, ERROR, DEBUG, SUCCESS
+    stage: str = ""  # DISCOVERY, TRIAGE, TRANSCRIPT, REFINEMENT, CHUNKING, EMBEDDING, etc.
+    message: str = ""
+    error_detail: str = ""  # Full traceback if ERROR
+    timestamp: str = ""
+    created_at: str = ""
+
+
+@dataclass
+class PipelineControl:
+    """Pipeline control state (pause/resume/stop flags)."""
+    control_id: int = 0
+    scan_id: str = ""
+    status: str = "RUNNING"  # RUNNING, PAUSED, STOPPING, STOPPED
+    pause_reason: str = ""
+    resumed_at: str = ""
+    stopped_at: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+
+
 # ---------------------------------------------------------------------------
 # SQL Schema
 # ---------------------------------------------------------------------------
@@ -330,6 +358,55 @@ SCHEMA_MIGRATIONS = [
         );
         CREATE INDEX IF NOT EXISTS idx_quotes_video ON quotes(video_id);
         CREATE INDEX IF NOT EXISTS idx_quotes_speaker ON quotes(speaker);
+    """),
+    # Version 10: Pipeline activity logging table
+    (10, """
+        CREATE TABLE IF NOT EXISTS pipeline_logs (
+            log_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            scan_id     TEXT DEFAULT '',
+            video_id    TEXT DEFAULT '',
+            channel_id  TEXT DEFAULT '',
+            level       TEXT DEFAULT 'INFO',
+            stage       TEXT DEFAULT '',
+            message     TEXT NOT NULL,
+            error_detail TEXT DEFAULT '',
+            timestamp   DATETIME DEFAULT CURRENT_TIMESTAMP,
+            created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_logs_scan ON pipeline_logs(scan_id);
+        CREATE INDEX IF NOT EXISTS idx_logs_video ON pipeline_logs(video_id);
+        CREATE INDEX IF NOT EXISTS idx_logs_channel ON pipeline_logs(channel_id);
+        CREATE INDEX IF NOT EXISTS idx_logs_level ON pipeline_logs(level);
+        CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON pipeline_logs(timestamp);
+    """),
+    # Version 11: Pipeline control state table
+    (11, """
+        CREATE TABLE IF NOT EXISTS pipeline_control (
+            control_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+            scan_id     TEXT NOT NULL UNIQUE,
+            status      TEXT DEFAULT 'RUNNING',
+            pause_reason TEXT DEFAULT '',
+            resumed_at  DATETIME,
+            stopped_at  DATETIME,
+            created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_control_scan ON pipeline_control(scan_id);
+        CREATE INDEX IF NOT EXISTS idx_control_status ON pipeline_control(status);
+    """),
+    # Version 12: Video deletion tracking
+    (12, """
+        CREATE TABLE IF NOT EXISTS deletion_history (
+            deletion_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            deletion_type TEXT NOT NULL,
+            channel_id TEXT DEFAULT '',
+            video_id TEXT DEFAULT '',
+            deleted_by TEXT DEFAULT 'user',
+            reason TEXT DEFAULT '',
+            data_deleted TEXT DEFAULT '[]',
+            deleted_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_deletion_history ON deletion_history(deleted_at);
     """),
 ]
 
@@ -1120,4 +1197,351 @@ class SQLiteStore:
         except Exception as e:
             logger.error(f"FTS5 index population failed: {e}")
             return 0
+
+    # -------------------------------------------------------------------
+    # Pipeline Logging
+    # -------------------------------------------------------------------
+
+    def log_pipeline_event(
+        self, level: str = "INFO", message: str = "",
+        scan_id: str = "", video_id: str = "", channel_id: str = "",
+        stage: str = "", error_detail: str = ""
+    ) -> int:
+        """Log a pipeline activity event. Returns log_id."""
+        cursor = self.conn.execute(
+            """INSERT INTO pipeline_logs 
+               (level, message, scan_id, video_id, channel_id, stage, error_detail, timestamp)
+               VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+            (level, message, scan_id, video_id, channel_id, stage, error_detail),
+        )
+        self.conn.commit()
+        return cursor.lastrowid
+
+    def get_logs(
+        self, scan_id: str = "", video_id: str = "",
+        level: str = "", limit: int = 1000,
+        order: str = "DESC"
+    ) -> list[PipelineLog]:
+        """Fetch pipeline logs with optional filtering."""
+        query = "SELECT * FROM pipeline_logs WHERE 1=1"
+        params = []
+        
+        if scan_id:
+            query += " AND scan_id = ?"
+            params.append(scan_id)
+        if video_id:
+            query += " AND video_id = ?"
+            params.append(video_id)
+        if level:
+            query += " AND level = ?"
+            params.append(level)
+        
+        query += f" ORDER BY timestamp {order} LIMIT ?"
+        params.append(limit)
+        
+        rows = self.conn.execute(query, params).fetchall()
+        return [PipelineLog(**dict(r)) for r in rows]
+
+    def get_log_summary(self, scan_id: str = "") -> dict:
+        """Get summary of logs for a scan."""
+        query = "SELECT level, COUNT(*) as count FROM pipeline_logs WHERE 1=1"
+        params = []
+        
+        if scan_id:
+            query += " AND scan_id = ?"
+            params.append(scan_id)
+        
+        query += " GROUP BY level"
+        rows = self.conn.execute(query, params).fetchall()
+        
+        summary = {}
+        for row in rows:
+            summary[row["level"]] = row["count"]
+        return summary
+
+    def clear_logs(self, older_than_days: int = 30) -> int:
+        """Delete old logs. Returns count deleted."""
+        result = self.conn.execute(
+            """DELETE FROM pipeline_logs 
+               WHERE timestamp < datetime('now', ? || ' days')""",
+            (f"-{older_than_days}",),
+        )
+        self.conn.commit()
+        return result.rowcount
+
+    # -------------------------------------------------------------------
+    # Pipeline Control (Pause/Resume/Stop)
+    # -------------------------------------------------------------------
+
+    def set_control_state(
+        self, scan_id: str, status: str = "RUNNING",
+        pause_reason: str = ""
+    ) -> None:
+        """Set pipeline control state (RUNNING, PAUSED, STOPPED, STOPPING)."""
+        try:
+            self.conn.execute(
+                """INSERT INTO pipeline_control (scan_id, status, pause_reason)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(scan_id) DO UPDATE SET
+                       status = excluded.status,
+                       pause_reason = excluded.pause_reason,
+                       updated_at = CURRENT_TIMESTAMP""",
+                (scan_id, status, pause_reason),
+            )
+            self.conn.commit()
+        except Exception as e:
+            logger.error(f"Failed to set control state: {e}")
+
+    def get_control_state(self, scan_id: str) -> Optional[PipelineControl]:
+        """Get pipeline control state for a scan."""
+        row = self.conn.execute(
+            "SELECT * FROM pipeline_control WHERE scan_id = ?", (scan_id,)
+        ).fetchone()
+        if row:
+            return PipelineControl(**dict(row))
+        return None
+
+    def pause_scan(self, scan_id: str, reason: str = "") -> None:
+        """Pause a running scan."""
+        self.set_control_state(scan_id, "PAUSED", reason)
+        self.log_pipeline_event(
+            level="INFO",
+            message=f"Scan paused: {reason}",
+            scan_id=scan_id
+        )
+
+    def resume_scan(self, scan_id: str) -> None:
+        """Resume a paused scan."""
+        self.conn.execute(
+            """UPDATE pipeline_control 
+               SET status = 'RUNNING', pause_reason = '', resumed_at = CURRENT_TIMESTAMP
+               WHERE scan_id = ?""",
+            (scan_id,),
+        )
+        self.conn.commit()
+        self.log_pipeline_event(
+            level="INFO",
+            message="Scan resumed",
+            scan_id=scan_id
+        )
+
+    def stop_scan(self, scan_id: str) -> None:
+        """Stop a scan gracefully."""
+        self.set_control_state(scan_id, "STOPPED", "User stopped")
+        self.log_pipeline_event(
+            level="WARNING",
+            message="Scan stopped by user",
+            scan_id=scan_id
+        )
+
+    # -------------------------------------------------------------------
+    # Video Removal & Discovery Queue Management
+    # -------------------------------------------------------------------
+
+    def remove_video_from_queue(self, video_id: str) -> bool:
+        """Remove a video from processing queue (only before ACCEPTED status)."""
+        try:
+            # Only remove if still in DISCOVERED state
+            result = self.conn.execute(
+                """UPDATE videos SET triage_status = 'SKIPPED'
+                   WHERE video_id = ? AND triage_status = 'DISCOVERED'""",
+                (video_id,),
+            )
+            self.conn.commit()
+            if result.rowcount > 0:
+                self.log_pipeline_event(
+                    level="INFO",
+                    message=f"Video removed from queue: {video_id}",
+                    video_id=video_id
+                )
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Failed to remove video from queue: {e}")
+            return False
+
+    # -------------------------------------------------------------------
+    # Data Deletion with Cascade
+    # -------------------------------------------------------------------
+
+    def delete_video_data(self, video_id: str, reason: str = "") -> dict:
+        """
+        Delete all data associated with a video.
+        
+        Returns dict with:
+        - chunks_deleted: count
+        - guests_removed: count  
+        - appearances_removed: count
+        - claims_deleted: count
+        - quotes_deleted: count
+        - video_deleted: bool
+        
+        Note: Video WILL be reprocessable after deletion - just upload same URL again
+        """
+        deleted = {
+            "chunks_deleted": 0,
+            "guests_removed": 0,
+            "appearances_removed": 0,
+            "claims_deleted": 0,
+            "quotes_deleted": 0,
+            "video_deleted": False,
+        }
+        
+        try:
+            # Get video details before deletion
+            video = self.get_video(video_id)
+            if not video:
+                return deleted
+            
+            # 1. Get all guests for this video to decide if we should delete them
+            guest_appearances = self.conn.execute(
+                """SELECT DISTINCT guest_id FROM guest_appearances 
+                   WHERE video_id = ?""",
+                (video_id,),
+            ).fetchall()
+            
+            guest_ids_in_video = [row["guest_id"] for row in guest_appearances]
+            
+            # 2. Delete guest appearances
+            result = self.conn.execute(
+                "DELETE FROM guest_appearances WHERE video_id = ?",
+                (video_id,),
+            )
+            deleted["appearances_removed"] = result.rowcount
+            
+            # 3. Delete claims
+            result = self.conn.execute(
+                "DELETE FROM claims WHERE video_id = ?",
+                (video_id,),
+            )
+            deleted["claims_deleted"] = result.rowcount
+            
+            # 4. Delete quotes
+            result = self.conn.execute(
+                "DELETE FROM quotes WHERE video_id = ?",
+                (video_id,),
+            )
+            deleted["quotes_deleted"] = result.rowcount
+            
+            # 5. Delete chunks (also updates FTS via triggers)
+            result = self.conn.execute(
+                "DELETE FROM transcript_chunks WHERE video_id = ?",
+                (video_id,),
+            )
+            deleted["chunks_deleted"] = result.rowcount
+            
+            # 6. Delete temp state if exists
+            self.conn.execute(
+                "DELETE FROM pipeline_temp_state WHERE video_id = ?",
+                (video_id,),
+            )
+            
+            # 7. Delete video summary
+            self.conn.execute(
+                "DELETE FROM video_summaries WHERE video_id = ?",
+                (video_id,),
+            )
+            
+            # 8. Reset video to DISCOVERED state so it can be reprocessed
+            self.conn.execute(
+                """UPDATE videos 
+                   SET checkpoint_stage = 'METADATA_HARVESTED',
+                       triage_status = 'DISCOVERED',
+                       triage_reason = 'Re-discoverable after data deletion',
+                       updated_at = CURRENT_TIMESTAMP
+                   WHERE video_id = ?""",
+                (video_id,),
+            )
+            deleted["video_deleted"] = True
+            
+            # 9. Check if any guests only appeared in this video and delete them
+            for guest_id in guest_ids_in_video:
+                remaining = self.conn.execute(
+                    "SELECT COUNT(*) as cnt FROM guest_appearances WHERE guest_id = ?",
+                    (guest_id,),
+                ).fetchone()
+                if remaining["cnt"] == 0:
+                    # This guest no longer appears anywhere
+                    self.conn.execute(
+                        "DELETE FROM guests WHERE guest_id = ?",
+                        (guest_id,),
+                    )
+                    deleted["guests_removed"] += 1
+            
+            # 10. Log the deletion
+            import json
+            self.conn.execute(
+                """INSERT INTO deletion_history 
+                   (deletion_type, video_id, deleted_by, reason, data_deleted)
+                   VALUES (?, ?, ?, ?, ?)""",
+                ("video", video_id, "user", reason, json.dumps(deleted)),
+            )
+            
+            self.conn.commit()
+            logger.info(f"Deleted data for video {video_id}: {deleted}")
+            
+        except Exception as e:
+            logger.error(f"Error deleting video data: {e}")
+            self.conn.rollback()
+        
+        return deleted
+
+    def delete_channel_data(self, channel_id: str, reason: str = "") -> dict:
+        """
+        Delete all videos and associated data for a channel.
+        
+        Returns summary of what was deleted.
+        """
+        deleted = {
+            "videos_deleted": 0,
+            "chunks_deleted": 0,
+            "guests_removed": 0,
+            "channel_reset": False,
+        }
+        
+        try:
+            # Get all videos in channel
+            videos = self.get_videos_by_channel(channel_id)
+            
+            for video in videos:
+                video_deleted = self.delete_video_data(video.video_id, reason)
+                deleted["videos_deleted"] += 1
+                deleted["chunks_deleted"] += video_deleted.get("chunks_deleted", 0)
+                deleted["guests_removed"] += video_deleted.get("guests_removed", 0)
+            
+            # Reset channel stats
+            self.conn.execute(
+                """UPDATE channels 
+                   SET processed_videos = 0, last_scanned_at = NULL
+                   WHERE channel_id = ?""",
+                (channel_id,),
+            )
+            deleted["channel_reset"] = True
+            
+            # Log the deletion
+            import json
+            self.conn.execute(
+                """INSERT INTO deletion_history 
+                   (deletion_type, channel_id, deleted_by, reason, data_deleted)
+                   VALUES (?, ?, ?, ?, ?)""",
+                ("channel", channel_id, "user", reason, json.dumps(deleted)),
+            )
+            
+            self.conn.commit()
+            logger.info(f"Deleted data for channel {channel_id}: {deleted}")
+            
+        except Exception as e:
+            logger.error(f"Error deleting channel data: {e}")
+            self.conn.rollback()
+        
+        return deleted
+
+    def get_deletion_history(self, limit: int = 50) -> list[dict]:
+        """Get deletion history."""
+        rows = self.conn.execute(
+            """SELECT * FROM deletion_history 
+               ORDER BY deleted_at DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
 

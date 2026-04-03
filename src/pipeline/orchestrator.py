@@ -102,6 +102,21 @@ class PipelineOrchestrator:
         if self._on_status:
             self._on_status(message)
 
+    def _check_pause_state(self, scan_id: str) -> bool:
+        """Check if scan is paused. Returns True if paused/stopped."""
+        control = self.db.get_control_state(scan_id)
+        if control:
+            if control.status in ("PAUSED", "STOPPED"):
+                reason = control.pause_reason or "No reason given"
+                self._report_status(f"Pipeline {control.status}: {reason}")
+                return True
+        return False
+
+    def _check_stop_requested(self, scan_id: str) -> bool:
+        """Check if stop was requested. Returns True if should stop."""
+        control = self.db.get_control_state(scan_id)
+        return control and control.status == "STOPPED"
+
     # -------------------------------------------------------------------
     # Full Pipeline
     # -------------------------------------------------------------------
@@ -113,6 +128,7 @@ class PipelineOrchestrator:
 
         # Create scan checkpoint
         scan_id = self.checkpoint.create_scan(url, parsed.url_type)
+        self.db.set_control_state(scan_id, "RUNNING")
 
         try:
             import queue
@@ -125,6 +141,13 @@ class PipelineOrchestrator:
                     self._stage_discover_stream(url, parsed, scan_id, discovery_queue)
                 except Exception as e:
                     logger.error(f"Discovery thread failed: {e}")
+                    self.db.log_pipeline_event(
+                        level="ERROR",
+                        message=f"Discovery failed: {str(e)}",
+                        scan_id=scan_id,
+                        stage="DISCOVERY",
+                        error_detail=str(e)
+                    )
                 finally:
                     discovery_queue.put(None)  # Sentinel
 
@@ -133,6 +156,17 @@ class PipelineOrchestrator:
 
             processed_count = 0
             while True:
+                # Check for pause/stop requests
+                if self._check_stop_requested(scan_id):
+                    self._report_status("Pipeline stop requested - aborting")
+                    self.checkpoint.fail_scan(scan_id)
+                    return scan_id
+                
+                # Wait while paused
+                while self._check_pause_state(scan_id):
+                    import time
+                    time.sleep(1)
+                
                 item = discovery_queue.get()
                 if item is None:
                     break
@@ -149,11 +183,18 @@ class PipelineOrchestrator:
                 )
 
             self.checkpoint.complete_scan(scan_id)
+            self.db.set_control_state(scan_id, "RUNNING")
             self._report_status(f"Scan {scan_id} completed: {processed_count} videos processed")
             return scan_id
 
         except Exception as e:
             logger.error(f"Pipeline failed: {e}")
+            self.db.log_pipeline_event(
+                level="ERROR",
+                message=f"Pipeline failed: {str(e)}",
+                scan_id=scan_id,
+                error_detail=str(e)
+            )
             self.checkpoint.fail_scan(scan_id)
             raise
 
@@ -394,17 +435,36 @@ class PipelineOrchestrator:
 
     def _stage_triage(self, video) -> None:
         """Stage 2: Run triage classification."""
-        result = self.triage.classify(video)
-        self.db.update_triage_status(
-            video.video_id,
-            status=result.decision.value,
-            reason=result.reason,
-            confidence=result.confidence,
-        )
-        logger.info(
-            f"Triage: {video.title[:50]}... → {result.decision.value} "
-            f"({result.phase}, {result.latency_ms:.0f}ms)"
-        )
+        try:
+            result = self.triage.classify(video)
+            self.db.update_triage_status(
+                video.video_id,
+                status=result.decision.value,
+                reason=result.reason,
+                confidence=result.confidence,
+            )
+            log_level = "SUCCESS" if result.decision.value == "ACCEPTED" else "INFO"
+            self.db.log_pipeline_event(
+                level=log_level,
+                message=f"Triage: {video.title[:50]}... → {result.decision.value} ({result.confidence:.0%})",
+                video_id=video.video_id,
+                channel_id=video.channel_id,
+                stage="TRIAGE",
+            )
+            logger.info(
+                f"Triage: {video.title[:50]}... → {result.decision.value} "
+                f"({result.phase}, {result.latency_ms:.0f}ms)"
+            )
+        except Exception as e:
+            self.db.log_pipeline_event(
+                level="ERROR",
+                message=f"Triage failed: {str(e)}",
+                video_id=video.video_id,
+                channel_id=video.channel_id,
+                stage="TRIAGE",
+                error_detail=str(e)
+            )
+            raise
 
     def _stage_transcript(self, video) -> bool:
         """Stage 3: Fetch transcript. Returns True if transcript was found."""

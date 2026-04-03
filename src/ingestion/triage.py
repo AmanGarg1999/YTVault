@@ -1,0 +1,241 @@
+"""
+Triage Engine for knowledgeVault-YT.
+
+Two-phase classification:
+  Phase 1: Rule-based pre-filter (< 1ms per video)
+  Phase 2: LLM metadata classifier via Ollama (< 2s per video)
+"""
+
+import json
+import logging
+import time
+from dataclasses import dataclass
+from enum import Enum
+from typing import Optional
+
+import ollama
+
+from src.config import get_settings, load_prompt, load_verified_channels
+from src.storage.sqlite_store import Video
+from src.utils.retry import with_retry
+
+logger = logging.getLogger(__name__)
+
+
+class TriageDecision(str, Enum):
+    ACCEPT = "ACCEPTED"
+    REJECT = "REJECTED"
+    PENDING = "PENDING_REVIEW"
+    NEEDS_LLM = "NEEDS_LLM"
+
+
+@dataclass
+class TriageResult:
+    decision: TriageDecision
+    reason: str
+    confidence: float = 1.0
+    phase: str = "rule"       # "rule" or "llm"
+    latency_ms: float = 0.0
+
+
+class TriageEngine:
+    """Two-phase triage engine: rule-based pre-filter + LLM classifier."""
+
+    def __init__(self):
+        self.settings = get_settings()
+        self.triage_cfg = self.settings["triage"]
+        self.ollama_cfg = self.settings["ollama"]
+
+        # Load verified channels
+        channels_cfg = load_verified_channels()
+        self.verified_channel_ids = {
+            ch["id"] for ch in channels_cfg.get("verified_channels", [])
+        }
+        self.shorts_whitelist = set(channels_cfg.get("shorts_whitelist", []))
+
+        # Load LLM prompt
+        self.triage_prompt = load_prompt("triage_classifier")
+
+        # Keyword sets (compiled as word-boundary regex for accurate matching)
+        import re
+        raw_keywords = self.triage_cfg.get("knowledge_keywords", [])
+        self.knowledge_keywords = raw_keywords
+        self._keyword_patterns = {
+            kw: re.compile(r'\b' + re.escape(kw) + r'\b', re.IGNORECASE)
+            for kw in raw_keywords
+        }
+        self.min_duration = self.triage_cfg.get("min_duration_seconds", 60)
+        self.confidence_threshold = self.triage_cfg.get("llm_confidence_threshold", 0.7)
+
+    def classify(self, video: Video) -> TriageResult:
+        """Run full triage pipeline on a video.
+
+        Phase 1 is always attempted first. If the result is NEEDS_LLM,
+        Phase 2 (LLM) is invoked.
+        """
+        # Phase 1: Rule-based
+        result = self._rule_filter(video)
+        if result.decision != TriageDecision.NEEDS_LLM:
+            return result
+
+        # Phase 2: LLM-based
+        return self._llm_classify(video)
+
+    def _rule_filter(self, video: Video) -> TriageResult:
+        """Phase 1: Fast rule-based pre-filtering."""
+        start = time.perf_counter()
+
+        # Hard Reject: Ultra-short content (unless whitelisted)
+        if video.duration_seconds < self.min_duration:
+            if video.channel_id not in self.shorts_whitelist:
+                latency = (time.perf_counter() - start) * 1000
+                return TriageResult(
+                    decision=TriageDecision.REJECT,
+                    reason=f"duration_under_{self.min_duration}s",
+                    confidence=1.0,
+                    phase="rule",
+                    latency_ms=latency,
+                )
+
+        # Hard Accept: Verified Knowledge channels
+        if video.channel_id in self.verified_channel_ids:
+            latency = (time.perf_counter() - start) * 1000
+            return TriageResult(
+                decision=TriageDecision.ACCEPT,
+                reason="verified_channel",
+                confidence=1.0,
+                phase="rule",
+                latency_ms=latency,
+            )
+
+        # Hard Accept: Educational keyword match in title (word-boundary)
+        title_lower = video.title.lower()
+        matched_keywords = [
+            kw for kw, pattern in self._keyword_patterns.items()
+            if pattern.search(title_lower)
+        ]
+        if matched_keywords:
+            latency = (time.perf_counter() - start) * 1000
+            return TriageResult(
+                decision=TriageDecision.ACCEPT,
+                reason=f"keyword_match: {', '.join(matched_keywords[:3])}",
+                confidence=0.85,
+                phase="rule",
+                latency_ms=latency,
+            )
+
+        # Needs LLM classification
+        latency = (time.perf_counter() - start) * 1000
+        return TriageResult(
+            decision=TriageDecision.NEEDS_LLM,
+            reason="ambiguous_metadata",
+            phase="rule",
+            latency_ms=latency,
+        )
+
+    def _llm_classify(self, video: Video) -> TriageResult:
+        """Phase 2: LLM-based metadata classification via Ollama."""
+        start = time.perf_counter()
+
+        user_prompt = self._build_triage_user_prompt(video)
+
+        try:
+            response = self._call_ollama_triage(user_prompt)
+
+            raw_response = response["message"]["content"].strip()
+            parsed = self._parse_llm_response(raw_response)
+            latency = (time.perf_counter() - start) * 1000
+
+            logger.info(
+                f"LLM triage for '{video.title[:60]}': "
+                f"{parsed['category']} (conf={parsed['confidence']:.2f}) "
+                f"in {latency:.0f}ms"
+            )
+
+            # Map LLM category to decision
+            category = parsed["category"].upper()
+            confidence = parsed["confidence"]
+
+            if category == "KNOWLEDGE" and confidence >= self.confidence_threshold:
+                decision = TriageDecision.ACCEPT
+            elif category == "NOISE" and confidence >= self.confidence_threshold:
+                decision = TriageDecision.REJECT
+            else:
+                decision = TriageDecision.PENDING
+
+            return TriageResult(
+                decision=decision,
+                reason=parsed.get("reason", "llm_classification"),
+                confidence=confidence,
+                phase="llm",
+                latency_ms=latency,
+            )
+
+        except Exception as e:
+            latency = (time.perf_counter() - start) * 1000
+            logger.error(f"LLM triage failed for {video.video_id}: {e}")
+            return TriageResult(
+                decision=TriageDecision.PENDING,
+                reason=f"llm_error: {str(e)[:100]}",
+                confidence=0.0,
+                phase="llm",
+                latency_ms=latency,
+            )
+
+    @with_retry("ollama_inference")
+    def _call_ollama_triage(self, user_prompt: str) -> dict:
+        """Call Ollama for triage classification with retry."""
+        return ollama.chat(
+            model=self.ollama_cfg["triage_model"],
+            messages=[
+                {"role": "system", "content": self.triage_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            options={
+                "num_predict": self.ollama_cfg.get("triage_max_tokens", 100),
+                "temperature": self.ollama_cfg.get("temperature", 0.1),
+            },
+        )
+
+    def _build_triage_user_prompt(self, video: Video) -> str:
+        """Build the user-message portion of the triage prompt."""
+        tags_str = ", ".join(video.tags[:10]) if video.tags else "none"
+        duration_str = f"{video.duration_seconds // 60}m {video.duration_seconds % 60}s"
+
+        return (
+            f"TITLE: {video.title}\n"
+            f"DESCRIPTION: {video.description[:500]}\n"
+            f"DURATION: {duration_str}\n"
+            f"TAGS: {tags_str}"
+        )
+
+    def _parse_llm_response(self, response: str) -> dict:
+        """Parse LLM JSON response with fallback handling."""
+        # Try direct JSON parse
+        try:
+            # Strip markdown code fences if present
+            clean = response.strip()
+            if clean.startswith("```"):
+                clean = clean.split("\n", 1)[1] if "\n" in clean else clean
+                clean = clean.rsplit("```", 1)[0] if "```" in clean else clean
+                clean = clean.strip()
+            return json.loads(clean)
+        except json.JSONDecodeError:
+            pass
+
+        # Try to extract JSON from response text
+        import re
+        json_match = re.search(r'\{[^}]+\}', response)
+        if json_match:
+            try:
+                return json.loads(json_match.group())
+            except json.JSONDecodeError:
+                pass
+
+        # Fallback: mark as ambiguous
+        logger.warning(f"Could not parse LLM triage response: {response[:200]}")
+        return {
+            "category": "AMBIGUOUS",
+            "confidence": 0.0,
+            "reason": "unparseable_response",
+        }

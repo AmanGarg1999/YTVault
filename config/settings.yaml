@@ -1,0 +1,123 @@
+# knowledgeVault-YT Configuration
+# ================================
+
+app:
+  name: "knowledgeVault-YT"
+  version: "0.1.0"
+  data_dir: "./data"
+  log_level: "INFO"
+
+# Ollama LLM Configuration
+# fast_model: used for triage, normalization, NER (speed-critical, structured tasks)
+# deep_model: used for summarization, RAG synthesis, claim extraction (quality-critical)
+ollama:
+  host: "http://localhost:11434"
+  triage_model: "llama3.2:3b"
+  normalizer_model: "llama3.2:3b"
+  deep_model: "llama3.1:8b"
+  rag_model: "llama3.1:8b"
+  embedding_model: "nomic-embed-text"
+  triage_max_tokens: 100
+  normalizer_max_tokens: 2048
+  rag_max_tokens: 4096
+  temperature: 0.1
+
+# SQLite Configuration
+sqlite:
+  path: "./data/knowledgevault.db"
+  journal_mode: "WAL"
+  busy_timeout: 5000
+
+# ChromaDB Configuration
+chromadb:
+  path: "./data/chromadb"
+  collection_name: "transcript_chunks"
+  similarity_space: "cosine"
+
+# Neo4j Configuration
+neo4j:
+  uri: "bolt://localhost:7687"
+  user: "neo4j"
+  password: "knowledgevault"
+
+# Ingestion Pipeline
+ingestion:
+  concurrent_metadata_fetches: 3
+  checkpoint_interval: 10          # Save checkpoint every N videos
+  rate_limit_delay: 1.0            # Seconds between yt-dlp calls
+
+# Triage Engine
+triage:
+  min_duration_seconds: 60
+  llm_confidence_threshold: 0.7
+  knowledge_keywords:
+    - "lecture"
+    - "tutorial"
+    - "analysis"
+    - "interview"
+    - "podcast"
+    - "documentary"
+    - "explained"
+    - "deep dive"
+    - "masterclass"
+    - "workshop"
+    - "seminar"
+    - "breakdown"
+    - "research"
+    - "history"
+    - "science"
+
+# Refinement Layer
+refinement:
+  sponsorblock_api: "https://sponsor.ajay.app/api/skipSegments"
+  sponsorblock_categories:
+    - "sponsor"
+    - "selfpromo"
+    - "interaction"
+    - "intro"
+    - "outro"
+  sponsorblock_timeout: 5
+  normalizer_chunk_size: 1000      # words
+  normalizer_chunk_overlap: 100    # words
+
+# Vector Chunking
+chunking:
+  strategy: "sliding_window"       # "sliding_window" or "semantic"
+  window_size: 400                 # words per chunk
+  overlap: 80                      # overlap words
+  min_chunk_size: 50               # skip chunks smaller than this
+  semantic_similarity_threshold: 0.4  # cosine distance drop to trigger split
+
+# Pipeline Concurrency
+pipeline:
+  llm_max_workers: 2               # concurrent Ollama calls for batch triage/normalization
+
+# RAG Configuration
+rag:
+  vector_top_k: 15
+  rerank_top_k: 8
+  similarity_threshold: 0.65
+  max_context_tokens: 4096
+  chunk_overlap_dedup: true
+  default_language: "en"
+
+# Retry Configuration
+retry:
+  yt_dlp_metadata:
+    max_retries: 3
+    backoff: [1, 5, 15]
+  transcript_fetch:
+    max_retries: 3
+    backoff: [2, 10, 30]
+  sponsorblock_api:
+    max_retries: 2
+    backoff: [1, 5]
+  ollama_inference:
+    max_retries: 2
+    backoff: [5, 15]
+  chromadb_upsert:
+    max_retries: 3
+    backoff: [1, 3, 10]
+  neo4j_write:
+    max_retries: 3
+    backoff: [1, 3, 10]

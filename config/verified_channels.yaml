@@ -1,0 +1,23 @@
+# Verified Knowledge Channels
+# ============================
+# Channels listed here are auto-accepted during triage (bypass LLM classification).
+# Add channel IDs for channels you trust to always produce knowledge-dense content.
+#
+# Format:
+#   - id: YouTube channel ID
+#     name: Human-readable name (for reference only)
+#     category: Content category
+
+verified_channels: []
+  # Example entries:
+  # - id: "UCsXVk37bltHxD1rDPwtNM8Q"
+  #   name: "Kurzgesagt – In a Nutshell"
+  #   category: "Science"
+  # - id: "UCsooa4yRKGN_zEE8iknghZA"
+  #   name: "TED-Ed"
+  #   category: "Education"
+
+# Shorts Insight Whitelist
+# ========================
+# Channel IDs whose Shorts (<60s) should NOT be auto-rejected.
+shorts_whitelist: []

@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "knowledgevault-yt"
+version = "0.1.0"
+description = "Local-first Research Intelligence System — transform YouTube content into a structured Knowledge Graph"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+dependencies = [
+    "yt-dlp>=2024.0",
+    "youtube-transcript-api>=0.6.0",
+    "chromadb>=0.4.0",
+    "ollama>=0.3.0",
+    "streamlit>=1.30.0",
+    "streamlit-agraph>=0.0.45",
+    "neo4j>=5.0.0",
+    "rapidfuzz>=3.0.0",
+    "requests>=2.31.0",
+    "pyyaml>=6.0",
+    "rich>=13.0",
+    "click>=8.1.0",
+    "pandas>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+kvault = "src.main:cli"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]

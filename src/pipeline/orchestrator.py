@@ -219,6 +219,33 @@ class PipelineOrchestrator:
 
         self.checkpoint.complete_scan(scan_id)
 
+    def process_manually_overridden_videos(self) -> int:
+        """Process all recently manually-overridden videos (force-accepted rejected ones).
+        
+        Returns count of videos processed.
+        """
+        manually_overridden = self.db.get_manually_overridden_videos()
+        
+        if not manually_overridden:
+            self._report_status("No manually-overridden videos to process")
+            return 0
+        
+        self._report_status(
+            f"Processing {len(manually_overridden)} manually-overridden videos..."
+        )
+        
+        for i, video in enumerate(manually_overridden):
+            self._report_status(
+                f"Processing manually-accepted {i + 1}/{len(manually_overridden)}: "
+                f"{video.title[:50]}..."
+            )
+            self._resume_video(video)
+        
+        self._report_status(
+            f"Completed processing {len(manually_overridden)} manually-overridden videos"
+        )
+        return len(manually_overridden)
+
     # -------------------------------------------------------------------
     # Stage Implementations
     # -------------------------------------------------------------------

@@ -594,6 +594,21 @@ class SQLiteStore:
             result.append(Video(**d))
         return result
 
+    def get_videos_by_status_sorted(
+        self, status: str, order_by: str = "created_at DESC", limit: int = 100
+    ) -> list[Video]:
+        """Get videos by triage status with custom sort order."""
+        rows = self.conn.execute(
+            f"SELECT * FROM videos WHERE triage_status = ? ORDER BY {order_by} LIMIT ?",
+            (status, limit),
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["tags"] = json.loads(d.pop("tags_json", "[]"))
+            result.append(Video(**d))
+        return result
+
     def get_videos_by_channel(self, channel_id: str, limit: int = None) -> list[Video]:
         """Get all videos for a channel, optionally limited."""
         query = "SELECT * FROM videos WHERE channel_id = ? ORDER BY upload_date DESC"
@@ -621,6 +636,55 @@ class SQLiteStore:
             (status, reason, confidence, video_id),
         )
         self.conn.commit()
+
+    def manual_override_rejected_video(
+        self, video_id: str, override_reason: str = ""
+    ) -> bool:
+        """
+        Manually override a rejected video to ACCEPTED status for re-ingestion.
+        
+        Returns True if successful, False if video not found or not in REJECTED status.
+        Resets checkpoint to METADATA_HARVESTED so full pipeline runs again.
+        """
+        try:
+            video = self.get_video(video_id)
+            if not video:
+                logger.warning(f"Video {video_id} not found")
+                return False
+            
+            if video.triage_status != "REJECTED":
+                logger.warning(f"Video {video_id} is not in REJECTED status (current: {video.triage_status})")
+                return False
+            
+            # Reset to ACCEPTED and push back to beginning of pipeline
+            self.conn.execute(
+                """UPDATE videos
+                   SET triage_status = 'ACCEPTED',
+                       triage_reason = ?,
+                       checkpoint_stage = 'METADATA_HARVESTED',
+                       triage_confidence = 1.0,
+                       updated_at = CURRENT_TIMESTAMP
+                   WHERE video_id = ?""",
+                (f"manual_override: {override_reason}" if override_reason else "manual_override",
+                 video_id),
+            )
+            self.conn.commit()
+            
+            # Log the manual override
+            self.log_pipeline_event(
+                level="INFO",
+                message=f"Manual override of REJECTED video: {video.title[:60]}",
+                video_id=video_id,
+                channel_id=video.channel_id,
+                stage="MANUAL_OVERRIDE",
+            )
+            
+            logger.info(f"Manually overrode rejected video {video_id}: {override_reason}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to manually override rejected video {video_id}: {e}")
+            return False
 
     def update_checkpoint_stage(self, video_id: str, stage: str) -> None:
         """Atomically advance a video's pipeline checkpoint stage."""
@@ -657,6 +721,28 @@ class SQLiteStore:
                WHERE triage_status = 'ACCEPTED'
                  AND checkpoint_stage != 'DONE'
                ORDER BY created_at ASC""",
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["tags"] = json.loads(d.pop("tags_json", "[]"))
+            result.append(Video(**d))
+        return result
+
+    def get_manually_overridden_videos(self, limit: int = 100) -> list[Video]:
+        """Get recently manually-overridden rejected videos ready for re-ingestion.
+        
+        These are ACCEPTED videos with checkpoint_stage = METADATA_HARVESTED
+        and recent triage_reason containing 'manual_override'.
+        """
+        rows = self.conn.execute(
+            """SELECT * FROM videos
+               WHERE triage_status = 'ACCEPTED'
+                 AND checkpoint_stage = 'METADATA_HARVESTED'
+                 AND triage_reason LIKE '%manual_override%'
+               ORDER BY updated_at DESC
+               LIMIT ?""",
+            (limit,),
         ).fetchall()
         result = []
         for r in rows:

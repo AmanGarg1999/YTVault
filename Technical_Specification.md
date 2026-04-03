@@ -632,14 +632,45 @@ graph LR
         G -->|"APPEARED_IN<br/>{timestamp, context}"| V
         V -->|"DISCUSSES<br/>{relevance_score}"| T
         G -->|"EXPERT_ON<br/>{mention_count}"| T
-        T -->|"RELATED_TO<br/>{co_occurrence_score}"| T
+        T -->|"RELATED_TO<br/>{relationship_type}"| T
+        T -->|"SUBTOPIC_OF"| T
+        V -->|"CONTAINS"| Q["📌 Quote"]
+        V -->|"MAKES"| CL["📢 Claim"]
     end
 
     style V fill:#fbbf24,stroke:#f59e0b,color:#000
     style C fill:#60a5fa,stroke:#3b82f6,color:#000
     style G fill:#f472b6,stroke:#ec4899,color:#000
     style T fill:#34d399,stroke:#10b981,color:#000
+    style Q fill:#a78bfa,stroke:#8b5cf6,color:#fff
+    style CL fill:#f87171,stroke:#ef4444,color:#fff
 ```
+
+### 3.5 Automated Taxonomy Building
+
+The `TaxonomyBuilder` autonomously organizes the flat topic list into a hierarchical structure.
+
+- **Process**: Queries all topics → Batches (50) → LLM Classifies `child → parent` → Creates `SUBTOPIC_OF` relationships.
+- **Outcome**: Enables "Zoom-out" discovery (e.g., browsing "Machine Learning" to find "Transformers").
+
+### 3.6 Epiphany Engine: Cross-Channel Insight Generation
+
+The `EpiphanyEngine` moves beyond simple search to active insight discovery.
+
+**Relationship Classification Model:**
+
+| Relationship | Definition | Graph Effect |
+|---|---|---|
+| **CONSENSUS** | Multiple channels agree on a fact/topic | Strengthens `RELATED_TO` weight |
+| **CONTRADICTION** | Channels hold opposing views | Creates `DEBATES` relationship |
+| **COMPLEMENTARY** | Each channel adds unique facets | Links topics with `EXTENDS` |
+| **EVOLUTION** | Perspective changes over time | Links timestamps with `EVOLVED_TO` |
+
+**Discovery Flow**:
+1. Scan graph for topics discussed by 2+ channels.
+2. Trigger RAG query: "Compare and contrast channel A and B on topic X".
+3. LLM classifies relationship and generates a synthesis briefing.
+4. Update graph with relationship types.
 
 **Cypher Schema Definition:**
 
@@ -737,6 +768,26 @@ answers STRICTLY from the provided context chunks. Follow these rules:
    contradiction between them.
 6. Organize the answer chronologically when tracking perspective evolution.
 ```
+
+### 4.2 Deep Chunk Analysis (The "Claim/Quote" Extraction)
+
+Unlike standard RAG which only indexes text, `knowledgeVault-YT` performs a structured deep-dive on every 400-word chunk.
+
+- **Fast Model (3B)**: Extract topics and entities.
+- **Deep Model (8B)**: Extract citable **Claims** (assertions of fact) and **Quotes** (notable verbatim statements).
+- **Persistence**: Structured data is stored in dedicated SQLite tables for precise attribute-based filtering (e.g., `SELECT quote FROM quotes WHERE speaker = 'Naval'`).
+
+### 4.3 Map-Reduce Summarization
+
+To handle long videos without context window exhaustion or "lost in the middle" effects, the `SummarizerEngine` uses a Map-Reduce architecture.
+
+1. **Map Phase**: Groups of 4 chunks are summarized into dense bullet points (parallelized via `LLMPool`).
+2. **Reduce Phase**: All bullet groups are synthesized by a deep LLM into a final structured JSON.
+3. **Output Schema**:
+   - `summary`: One-paragraph high-level narrative.
+   - `takeaways`: 5-7 actionable citable points.
+   - `narrative_timeline`: Key segments with timestamps.
+   - `primary_entities`: Resolved guests and organizations.
 
 **Retrieval Configuration:**
 
@@ -982,30 +1033,15 @@ def discover_channel_videos(channel_url: str, scan_id: str):
 | GPU | None (CPU-only Ollama) | 8 GB VRAM (RTX 3060+) |
 | Storage | 20 GB free | 50 GB SSD |
 
-### 5.3 Error Handling & Retry Strategy
+### 5.4 Metadata & Pipeline ETA Engine
 
-```python
-RETRY_CONFIG = {
-    "yt_dlp_metadata": {"max_retries": 3, "backoff": [1, 5, 15]},
-    "transcript_fetch": {"max_retries": 3, "backoff": [2, 10, 30]},
-    "sponsorblock_api": {"max_retries": 2, "backoff": [1, 5]},
-    "ollama_inference": {"max_retries": 2, "backoff": [5, 15]},
-    "chromadb_upsert":  {"max_retries": 3, "backoff": [1, 3, 10]},
-    "neo4j_write":      {"max_retries": 3, "backoff": [1, 3, 10]},
-}
+The `ETACalculator` provides real-time throughput and completion estimates based on historical stage performance.
 
-class RetryableOperation:
-    def execute_with_retry(self, operation, config_key, *args, **kwargs):
-        config = RETRY_CONFIG[config_key]
-        for attempt, delay in enumerate(config["backoff"]):
-            try:
-                return operation(*args, **kwargs)
-            except TransientError as e:
-                logger.warning(f"Attempt {attempt+1} failed: {e}. Retrying in {delay}s")
-                time.sleep(delay)
-        # Final attempt without catch
-        return operation(*args, **kwargs)
-```
+- **Throughput**: Calculated as `videos_completed / decimal_hours`.
+- **Stage Averaging**: Tracks `total_time / total_processed` per stage (Discovery, Triage, Transcript, etc.).
+- **ETA**: `(remaining_videos * sum(avg_stage_times)) + current_video_remaining_stages`.
+
+---
 
 ---
 

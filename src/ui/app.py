@@ -25,7 +25,7 @@ from src.storage.sqlite_store import SQLiteStore
 from src.ui.pages import (
     dashboard, harvest, ambiguity, research,
     guest_intel, explorer, pipeline_monitor, export_center,
-    logs_monitor, pipeline_control, data_management,
+    logs_monitor, pipeline_control, data_management, reject_review,
 )
 
 # ---------------------------------------------------------------------------
@@ -180,7 +180,7 @@ st.sidebar.markdown("---")
 
 page = st.sidebar.radio(
     "Navigate",
-    ["🏠 Dashboard", "🌾 Harvest Manager", "📋 Ambiguity Queue",
+    ["🏠 Dashboard", "🌾 Harvest Manager", "📋 Ambiguity Queue", "🚫 Rejected Videos",
      "🔍 Research Console", "👤 Guest Intelligence", "🧠 Knowledge Explorer",
      "📊 Pipeline Monitor", "📤 Export Center", "📋 Logs & Activity",
      "🎮 Pipeline Control", "🗑️ Data Management"],
@@ -196,6 +196,7 @@ PAGE_MAP = {
     "🏠 Dashboard": lambda: dashboard.render(db),
     "🌾 Harvest Manager": lambda: harvest.render(db, run_pipeline_background),
     "📋 Ambiguity Queue": lambda: ambiguity.render(db),
+    "🚫 Rejected Videos": lambda: reject_review.render(db, run_pipeline_background),
     "🔍 Research Console": lambda: research.render(db),
     "👤 Guest Intelligence": lambda: guest_intel.render(db),
     "🧠 Knowledge Explorer": lambda: explorer.render(db),

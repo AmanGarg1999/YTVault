@@ -45,6 +45,50 @@ def render(db, run_pipeline_background):
             except Exception as e:
                 st.error(f"Failed to start harvest: {e}")
 
+        # Manually overridden videos section
+        st.markdown("---")
+        st.markdown("### ⚡ Force-Accepted Videos (Manual Overrides)")
+
+        manually_overridden = db.get_manually_overridden_videos(limit=20)
+        if manually_overridden:
+            col1, col2 = st.columns([2, 2])
+            with col1:
+                st.info(f"**{len(manually_overridden)}** videos waiting to be re-ingested after manual override")
+            with col2:
+                if st.button("🔄 Process All Force-Accepted Videos", key="process_overridden"):
+                    from src.pipeline.orchestrator import PipelineOrchestrator
+                    orchestrator = PipelineOrchestrator()
+                    try:
+                        count = orchestrator.process_manually_overridden_videos()
+                        st.success(f"Processing {count} manually-overridden videos in background")
+                        st.toast(f"Processing {count} videos!", icon="⚡")
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Failed to process: {e}")
+                    finally:
+                        orchestrator.close()
+
+            # Show the manually-overridden videos
+            for i, v in enumerate(manually_overridden[:5]):
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.caption(f"🔄 **{v.title[:60]}...** (Manual Override)")
+                with col2:
+                    if st.button("Process", key=f"process_single_{i}_{v.video_id}"):
+                        from src.pipeline.orchestrator import PipelineOrchestrator
+                        orchestrator = PipelineOrchestrator()
+                        try:
+                            orchestrator._resume_video(v)
+                            st.success(f"Processing {v.title[:40]}...")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed: {e}")
+                        finally:
+                            orchestrator.close()
+        else:
+            st.info("No manually-overridden videos waiting for processing.")
+
         # Resume section
         st.markdown("---")
         st.markdown("### 🔄 Resume Interrupted Scan")

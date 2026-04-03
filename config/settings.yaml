@@ -21,6 +21,8 @@ ollama:
   normalizer_max_tokens: 2048
   rag_max_tokens: 4096
   temperature: 0.1
+  timeout_seconds: 30      # API call timeout
+  request_timeout_seconds: 45  # Overall request timeout
 
 # SQLite Configuration
 sqlite:
@@ -90,7 +92,11 @@ chunking:
 
 # Pipeline Concurrency
 pipeline:
-  llm_max_workers: 2               # concurrent Ollama calls for batch triage/normalization
+  llm_max_workers: 8               # concurrent Ollama calls (increased from 2, hardware supports max 20)
+  discovery_rate_limit_delay: 1.0  # seconds between yt-dlp requests
+  batch_size_triage: 10           # videos per triage batch
+  batch_size_normalize: 5         # transcripts per normalization batch
+  enable_eta_calculation: true    # calculate and display progress ETA
 
 # RAG Configuration
 rag:

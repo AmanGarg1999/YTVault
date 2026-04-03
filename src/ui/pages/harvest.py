@@ -26,7 +26,7 @@ def render(db, run_pipeline_background):
 
         col1, col2 = st.columns([1, 3])
         with col1:
-            start_btn = st.button("🚀 Start Harvest", type="primary", use_container_width=True)
+            start_btn = st.button("🚀 Start Harvest", type="primary", use_container_width=True, key="start_harvest_btn")
 
         if start_btn and url:
             try:

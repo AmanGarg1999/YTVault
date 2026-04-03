@@ -6,6 +6,7 @@ strategy: manual English → auto English → manual any → auto any.
 """
 
 import logging
+import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -17,6 +18,10 @@ from youtube_transcript_api._errors import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Retry configuration
+MAX_RETRIES = 3
+RETRY_DELAYS = [1, 3, 5]  # seconds between retries
 
 
 @dataclass
@@ -46,8 +51,8 @@ class TranscriptResult:
         return self.error is None and len(self.segments) > 0
 
 
-def fetch_transcript(video_id: str) -> TranscriptResult:
-    """Fetch transcript with priority-ordered fallback strategy.
+def fetch_transcript(video_id: str, retry_count: int = 0) -> TranscriptResult:
+    """Fetch transcript with priority-ordered fallback strategy and retry logic.
 
     Priority:
         1. Manual English transcript
@@ -59,23 +64,30 @@ def fetch_transcript(video_id: str) -> TranscriptResult:
         TranscriptResult with segments, full text, and strategy info.
     """
     try:
-        # Use a more robust check for list_transcripts (recent versions of the library)
-        if hasattr(YouTubeTranscriptApi, "list_transcripts"):
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-        else:
-            # Fallback for very old versions or unexpected library state
-            logger.warning(f"list_transcripts missing on YouTubeTranscriptApi — checking for alternative methods")
-            # We skip list-based priority but try to fetch default 'en' directly
-            # This is a last-resort fallback for broken environments
-            default_transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=["en"])
-            if default_transcript:
-                return TranscriptResult(
-                    segments=[TimestampedSegment(text=s["text"], start=s["start"], duration=s["duration"]) 
-                             for s in default_transcript],
-                    full_text=" ".join(s["text"] for s in default_transcript),
-                    strategy="auto_en", language_iso="en", needs_translation=False
-                )
-            raise AttributeError("YouTubeTranscriptApi has no 'list_transcripts' method")
+        # List transcripts with retry
+        transcript_list = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+                break
+            except (TranscriptsDisabled, VideoUnavailable):
+                raise  # Don't retry on these errors
+            except Exception as e:
+                if attempt < MAX_RETRIES - 1:
+                    wait_time = RETRY_DELAYS[attempt]
+                    logger.warning(f"Transcript list attempt {attempt+1}/{MAX_RETRIES} failed for {video_id}, retrying in {wait_time}s: {e}")
+                    time.sleep(wait_time)
+                else:
+                    logger.error(f"All {MAX_RETRIES} transcript list attempts failed for {video_id}: {e}")
+                    raise
+
+        if transcript_list is None:
+            logger.error(f"Could not list transcripts for {video_id}")
+            return TranscriptResult(
+                segments=[], full_text="", strategy="none",
+                language_iso="", needs_translation=False,
+                error="could_not_list_transcripts",
+            )
 
     except (TranscriptsDisabled, VideoUnavailable) as e:
         logger.warning(f"Transcripts unavailable for {video_id}: {e}")

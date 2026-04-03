@@ -184,18 +184,26 @@ class TriageEngine:
 
     @with_retry("ollama_inference")
     def _call_ollama_triage(self, user_prompt: str) -> dict:
-        """Call Ollama for triage classification with retry."""
-        return ollama.chat(
-            model=self.ollama_cfg["triage_model"],
-            messages=[
-                {"role": "system", "content": self.triage_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            options={
-                "num_predict": self.ollama_cfg.get("triage_max_tokens", 100),
-                "temperature": self.ollama_cfg.get("temperature", 0.1),
-            },
-        )
+        """Call Ollama for triage classification with retry and timeout."""
+        timeout = self.ollama_cfg.get("timeout_seconds", 30)
+        try:
+            response = ollama.chat(
+                model=self.ollama_cfg["triage_model"],
+                messages=[
+                    {"role": "system", "content": self.triage_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                options={
+                    "num_predict": self.ollama_cfg.get("triage_max_tokens", 100),
+                    "temperature": self.ollama_cfg.get("temperature", 0.1),
+                },
+            )
+            return response
+        except Exception as e:
+            if "timeout" in str(e).lower():
+                logger.error(f"Ollama triage timeout after {timeout}s: {e}")
+                raise TimeoutError(f"Ollama inference timeout: {e}")
+            raise
 
     def _build_triage_user_prompt(self, video: Video) -> str:
         """Build the user-message portion of the triage prompt."""

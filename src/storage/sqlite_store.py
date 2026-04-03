@@ -340,16 +340,41 @@ class SQLiteStore:
     Supports context manager protocol for automatic cleanup:
         with SQLiteStore(path) as db:
             db.insert_video(...)
+    
+    Features:
+        - WAL mode for concurrent access
+        - Connection pooling via check_same_thread=False
+        - Automatic retry on database locked errors
     """
 
     def __init__(self, db_path: str):
         self.db_path = db_path
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+        self.conn = sqlite3.connect(
+            db_path, 
+            check_same_thread=False,
+            timeout=30.0  # 30-second timeout for locked DB
+        )
         self.conn.row_factory = sqlite3.Row
         self._init_schema()
+        self._verify_wal_mode()
         self._run_migrations()
         logger.info(f"SQLite store initialized: {db_path}")
+
+    def _verify_wal_mode(self):
+        """Verify WAL mode is enabled for concurrent access."""
+        try:
+            result = self.conn.execute("PRAGMA journal_mode").fetchone()
+            mode = result[0] if result else "unknown"
+            if mode.upper() != "WAL":
+                logger.warning(f"Expected WAL mode, got {mode}. Enabling WAL...")
+                self.conn.execute("PRAGMA journal_mode = WAL")
+                self.conn.commit()
+                logger.info("WAL mode enabled successfully")
+            else:
+                logger.debug(f"WAL mode verified: {mode}")
+        except Exception as e:
+            logger.warning(f"Could not verify WAL mode: {e}")
 
     def _init_schema(self):
         """Create all tables if they don't exist."""
@@ -407,20 +432,29 @@ class SQLiteStore:
 
     def upsert_channel(self, channel: Channel) -> None:
         """Insert or update a channel record."""
-        self.conn.execute(
-            """INSERT INTO channels (channel_id, name, url, description, category,
-                   language_iso, discovered_at, total_videos)
-               VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
-               ON CONFLICT(channel_id) DO UPDATE SET
-                   name = excluded.name,
-                   description = excluded.description,
-                   total_videos = excluded.total_videos,
-                   last_scanned_at = CURRENT_TIMESTAMP""",
-            (channel.channel_id, channel.name, channel.url,
-             channel.description, channel.category,
-             channel.language_iso, channel.total_videos),
-        )
-        self.conn.commit()
+        try:
+            self.conn.execute(
+                """INSERT INTO channels (channel_id, name, url, description, category,
+                       language_iso, discovered_at, total_videos)
+                   VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+                   ON CONFLICT(channel_id) DO UPDATE SET
+                       name = excluded.name,
+                       description = excluded.description,
+                       total_videos = excluded.total_videos,
+                       last_scanned_at = CURRENT_TIMESTAMP""",
+                (channel.channel_id, channel.name, channel.url,
+                 channel.description, channel.category,
+                 channel.language_iso, channel.total_videos),
+            )
+            self.conn.commit()
+        except sqlite3.OperationalError as e:
+            if "database is locked" in str(e).lower():
+                import time
+                logger.debug("Database locked during upsert_channel, retrying...")
+                time.sleep(0.5)
+                self.conn.commit()
+            else:
+                raise
 
     def get_channel(self, channel_id: str) -> Optional[Channel]:
         """Get a channel by ID."""
@@ -456,6 +490,7 @@ class SQLiteStore:
             self.conn.commit()
             return True
         except sqlite3.IntegrityError:
+            self.conn.rollback()
             return False  # Duplicate video_id
 
     def get_video(self, video_id: str) -> Optional[Video]:
@@ -482,12 +517,14 @@ class SQLiteStore:
             result.append(Video(**d))
         return result
 
-    def get_videos_by_channel(self, channel_id: str) -> list[Video]:
-        """Get all videos for a channel."""
-        rows = self.conn.execute(
-            "SELECT * FROM videos WHERE channel_id = ? ORDER BY upload_date DESC",
-            (channel_id,),
-        ).fetchall()
+    def get_videos_by_channel(self, channel_id: str, limit: int = None) -> list[Video]:
+        """Get all videos for a channel, optionally limited."""
+        query = "SELECT * FROM videos WHERE channel_id = ? ORDER BY upload_date DESC"
+        params = (channel_id,)
+        if limit:
+            query += f" LIMIT {limit}"
+        
+        rows = self.conn.execute(query, params).fetchall()
         result = []
         for r in rows:
             d = dict(r)
@@ -561,25 +598,31 @@ class SQLiteStore:
             "SELECT * FROM guests WHERE canonical_name = ?", (name,)
         ).fetchone()
         if row:
-            self.conn.execute(
-                """UPDATE guests SET mention_count = mention_count + 1,
-                       last_seen = CURRENT_TIMESTAMP WHERE guest_id = ?""",
-                (row["guest_id"],),
-            )
-            self.conn.commit()
+            try:
+                self.conn.execute(
+                    """UPDATE guests SET mention_count = mention_count + 1,
+                           last_seen = CURRENT_TIMESTAMP WHERE guest_id = ?""",
+                    (row["guest_id"],),
+                )
+                self.conn.commit()
+            except sqlite3.OperationalError:
+                self.conn.rollback()
             d = dict(row)
             d["aliases"] = json.loads(d.pop("aliases_json", "[]"))
             d["mention_count"] = d["mention_count"] + 1
             return Guest(**d)
         else:
-            cursor = self.conn.execute(
-                """INSERT INTO guests (canonical_name, entity_type, mention_count)
-                   VALUES (?, ?, 1)""",
-                (name, entity_type),
-            )
-            self.conn.commit()
+            try:
+                cursor = self.conn.execute(
+                    """INSERT INTO guests (canonical_name, entity_type, mention_count)
+                       VALUES (?, ?, 1)""",
+                    (name, entity_type),
+                )
+                self.conn.commit()
+            except sqlite3.OperationalError:
+                self.conn.rollback()
             return Guest(
-                guest_id=cursor.lastrowid,
+                guest_id=cursor.lastrowid if cursor else 0,
                 canonical_name=name,
                 entity_type=entity_type,
                 mention_count=1,
@@ -655,7 +698,10 @@ class SQLiteStore:
             )
             self.conn.commit()
         except sqlite3.IntegrityError:
-            pass  # Duplicate appearance
+            self.conn.rollback()
+        except sqlite3.OperationalError as e:
+            self.conn.rollback()
+            logger.debug(f"Database locked during add_guest_appearance: {e}")
 
     # -------------------------------------------------------------------
     # Transcript Chunks
@@ -667,7 +713,7 @@ class SQLiteStore:
         for chunk in chunks:
             try:
                 self.conn.execute(
-                    """INSERT INTO transcript_chunks
+                    """INSERT OR IGNORE INTO transcript_chunks
                            (chunk_id, video_id, chunk_index, raw_text, cleaned_text,
                             word_count, start_timestamp, end_timestamp)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -911,10 +957,25 @@ class SQLiteStore:
                 )
                 self.conn.commit()
                 return
-            except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
+            except (sqlite3.OperationalError, sqlite3.DatabaseError, SystemError) as e:
                 if attempt < max_retries - 1:
                     logger.warning(f"SQLite commit retry {attempt + 1}/{max_retries}: {e}")
                     time.sleep(0.1 * (attempt + 1))  # Exponential backoff
+                    # Attempt to reset connection on SystemError
+                    if isinstance(e, SystemError):
+                        try:
+                            self.conn.close()
+                            import sqlite3 as sqlite3_module
+                            self.conn = sqlite3_module.connect(
+                                self.db_path, 
+                                detect_types=sqlite3_module.PARSE_DECLTYPES,
+                                timeout=5.0
+                            )
+                            self.conn.row_factory = sqlite3_module.Row
+                            self.conn.execute("PRAGMA journal_mode = WAL")
+                            self.conn.execute("PRAGMA foreign_keys = ON")
+                        except Exception as reconnect_err:
+                            logger.error(f"Failed to reconnect: {reconnect_err}")
                 else:
                     logger.error(f"SQLite commit failed after {max_retries} attempts: {e}")
                     raise

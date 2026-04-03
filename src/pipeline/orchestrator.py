@@ -157,11 +157,6 @@ class PipelineOrchestrator:
             self.checkpoint.fail_scan(scan_id)
             raise
 
-        except Exception as e:
-            logger.error(f"Pipeline failed: {e}")
-            self.checkpoint.fail_scan(scan_id)
-            raise
-
     def resume(self, scan_id: str) -> None:
         """Resume an interrupted scan from the last checkpoint.
 

@@ -9,6 +9,7 @@ import json
 import logging
 import re
 import subprocess
+import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -16,6 +17,22 @@ from src.storage.sqlite_store import Channel, Video
 from src.utils.retry import with_retry
 
 logger = logging.getLogger(__name__)
+
+# Rate limiting configuration
+YTDLP_RATE_LIMIT_DELAY = 1.0  # seconds between requests
+YTDLP_LAST_REQUEST_TIME = 0  # Module-level tracking
+
+
+def _apply_rate_limit():
+    """Apply rate limiting between yt-dlp requests."""
+    global YTDLP_LAST_REQUEST_TIME
+    now = time.time()
+    elapsed = now - YTDLP_LAST_REQUEST_TIME
+    if elapsed < YTDLP_RATE_LIMIT_DELAY:
+        delay = YTDLP_RATE_LIMIT_DELAY - elapsed
+        logger.debug(f"Rate limiting: sleeping {delay:.2f}s")
+        time.sleep(delay)
+    YTDLP_LAST_REQUEST_TIME = time.time()
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +163,14 @@ def _run_ytdlp(args: list[str], timeout: int = 60) -> str:
         logger.error(f"yt-dlp executable not found. PATH: {env['PATH']}")
         raise RuntimeError(f"yt-dlp not found. Please install it and ensure it is in your PATH.")
 
+    if result.returncode != 0:
+        logger.error(f"yt-dlp exited with code {result.returncode}: {result.stderr[:500]}")
+        raise RuntimeError(f"yt-dlp failed: {result.stderr[:200]}")
+    
+    if not result.stdout.strip():
+        logger.error(f"yt-dlp returned empty output. stderr: {result.stderr[:500]}")
+        raise RuntimeError(f"yt-dlp returned empty output")
+    
     return result.stdout
 
 
@@ -193,6 +218,7 @@ def extract_video_metadata(video_id: str) -> tuple[Video, Channel]:
     No media files are downloaded (--no-download flag enforced).
     Returns both the Video and a shallow Channel model for FK constraints.
     """
+    _apply_rate_limit()  # Rate limiting
     url = f"https://www.youtube.com/watch?v={video_id}"
     raw = _run_ytdlp(["--dump-json", url])
     data = json.loads(raw)
@@ -220,19 +246,45 @@ def extract_video_metadata(video_id: str) -> tuple[Video, Channel]:
 
 
 def extract_channel_info(url: str) -> Channel:
-    """Extract channel metadata from a channel URL."""
-    raw = _run_ytdlp(["--dump-json", "--playlist-items", "0", url], timeout=30)
-    # yt-dlp may return channel info in the first entry
-    lines = raw.strip().split("\n")
-    if lines:
-        data = json.loads(lines[0])
-        return Channel(
-            channel_id=data.get("channel_id", ""),
-            name=data.get("channel", data.get("uploader", "Unknown")),
-            url=data.get("channel_url", url),
-            description=(data.get("description", "") or "")[:500],
-        )
-    raise RuntimeError(f"Could not extract channel info from: {url}")
+    """Extract channel metadata from a channel URL.
+    
+    Strategy: Try to get first video from playlist, fallback to generic channel object.
+    """
+    _apply_rate_limit()  # Rate limiting
+    
+    # Try to get first video info from the channel
+    try:
+        # Use --flat-playlist with limit 1 to get first video's metadata
+        raw = _run_ytdlp([
+            "--flat-playlist",
+            "--dump-json",
+            "--print", "id",
+            url
+        ], timeout=30)
+        
+        lines = [l.strip() for l in raw.strip().split("\n") if l.strip()]
+        if lines:
+            # First line should be a video ID
+            first_video_id = lines[0]
+            if len(first_video_id) == 11:  # Valid YouTube video ID length
+                # Extract metadata from first video
+                try:
+                    video, channel = extract_video_metadata(first_video_id)
+                    return channel
+                except Exception as e:
+                    logger.warning(f"Failed to extract from first video: {e}")
+    except Exception as e:
+        logger.debug(f"Failed to get first video info: {e}")
+    
+    # Fallback: Create a basic channel object with just the URL
+    # The channel will be populated when individual videos are processed
+    logger.warning(f"Using minimal channel info for {url}")
+    return Channel(
+        channel_id="unknown",
+        name="Unknown Channel",
+        url=url,
+        description="",
+    )
 
 
 def discover_video_ids(url: str, parsed: ParsedURL):

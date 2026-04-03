@@ -41,6 +41,11 @@ class OllamaEmbeddingFunction:
         if not input:
             return []
 
+        # Validate input
+        if not isinstance(input, list):
+            logger.error(f"Invalid input type to __call__: expected list, got {type(input)}")
+            raise TypeError(f"Expected list of strings, got {type(input)}")
+
         # Try batch embedding (Ollama library 0.1.7+ supports .embed)
         try:
             if hasattr(ollama_client, "embed"):
@@ -48,7 +53,9 @@ class OllamaEmbeddingFunction:
                     model=self.model_name,
                     input=input,
                 )
-                return response.get("embeddings", [])
+                embeddings = response.get("embeddings", [])
+                logger.debug(f"Batch embed succeeded: {len(embeddings)} embeddings")
+                return embeddings
         except Exception as e:
             logger.debug(f"Ollama batch embed failed, falling back to sequential: {e}")
 
@@ -69,6 +76,7 @@ class OllamaEmbeddingFunction:
             logger.error(f"Ollama embedding failed: {e}")
             raise
 
+        logger.debug(f"Sequential embed succeeded: {len(embeddings)} embeddings")
         return embeddings
 
 
@@ -203,7 +211,7 @@ class VectorStore:
 
     def upsert_chunks(self, chunks: list[TranscriptChunk], channel_id: str = "",
                       upload_date: str = "", language_iso: str = "en") -> int:
-        """Embed and upsert transcript chunks into ChromaDB.
+        """Embed and upsert transcript chunks into ChromaDB with deduplication.
 
         Args:
             chunks: List of TranscriptChunk objects.
@@ -217,31 +225,61 @@ class VectorStore:
         if not chunks:
             return 0
 
+        # Deduplication: track unique text hashes to avoid duplicate embeddings
+        seen_hashes = set()
+        deduplicated_chunks = []
+        skipped = 0
+        
+        for chunk in chunks:
+            # Simple hash-based deduplication (first 100 chars)
+            chunk_hash = hash(chunk.cleaned_text[:100])
+            if chunk_hash not in seen_hashes:
+                seen_hashes.add(chunk_hash)
+                deduplicated_chunks.append(chunk)
+            else:
+                skipped += 1
+        
+        if skipped > 0:
+            logger.debug(f"Deduplication: skipped {skipped} duplicate chunks")
+
         # Batch upsert for performance
         batch_size = 50
         total = 0
 
-        for i in range(0, len(chunks), batch_size):
-            batch = chunks[i:i + batch_size]
-            self.collection.upsert(
-                ids=[c.chunk_id for c in batch],
-                documents=[c.cleaned_text for c in batch],
-                metadatas=[{
-                    "video_id": c.video_id,
-                    "channel_id": channel_id,
-                    "chunk_index": c.chunk_index,
-                    "start_timestamp": c.start_timestamp,
-                    "end_timestamp": c.end_timestamp,
-                    "word_count": c.word_count,
-                    "upload_date": upload_date,
-                    "language_iso": language_iso,
-                } for c in batch],
-            )
-            total += len(batch)
-            logger.debug(f"Upserted batch {i // batch_size + 1}: {len(batch)} chunks")
+        try:
+            for i in range(0, len(deduplicated_chunks), batch_size):
+                batch = deduplicated_chunks[i:i + batch_size]
+                try:
+                    # Verify embedding function is callable
+                    if not callable(self.embedding_fn):
+                        logger.error(f"embedding_fn is not callable: {type(self.embedding_fn)}")
+                        raise TypeError(f"embedding_fn must be callable, got {type(self.embedding_fn)}")
+                    
+                    self.collection.upsert(
+                        ids=[c.chunk_id for c in batch],
+                        documents=[c.cleaned_text for c in batch],
+                        metadatas=[{
+                            "video_id": c.video_id,
+                            "channel_id": channel_id,
+                            "chunk_index": c.chunk_index,
+                            "start_timestamp": c.start_timestamp,
+                            "end_timestamp": c.end_timestamp,
+                            "word_count": c.word_count,
+                            "upload_date": upload_date,
+                            "language_iso": language_iso,
+                        } for c in batch],
+                    )
+                    total += len(batch)
+                    logger.debug(f"Upserted batch {i // batch_size + 1}: {len(batch)} chunks")
+                except Exception as e:
+                    logger.error(f"Failed to upsert batch {i // batch_size + 1}: {e}")
+                    raise
 
-        logger.info(f"Upserted {total} chunks to vector store")
-        return total
+            logger.info(f"Upserted {total} chunks to vector store (deduplicated {skipped})")
+            return total
+        except Exception as e:
+            logger.error(f"upsert_chunks failed: {e}")
+            raise
 
     def search(
         self,

@@ -14,9 +14,9 @@ ollama:
   host: "http://localhost:11434"
   triage_model: "llama3.2:3b"
   normalizer_model: "llama3.2:3b"
-  deep_model: "llama3.1:8b"
-  rag_model: "llama3.1:8b"
-  embedding_model: "nomic-embed-text"
+  deep_model: "llama3.2:3b"
+  rag_model: "llama3.2:3b"
+  embedding_model: "nomic-embed-text:latest"
   triage_max_tokens: 100
   normalizer_max_tokens: 2048
   rag_max_tokens: 4096

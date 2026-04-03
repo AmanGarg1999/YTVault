@@ -884,7 +884,7 @@ class SQLiteStore:
         total_processed: int = 0, last_video_id: str = "",
         status: str = ""
     ) -> None:
-        """Update an existing scan checkpoint."""
+        """Update an existing scan checkpoint with retry logic."""
         updates = ["updated_at = CURRENT_TIMESTAMP"]
         params = []
         if total_discovered:
@@ -900,11 +900,24 @@ class SQLiteStore:
             updates.append("status = ?")
             params.append(status)
         params.append(scan_id)
-        self.conn.execute(
-            f"UPDATE scan_checkpoints SET {', '.join(updates)} WHERE scan_id = ?",
-            params,
-        )
-        self.conn.commit()
+        
+        import time
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                self.conn.execute(
+                    f"UPDATE scan_checkpoints SET {', '.join(updates)} WHERE scan_id = ?",
+                    params,
+                )
+                self.conn.commit()
+                return
+            except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"SQLite commit retry {attempt + 1}/{max_retries}: {e}")
+                    time.sleep(0.1 * (attempt + 1))  # Exponential backoff
+                else:
+                    logger.error(f"SQLite commit failed after {max_retries} attempts: {e}")
+                    raise
 
     def get_scan_checkpoint(self, scan_id: str) -> Optional[ScanCheckpoint]:
         """Get a scan checkpoint by ID."""

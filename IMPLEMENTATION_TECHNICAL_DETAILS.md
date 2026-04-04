@@ -145,6 +145,9 @@ def delete_channel_data(
 ) -> dict  # Returns summary of deletions
 
 def get_deletion_history(self, limit: int = 50) -> list[dict]
+
+def get_knowledge_density_leaderboard(self, limit: int = 10) -> list[dict]
+    # Updated to include videos in CHUNK_ANALYZED and EMBEDDED stages
 ```
 
 ---
@@ -227,6 +230,27 @@ def _check_stop_requested(self, scan_id: str) -> bool
 - Full deletion history with timestamps
 - Storage estimate calculations
 - Reprocessing guidance
+- **Guest Data Cleanup (NEW):** Interactive utility to purge low-quality or junk names from the database
+
+---
+
+## Intelligence Layer Improvements
+
+### 1. RAG Engine Optimization
+**File:** `src/intelligence/rag_engine.py`
+- **Import Shadowing Fix:** Renamed `ollama` import to `ollama_api` to prevent library functions from being shadowed by local strings.
+- **Enhanced Synthesis:** Adjusted temperature to `0.1` and refined the RAG prompt to prioritize accuracy and citations.
+
+### 2. Interactive Knowledge Graph
+**File:** `src/intelligence/explorer.py` & `src/ui/pages/explorer.py`
+- **Node Selection:** Implemented `streamlit-agraph` callback handling to display selected entity details in a dedicated panel.
+- **Thematic Bridges:** Added `get_thematic_bridges` method using Cypher to surface hidden connections (shared topics/guests) between videos.
+- **Cross-Page Linking:** Integrated session-state navigation to allow one-click jumping from a graph node to the Guest Intelligence profile.
+
+### 3. Guest Entity Resolution
+**File:** `src/intelligence/entity_resolver.py` & `config/prompts/entity_extractor.txt`
+- **Noise Filtering:** Implemented `ENTITY_IGNORE_LIST` to filter out pronouns, locations (e.g., "India"), and generic labels.
+- **Prompt Strengthening:** Updated NER extractor prompt with strict rules for individual extraction.
 
 ---
 
@@ -440,5 +464,5 @@ Existing deployments can:
 
 ---
 
-**Implementation Date:** 2025-04-04
-**Status:** Complete and production-ready
+**Implementation Date:** 2026-04-04
+**Status:** Complete and verified (Research Console Fix + Interactive Graph)

@@ -289,7 +289,70 @@ def render(db):
         st.markdown("---")
 
         # =====================================================================
-        # SECTION 4: Storage Optimization Tips
+        # SECTION 4: Guest Data Cleanup (NEW)
+        # =====================================================================
+        st.markdown("### 👤 Guest Data Cleanup")
+        st.info("""
+        **Guest cleanup** identifies and removes low-quality guest entries:
+        - Names shorter than 3 characters
+        - Generic pronouns ("you", "he", "they")
+        - Mis-tagged locations or organizations
+        - One-word generic labels ("speaker", "expert")
+        """)
+        
+        # Identification logic
+        ENTITY_IGNORE_LIST = {
+            "you", "he", "she", "it", "they", "we", "i", "me", "him", "her", "us", "them",
+            "assistant", "speaker", "host", "guest", "expert", "narrator",
+            "india", "usa", "china", "london", "mars", "earth",
+            "youtube", "google", "openai", "anthropic", "meta", "tesla",
+            "unknown", "someone", "somebody", "anyone", "everyone",
+            "a", "the", "an", "this", "that", "there", "here"
+        }
+        
+        with st.expander("🔍 Preview Junk Guests", expanded=False):
+            all_guests = db.get_all_guests()
+            to_cleanup = []
+            for g in all_guests:
+                name_clean = g.canonical_name.lower().strip().strip('.,!?"')
+                is_junk = False
+                if len(name_clean) < 3 or name_clean in ENTITY_IGNORE_LIST:
+                    is_junk = True
+                elif len(name_clean.split()) == 1 and name_clean in ENTITY_IGNORE_LIST:
+                    is_junk = True
+                
+                if is_junk:
+                    to_cleanup.append({"ID": g.guest_id, "Name": g.canonical_name, "Mentions": g.mention_count})
+            
+            if to_cleanup:
+                st.write(f"Found **{len(to_cleanup)}** potentially low-quality guest records.")
+                st.table(pd.DataFrame(to_cleanup))
+                
+                if st.button("🔴 PURGE JUNK GUESTS", type="primary", key="purge_guests_btn"):
+                    if st.checkbox("⚠️ Confirm purge of guest records", key="confirm_purge_guests"):
+                        try:
+                            # Run deletion SQL
+                            ids = [item["ID"] for item in to_cleanup]
+                            placeholders = ",".join(["?"] * len(ids))
+                            
+                            # Start transaction
+                            db.conn.execute("BEGIN TRANSACTION")
+                            db.conn.execute(f"DELETE FROM guest_appearances WHERE guest_id IN ({placeholders})", ids)
+                            db.conn.execute(f"DELETE FROM guests WHERE guest_id IN ({placeholders})", ids)
+                            db.conn.commit()
+                            
+                            st.success(f"✅ Successfully purged {len(ids)} junk guest records!")
+                            st.rerun()
+                        except Exception as e:
+                            db.conn.rollback()
+                            st.error(f"❌ Purge failed: {e}")
+            else:
+                st.success("No apparent junk guests found in current vault!")
+
+        st.markdown("---")
+
+        # =====================================================================
+        # SECTION 5: Storage Optimization Tips
         # =====================================================================
         st.markdown("### 💾 Storage Optimization Tips")
         

@@ -95,7 +95,12 @@ def render(db):
                                                 f"- [{c.source_id}] **{c.video_title}** "
                                                 f"([{c.timestamp_str}]({c.youtube_link}))"
                                             )
-                                            topic = getattr(c, "topic", "") if hasattr(c, "topic") else c.get("topic", "")
+                                            # Handle both dataclass properties and dict-like access
+                                            topic = ""
+                                            if hasattr(c, "topic"):
+                                                topic = c.topic
+                                            elif isinstance(c, dict):
+                                                topic = c.get("topic", "")
                                             st.caption(f"📂 Topic: {topic or 'General Context'}")
                                         with col2:
                                             c1, c2 = st.columns(2)
@@ -117,6 +122,84 @@ def render(db):
                                         "link": c.youtube_link,
                                         "topic": getattr(c, "topic", ""),
                                     })
+
+                        # Week 1 Enhancement: Show raw data for verification
+                        st.divider()
+                        st.subheader("🔍 Verification Layer")
+                        
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Citations", len(response.citations))
+                        with col2:
+                            st.metric("Chunks Retrieved", response.total_chunks_retrieved)
+                        with col3:
+                            st.metric("Query Time", f"{response.latency_ms:.0f}ms")
+                        
+                        if response.verification_notes:
+                            st.info(response.verification_notes)
+                        
+                        # Raw chunks with original text
+                        if response.raw_chunks:
+                            with st.expander("📋 Raw Source Chunks (Original Text)", expanded=False):
+                                for i, raw in enumerate(response.raw_chunks, 1):
+                                    with st.expander(
+                                        f"{i}. {raw['chunk_id'][:20]}... ({raw['channel']}) [{raw['timestamp']}]",
+                                        expanded=(i == 1)
+                                    ):
+                                        col1, col2 = st.columns(2)
+                                        
+                                        with col1:
+                                            st.write("**Cleaned Text:**")
+                                            st.text_area(
+                                                "Cleaned",
+                                                value=raw['cleaned_text'][:500],
+                                                height=150,
+                                                disabled=True,
+                                                key=f"raw_cleaned_{i}"
+                                            )
+                                        
+                                        with col2:
+                                            st.write("**Raw Text (Original):**")
+                                            st.text_area(
+                                                "Raw",
+                                                value=raw['raw_text'][:500],
+                                                height=150,
+                                                disabled=True,
+                                                key=f"raw_original_{i}"
+                                            )
+                                        
+                                        st.caption(
+                                            f"Link: {raw['youtube_link']} | "
+                                            f"Chunk ID: {raw['chunk_id']}"
+                                        )
+                        
+                        # Full transcripts for reference
+                        if response.full_transcripts:
+                            with st.expander(f"📚 Full Transcripts ({len(response.full_transcripts)} videos)", expanded=False):
+                                for transcript in response.full_transcripts:
+                                    with st.expander(
+                                        f"{transcript['title'][:50]} ({transcript['duration']})",
+                                        expanded=False
+                                    ):
+                                        st.write(f"**Channel:** {transcript['channel']}")
+                                        st.write(f"**Date:** {transcript['upload_date']}")
+                                        st.write(f"**Chunks:** {transcript['chunk_count']}")
+                                        
+                                        st.text_area(
+                                            "Full Transcript",
+                                            value=transcript['full_text'][:2000],
+                                            height=300,
+                                            disabled=True,
+                                            key=f"full_transcript_{transcript['video_id']}"
+                                        )
+                                        
+                                        if len(transcript['full_text']) > 2000:
+                                            st.caption(f"Showing first 2000 chars of {len(transcript['full_text'])} total. "
+                                                      f"View full transcript in Transcripts page.")
+                                        
+                                        st.caption(f"Access via: {transcript['access_via']}")
+                        
+                        st.divider()
 
                         conf = response.confidence
                         conf_str = ""
@@ -151,6 +234,8 @@ def render(db):
                         }
 
                     except Exception as e:
+                        import traceback
+                        traceback.print_exc()
                         error_msg = f"Query failed: {e}. Make sure Ollama is running."
                         st.error(error_msg)
                         st.session_state.conversation[-1]["answer"] = error_msg

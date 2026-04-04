@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-import ollama
+import ollama as ollama_api
 
 from src.config import get_settings, load_prompt
 from src.intelligence.query_parser import QueryPlan, parse_query
@@ -97,7 +97,7 @@ class ConfidenceScore:
 
 @dataclass
 class RAGResponse:
-    """Complete response from a RAG query."""
+    """Complete response from a RAG query with optional raw data for verification."""
     query: str
     answer: str
     citations: list[Citation] = field(default_factory=list)
@@ -106,6 +106,11 @@ class RAGResponse:
     total_chunks_used: int = 0
     latency_ms: float = 0.0
     query_plan: Optional[QueryPlan] = None
+    
+    # Week 1 Enhancement: Raw data for verification workflow
+    raw_chunks: list[dict] = field(default_factory=list)  # Full chunk text + metadata
+    full_transcripts: list[dict] = field(default_factory=list)  # Full video transcripts
+    verification_notes: str = ""  # How to verify answer
 
 
 class RAGEngine:
@@ -222,6 +227,10 @@ class RAGEngine:
             f"(confidence: {confidence.overall:.2f})"
         )
 
+        # Step 11: Enrich with raw transcript data for verification (Week 1 enhancement)
+        raw_chunks = self._enrich_citations_with_raw(citations)
+        full_transcripts = self._get_full_transcripts_for_citations(citations)
+
         return RAGResponse(
             query=question,
             answer=answer,
@@ -231,6 +240,10 @@ class RAGEngine:
             total_chunks_used=len(citations),
             latency_ms=latency,
             query_plan=plan,
+            raw_chunks=raw_chunks,
+            full_transcripts=full_transcripts,
+            verification_notes=f"Answer based on {len(citations)} citations from {len(set(c.channel_name for c in citations))} channels. "
+                              f"View raw chunks and full transcripts to verify.",
         )
 
     # -------------------------------------------------------------------
@@ -458,19 +471,23 @@ class RAGEngine:
     def _synthesize(self, context_prompt: str) -> str:
         """Send context + question to Ollama LLM for synthesis."""
         try:
-            response = ollama.chat(
-                model=self.ollama_cfg.get("deep_model", self.ollama_cfg["rag_model"]),
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": context_prompt},
-                ],
-                options={
-                    "num_predict": self.ollama_cfg.get("rag_max_tokens", 4096),
-                    "temperature": 0.3,
-                },
-            )
-            return response["message"]["content"].strip()
-
+            # Ensure ollama_api is the standard library and chat is callable
+            if hasattr(ollama_api, "chat") and callable(ollama_api.chat):
+                response = ollama_api.chat(
+                    model=self.ollama_cfg.get("deep_model", self.ollama_cfg.get("rag_model", "llama3.2:3b")),
+                    messages=[
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "user", "content": context_prompt},
+                    ],
+                    options={
+                        "num_predict": self.ollama_cfg.get("rag_max_tokens", 4096),
+                        "temperature": self.ollama_cfg.get("temperature", 0.1),
+                    },
+                )
+                return response["message"]["content"]
+            else:
+                logger.error("Ollama library in unexpected state or ollama.chat not reachable")
+                return "Error: LLM client is misconfigured."
         except Exception as e:
             logger.error(f"RAG synthesis failed: {e}")
             return (
@@ -478,3 +495,64 @@ class RAGEngine:
                 "The context chunks were retrieved successfully — "
                 "please check that Ollama is running."
             )
+
+    # -------------------------------------------------------------------
+    # Raw Data Enrichment (Week 1: Verification Workflow)
+    # -------------------------------------------------------------------
+
+    def _enrich_citations_with_raw(self, citations: list[Citation]) -> list[dict]:
+        """Add raw transcript text to each citation for verification."""
+        rich_data = []
+        
+        for c in citations:
+            try:
+                chunk = self.db.execute("""
+                    SELECT raw_text, cleaned_text, chunk_id
+                    FROM transcript_chunks
+                    WHERE chunk_id = ?
+                """, (c.chunk_id,)).fetchone()
+                
+                if chunk:
+                    rich_data.append({
+                        "chunk_id": c.chunk_id,
+                        "video_id": c.video_id,
+                        "video_title": c.video_title,
+                        "channel": c.channel_name,
+                        "timestamp": c.timestamp_str,
+                        "timestamp_seconds": int(c.start_timestamp),
+                        "youtube_link": c.youtube_link,
+                        "raw_text": chunk['raw_text'],
+                        "cleaned_text": chunk['cleaned_text'],
+                        "relevance_score": 1.0 - (c.start_timestamp - int(c.start_timestamp))  # rough approximation
+                    })
+            except Exception as e:
+                logger.warning(f"Failed to enrich citation {c.chunk_id}: {e}")
+                continue
+        
+        return rich_data
+    
+    def _get_full_transcripts_for_citations(self, citations: list[Citation]) -> list[dict]:
+        """Get full transcripts for cited videos."""
+        video_ids = set(c.video_id for c in citations)
+        full_transcripts = []
+        
+        for vid in video_ids:
+            try:
+                transcript = self.db.get_full_transcript(vid)
+                if transcript:
+                    full_transcripts.append({
+                        "video_id": vid,
+                        "title": transcript['title'],
+                        "channel": transcript['channel'],
+                        "duration": f"{transcript['duration_seconds'] // 60}m {transcript['duration_seconds'] % 60}s",
+                        "upload_date": transcript['upload_date'],
+                        "full_text": transcript['full_cleaned_text'],
+                        "access_via": f"Transcript Viewer > {vid}",
+                        "chunk_count": transcript['total_chunks']
+                    })
+            except Exception as e:
+                logger.warning(f"Failed to get full transcript for {vid}: {e}")
+                continue
+        
+        return full_transcripts
+

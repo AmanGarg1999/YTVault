@@ -10,7 +10,7 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-import ollama
+import ollama as ollama_api
 from rapidfuzz import fuzz
 
 from src.config import get_settings, load_prompt
@@ -18,6 +18,15 @@ from src.storage.sqlite_store import Guest, SQLiteStore
 
 logger = logging.getLogger(__name__)
 
+# Noise list to filter out common false positives from NER
+ENTITY_IGNORE_LIST = {
+    "you", "he", "she", "it", "they", "we", "i", "me", "him", "her", "us", "them",
+    "assistant", "speaker", "host", "guest", "expert", "narrator",
+    "india", "usa", "china", "london", "mars", "earth", # Skip pure locations if mis-tagged
+    "youtube", "google", "openai", "anthropic", "meta", "tesla",
+    "unknown", "someone", "somebody", "anyone", "everyone",
+    "a", "the", "an", "this", "that", "there", "here"
+}
 
 @dataclass
 class ExtractedEntity:
@@ -31,7 +40,7 @@ class EntityResolver:
     """Resolves guest entities across channels using NER + fuzzy matching + LLM.
 
     Pipeline:
-        1. Extract person entities from transcript via LLM NER
+        1. Extract person entities from transcript via LLM NER (with improved filtering)
         2. Attempt exact match against canonical names and aliases
         3. Attempt fuzzy match (Levenshtein similarity ≥ 85%)
         4. LLM disambiguation for multiple candidates
@@ -58,7 +67,7 @@ class EntityResolver:
         truncated = text[:2000]
 
         try:
-            response = ollama.chat(
+            response = ollama_api.chat(
                 model=self.ollama_cfg["triage_model"],  # Reuse fast model
                 messages=[
                     {"role": "system", "content": self.ner_prompt},
@@ -72,71 +81,71 @@ class EntityResolver:
 
             raw = response["message"]["content"].strip()
             entities = self._parse_entity_response(raw)
-            logger.debug(f"Extracted {len(entities)} entities from chunk")
-            return entities
+            
+            # Additional filtering for quality
+            filtered = []
+            for e in entities:
+                name_clean = e.name.lower().strip().strip('.,!?"')
+                # Skip if too short, single character, or in noise list
+                if len(name_clean) < 3: continue
+                if name_clean in ENTITY_IGNORE_LIST: continue
+                if any(word in ENTITY_IGNORE_LIST for word in name_clean.split()):
+                    # Avoid skipping "Sam Altman" just because "Sam" is short, 
+                    # but skip "Sam" if it's the only word and short.
+                    if len(name_clean.split()) == 1: continue
+
+                filtered.append(e)
+                
+            logger.debug(f"Extracted {len(filtered)} quality entities from chunk (filtered from {len(entities)})")
+            return filtered
 
         except Exception as e:
             logger.error(f"Entity extraction failed: {e}")
             return []
 
     def resolve(self, entity_name: str) -> Guest:
-        """Resolve an extracted name to a canonical Guest record.
-
-        Resolution priority:
-            1. Exact match on canonical_name
-            2. Exact match on aliases
-            3. Fuzzy match (≥85% similarity)
-            4. LLM disambiguation for multiple fuzzy matches
-            5. Create new Guest record
-        """
+        """Resolve an extracted name to a canonical Guest record."""
+        # Normalize name for matching
+        clean_name = entity_name.strip()
+        
         # Step 1: Exact match
-        guest = self.db.find_guest_exact(entity_name)
+        guest = self.db.find_guest_exact(clean_name)
         if guest:
-            logger.debug(f"Exact match: '{entity_name}' → '{guest.canonical_name}'")
+            logger.debug(f"Exact match: '{clean_name}' → '{guest.canonical_name}'")
             return guest
 
         # Step 2: Fuzzy match against cached guests
-        candidates = self._fuzzy_match(entity_name)
+        candidates = self._fuzzy_match(clean_name)
 
         if len(candidates) == 1:
             # Single fuzzy match — add as alias
             guest = candidates[0]
-            self.db.add_guest_alias(guest.guest_id, entity_name)
+            # Avoid adding tiny name fragments as aliases
+            if len(clean_name) >= 4:
+                self.db.add_guest_alias(guest.guest_id, clean_name)
             logger.info(
-                f"Fuzzy match: '{entity_name}' → '{guest.canonical_name}' "
-                f"(added as alias)"
+                f"Fuzzy match: '{clean_name}' → '{guest.canonical_name}'"
             )
             return guest
 
         if len(candidates) > 1:
             # Multiple matches — LLM disambiguation
-            guest = self._llm_disambiguate(entity_name, candidates)
+            guest = self._llm_disambiguate(clean_name, candidates)
             if guest:
                 return guest
 
         # Step 3: Create new guest and refresh cache
-        guest = self.db.upsert_guest(entity_name)
+        guest = self.db.upsert_guest(clean_name)
         if self._guests_cache is not None:
             self._guests_cache.append(guest)
-        logger.info(f"New guest created: '{entity_name}'")
+        logger.info(f"New guest created: '{clean_name}'")
         return guest
 
     def process_video_entities(
         self, video_id: str, transcript_text: str
     ) -> list[Guest]:
-        """Full pipeline: extract entities from transcript and resolve them.
-
-        Caches the guest list once at the start to avoid O(N) DB loads
-        per entity during fuzzy matching.
-
-        Args:
-            video_id: Video ID to link appearances to.
-            transcript_text: Cleaned transcript text.
-
-        Returns:
-            List of resolved Guest objects found in the transcript.
-        """
-        # Pre-load all guests for this batch (used by _fuzzy_match)
+        """Full pipeline: extract entities from transcript and resolve them."""
+        # Pre-load all guests for this batch
         self._guests_cache = self.db.get_all_guests()
 
         entities = self.extract_entities(transcript_text)
@@ -144,9 +153,9 @@ class EntityResolver:
         seen_names = set()
 
         for entity in entities:
-            if entity.name in seen_names:
+            if entity.name.lower().strip() in seen_names:
                 continue
-            seen_names.add(entity.name)
+            seen_names.add(entity.name.lower().strip())
 
             guest = self.resolve(entity.name)
             resolved_guests.append(guest)
@@ -158,33 +167,26 @@ class EntityResolver:
                 context=entity.context[:200],
             )
 
-        # Clear cache after batch
         self._guests_cache = None
         return resolved_guests
 
     def _fuzzy_match(self, name: str) -> list[Guest]:
-        """Find guests with similar names using fuzzy string matching.
-
-        Uses the cached guest list when available (set by process_video_entities).
-        """
+        """Find guests with similar names."""
         all_guests = self._guests_cache if self._guests_cache is not None else self.db.get_all_guests()
         matches = []
         name_lower = name.lower()
 
         for guest in all_guests:
-            # Check canonical name
             score = fuzz.ratio(name_lower, guest.canonical_name.lower())
             if score >= self.fuzzy_threshold:
                 matches.append(guest)
                 continue
 
-            # Check aliases
             for alias in guest.aliases:
                 score = fuzz.ratio(name_lower, alias.lower())
                 if score >= self.fuzzy_threshold:
                     matches.append(guest)
                     break
-
         return matches
 
     def _llm_disambiguate(
@@ -199,39 +201,33 @@ class EntityResolver:
         prompt = (
             f'Is "{name}" the same person as any of these existing records?\n\n'
             f"{candidate_list}\n\n"
-            f'Respond with ONLY the matching canonical name if it matches, '
-            f'or "NEW" if it\'s a different person.'
+            f'Respond with ONLY the matching canonical name if it is definitely the same person, '
+            f'or "NEW" if you are unsure or it is a different person.'
         )
 
         try:
-            response = ollama.chat(
+            response = ollama_api.chat(
                 model=self.ollama_cfg["triage_model"],
                 messages=[{"role": "user", "content": prompt}],
-                options={"num_predict": 50, "temperature": 0.1},
+                options={"num_predict": 50, "temperature": 0.0},
             )
 
-            answer = response["message"]["content"].strip().strip('"')
+            answer = response["message"]["content"].strip().strip('"').strip("'")
 
             if answer.upper() == "NEW":
                 return None
 
-            # Find matching candidate
             for guest in candidates:
                 if fuzz.ratio(answer.lower(), guest.canonical_name.lower()) >= 90:
                     self.db.add_guest_alias(guest.guest_id, name)
-                    logger.info(
-                        f"LLM disambiguated: '{name}' → '{guest.canonical_name}'"
-                    )
                     return guest
-
             return None
-
         except Exception as e:
             logger.error(f"LLM disambiguation failed: {e}")
             return None
 
     def _parse_entity_response(self, raw: str) -> list[ExtractedEntity]:
-        """Parse LLM NER response into Entity objects."""
+        """Parse LLM NER response."""
         try:
             clean = raw.strip()
             if clean.startswith("```"):
@@ -249,7 +245,6 @@ class EntityResolver:
                     for e in data
                     if e.get("name", "").strip()
                 ]
-        except (json.JSONDecodeError, TypeError):
-            logger.warning(f"Could not parse NER response: {raw[:200]}")
-
+        except Exception:
+            pass
         return []

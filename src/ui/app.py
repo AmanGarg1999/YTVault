@@ -26,6 +26,7 @@ from src.ui.pages import (
     dashboard, harvest, ambiguity, research,
     guest_intel, explorer, pipeline_monitor, export_center,
     logs_monitor, pipeline_control, data_management, reject_review,
+    transcript_viewer,
 )
 
 # ---------------------------------------------------------------------------
@@ -178,14 +179,30 @@ db = init_db()
 st.sidebar.markdown("## 🧠 knowledgeVault-YT")
 st.sidebar.markdown("---")
 
+# Define navigation options
+nav_options = ["🏠 Dashboard", "🌾 Harvest Manager", "📋 Ambiguity Queue", "🚫 Rejected Videos",
+               "🔍 Research Console", "� Transcripts", "�👤 Guest Intelligence", "🧠 Knowledge Explorer",
+               "📊 Pipeline Monitor", "📤 Export Center", "📋 Logs & Activity",
+               "🎮 Pipeline Control", "🗑️ Data Management"]
+
+# Support programmatic navigation
+if "navigate" in st.session_state:
+    target_page = st.session_state.pop("navigate")
+    if target_page in nav_options:
+        st.session_state.current_page = target_page
+
+# Set default page
+if "current_page" not in st.session_state:
+    st.session_state.current_page = "🏠 Dashboard"
+
 page = st.sidebar.radio(
     "Navigate",
-    ["🏠 Dashboard", "🌾 Harvest Manager", "📋 Ambiguity Queue", "🚫 Rejected Videos",
-     "🔍 Research Console", "👤 Guest Intelligence", "🧠 Knowledge Explorer",
-     "📊 Pipeline Monitor", "📤 Export Center", "📋 Logs & Activity",
-     "🎮 Pipeline Control", "🗑️ Data Management"],
+    nav_options,
+    index=nav_options.index(st.session_state.current_page),
     label_visibility="collapsed",
+    key="page_radio" # Use key to force sync if session_state.current_page changes
 )
+st.session_state.current_page = page
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +215,8 @@ PAGE_MAP = {
     "📋 Ambiguity Queue": lambda: ambiguity.render(db),
     "🚫 Rejected Videos": lambda: reject_review.render(db, run_pipeline_background),
     "🔍 Research Console": lambda: research.render(db),
-    "👤 Guest Intelligence": lambda: guest_intel.render(db),
+    "� Transcripts": lambda: transcript_viewer.render(db),
+    "�👤 Guest Intelligence": lambda: guest_intel.render(db),
     "🧠 Knowledge Explorer": lambda: explorer.render(db),
     "📊 Pipeline Monitor": lambda: pipeline_monitor.render(db, run_pipeline_background),
     "📤 Export Center": lambda: export_center.render(db),

@@ -137,7 +137,55 @@ def _render_connection_graph(explorer_obj, agraph, Node, Edge, Config):
 
                 st.markdown(f"**Viewing:** {st.session_state.get('explorer_mode', 'Vault')} Network")
                 st.caption("🔴 Video | 🟣 Guest | 🔵 Topic | 🟡 Channel")
-                agraph(nodes=nodes, edges=edges, config=config)
+                
+                # agraph returns the id of the clicked node
+                # Note: streamlit-agraph returns None if no node is clicked
+                selected_node_id = agraph(nodes=nodes, edges=edges, config=config)
+                
+                if selected_node_id:
+                    # Find the node in our graph data
+                    node = next((n for n in graph_data["nodes"] if n["id"] == selected_node_id), None)
+                    if node:
+                        st.markdown("---")
+                        st.markdown(f"### 📋 Node Details: {node['label']}")
+                        
+                        d_col1, d_col2 = st.columns(2)
+                        with d_col1:
+                            st.write(f"**Type:** {node['type']}")
+                            if node["type"] == "Video":
+                                st.write(f"**Video ID:** `{node['internal_id']}`")
+                                vid_url = f"https://www.youtube.com/watch?v={node['internal_id']}"
+                                st.link_button("📺 Watch on YouTube", vid_url)
+                                
+                                # Show Thematic Bridges
+                                st.markdown("---")
+                                st.markdown("🌉 **Thematic Bridges**")
+                                bridges = explorer_obj.get_thematic_bridges(node["internal_id"])
+                                if bridges:
+                                    for b in bridges:
+                                        with st.expander(f"{b['title'][:40]}...", expanded=False):
+                                            st.write(f"Connects via: **{', '.join(b['bridge_types'])}**")
+                                            st.write(f"Strength: {b['shared_count']} shared entities")
+                                            if st.button(f"🔍 Explore {b['video_id'][:8]}", key=f"bridge_{b['video_id']}"):
+                                                st.session_state.explorer_mode = "Video"
+                                                st.session_state.explorer_entity = b["video_id"]
+                                                st.rerun()
+                                else:
+                                    st.caption("No thematic bridges found yet.")
+                        
+                        with d_col2:
+                            if node["type"] == "Guest":
+                                st.write(f"**Canonical Name:** {node['internal_id']}")
+                                if st.button(f"👤 View Guest Intel: {node['label']}"):
+                                    st.session_state.navigate = "👤 Guest Intelligence"
+                                    st.session_state.selected_guest = node["internal_id"]
+                                    st.rerun()
+                            
+                            if node["type"] == "Topic":
+                                if st.button(f"🔍 Spotlight Topic: {node['label']}"):
+                                    # Switch to tab2 and select topic
+                                    # Note: Streamlit tabs don't easily switch via code without index state
+                                    st.info(f"Go to **Topic Spotlight** tab to explore '{node['label']}' in depth.")
             else:
                 st.info("No connections found for this entity.")
         else:

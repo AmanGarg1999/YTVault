@@ -24,8 +24,17 @@ def render(db):
             st.info("No guests discovered yet. Run the pipeline with graph sync enabled.")
         else:
             guest_names = [g.canonical_name for g in guests]
+            
+            # Handle pre-selected guest from Knowledge Explorer
+            default_index = 0
+            if "selected_guest" in st.session_state:
+                pre_selected = st.session_state.pop("selected_guest")
+                if pre_selected in guest_names:
+                    default_index = guest_names.index(pre_selected)
+
             selected_name = st.selectbox(
                 "Select Guest", guest_names,
+                index=default_index,
                 help="Browse all discovered guests sorted by mention count",
             )
 

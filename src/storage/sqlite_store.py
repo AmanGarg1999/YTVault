@@ -503,6 +503,14 @@ class SQLiteStore:
         except Exception:
             pass
 
+    def execute(self, sql: str, params: tuple = ()):
+        """Execute a SQL query directly on the connection."""
+        return self.conn.execute(sql, params)
+
+    def commit(self):
+        """Commit the current transaction."""
+        self.conn.commit()
+
     # -------------------------------------------------------------------
     # Channels
     # -------------------------------------------------------------------
@@ -1088,6 +1096,119 @@ class SQLiteStore:
             return VideoSummary(**dict(row))
         return None
 
+    # -------------------------------------------------------------------
+    # Transcript Access & Search (Week 1 Enhancement)
+    # -------------------------------------------------------------------
+
+    def get_full_transcript(self, video_id: str) -> Optional[dict]:
+        """Retrieve full transcript for a video with all metadata."""
+        video = self.get_video(video_id)
+        if not video:
+            return None
+        
+        chunks = self.execute("""
+            SELECT chunk_id, chunk_index, raw_text, cleaned_text,
+                   start_timestamp, end_timestamp, word_count
+            FROM transcript_chunks
+            WHERE video_id = ?
+            ORDER BY chunk_index ASC
+        """, (video_id,)).fetchall()
+        
+        if not chunks:
+            return None
+        
+        # Reconstruct transcript
+        full_raw = " ".join([c['raw_text'] for c in chunks])
+        full_cleaned = " ".join([c['cleaned_text'] for c in chunks])
+        
+        channel = self.get_channel(video.channel_id)
+        
+        return {
+            "video_id": video_id,
+            "title": video.title,
+            "channel": channel.name if channel else "Unknown",
+            "duration_seconds": video.duration_seconds,
+            "upload_date": video.upload_date,
+            "language": video.language_iso,
+            "transcript_strategy": video.transcript_strategy,
+            "full_raw_text": full_raw,
+            "full_cleaned_text": full_cleaned,
+            "chunks": chunks,
+            "total_chunks": len(chunks)
+        }
+    
+    def get_chunk(self, chunk_id: str) -> Optional[TranscriptChunk]:
+        """Get a single transcript chunk by ID."""
+        row = self.execute(
+            "SELECT * FROM transcript_chunks WHERE chunk_id = ?", (chunk_id,)
+        ).fetchone()
+        if row:
+            return TranscriptChunk(**dict(row))
+        return None
+
+    def search_transcript(self, video_id: str, search_term: str) -> list[dict]:
+        """Find occurrences of a term in a video's transcript."""
+        results = self.execute("""
+            SELECT chunk_id, chunk_index, cleaned_text, raw_text,
+                   start_timestamp, end_timestamp, word_count
+            FROM transcript_chunks
+            WHERE video_id = ? 
+              AND (cleaned_text LIKE ? OR raw_text LIKE ?)
+            ORDER BY chunk_index ASC
+        """, (video_id, f"%{search_term}%", f"%{search_term}%")).fetchall()
+        
+        return results
+    
+    def get_transcript_at_timestamp(self, video_id: str, seconds: float, 
+                                     context_seconds: int = 30) -> Optional[dict]:
+        """Get transcript around a specific timestamp."""
+        chunks = self.execute("""
+            SELECT chunk_id, chunk_index, cleaned_text, raw_text,
+                   start_timestamp, end_timestamp
+            FROM transcript_chunks
+            WHERE video_id = ?
+              AND start_timestamp <= ? + ?
+              AND end_timestamp >= ? - ?
+            ORDER BY start_timestamp ASC
+        """, (video_id, seconds, context_seconds, seconds, context_seconds)).fetchall()
+        
+        if not chunks:
+            return None
+        
+        return {
+            "target_timestamp": seconds,
+            "context_seconds": context_seconds,
+            "chunks": chunks
+        }
+    
+    def compare_transcripts(self, video_ids: list[str]) -> dict:
+        """Get transcripts for multiple videos for comparison."""
+        transcripts = {}
+        for vid in video_ids:
+            transcript = self.get_full_transcript(vid)
+            if transcript:
+                transcripts[vid] = transcript
+        return transcripts
+    
+    def search_all_transcripts(self, search_term: str, limit: int = 100) -> list[dict]:
+        """Global search across all transcripts."""
+        results = self.execute("""
+            SELECT DISTINCT
+                tc.video_id,
+                v.title,
+                c.name as channel,
+                COUNT(DISTINCT tc.chunk_id) as chunk_count
+            FROM transcript_chunks tc
+            JOIN videos v ON tc.video_id = v.video_id
+            JOIN channels c ON v.channel_id = c.channel_id
+            WHERE tc.cleaned_text LIKE ? OR tc.raw_text LIKE ?
+            GROUP BY tc.video_id
+            ORDER BY v.upload_date DESC
+            LIMIT ?
+        """, (f"%{search_term}%", f"%{search_term}%", limit)).fetchall()
+        
+        return results
+
     def update_scan_checkpoint(
         self, scan_id: str, total_discovered: int = 0,
         total_processed: int = 0, last_video_id: str = "",
@@ -1180,14 +1301,16 @@ class SQLiteStore:
                 (SELECT COUNT(*) FROM guest_appearances WHERE video_id = v.video_id) AS guest_count
             FROM videos v
             JOIN channels c ON v.channel_id = c.channel_id
-            WHERE v.duration_seconds > 0 AND v.checkpoint_stage = 'DONE'
+            WHERE v.duration_seconds > 0 
+              AND v.checkpoint_stage IN ('CHUNK_ANALYZED', 'EMBEDDED', 'GRAPH_SYNCED', 'DONE')
             """
         ).fetchall()
         
         result = []
         for row in rows:
-            dur_mins = max(1, row["duration_seconds"] // 60)
-            score = (row["chunk_count"] * 1.5 + row["guest_count"] * 5.0) / dur_mins
+            dur_mins = max(1, row["duration_seconds"] / 60.0)
+            # Weighting: 2.0 per chunk (knowledge units) + 10.0 per guest (high value entities)
+            score = (row["chunk_count"] * 2.0 + row["guest_count"] * 10.0) / dur_mins
             r_dict = dict(row)
             r_dict["density_score"] = score
             result.append(r_dict)

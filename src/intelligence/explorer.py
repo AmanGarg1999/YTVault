@@ -190,13 +190,31 @@ class KnowledgeExplorer:
         return stats
 
 
+    def get_thematic_bridges(self, video_id: str, limit: int = 10):
+        """Find videos related to a given video through shared guests or topics.
+        
+        Surfaces 'bridges' that aren't necessarily in the same channel.
+        """
+        with self.graph.driver.session() as session:
+            query = """
+            MATCH (v:Video {video_id: $vid})-[:APPEARS_IN|DISCUSSES]-(common)-(other:Video)
+            WHERE v <> other
+            RETURN other.video_id AS video_id, 
+                   other.title AS title, 
+                   count(common) AS shared_count,
+                   collect(DISTINCT labels(common)[0]) AS bridge_types
+            ORDER BY shared_count DESC
+            LIMIT $limit
+            """
+            result = session.run(query, vid=video_id, limit=limit)
+            return [dict(r) for r in result]
+
     def _neo_node_to_node(self, node):
         """Convert Neo4j node to simple dict for UI."""
         labels = list(node.labels)
         primary_label = labels[0] if labels else "Unknown"
         
-        # ID selection for streamlit-agraph (must be string)
-        # Use element_id (Neo4j 5+) or str(id) (Legacy)
+        # ID selection for streamlit-agraph
         try:
             node_id = str(node.element_id)
         except (AttributeError, ValueError):
@@ -204,15 +222,25 @@ class KnowledgeExplorer:
             
         # Unique business ID selection based on type
         internal_id = ""
-        if "Video" in labels: internal_id = node.get("video_id", "")
-        elif "Guest" in labels: internal_id = node.get("canonical_name", "")
-        elif "Topic" in labels: internal_id = node.get("name", "")
-        elif "Channel" in labels: internal_id = node.get("channel_id", "")
+        label_text = ""
+        
+        if "Video" in labels:
+            internal_id = node.get("video_id", "")
+            label_text = node.get("title", internal_id)[:30] + "..."
+        elif "Guest" in labels:
+            internal_id = node.get("canonical_name", "")
+            label_text = internal_id
+        elif "Topic" in labels:
+            internal_id = node.get("name", "")
+            label_text = f"#{internal_id}"
+        elif "Channel" in labels:
+            internal_id = node.get("channel_id", "")
+            label_text = node.get("name", internal_id)
         
         return {
             "id": node_id,
             "internal_id": internal_id,
-            "label": internal_id or primary_label,
+            "label": label_text or primary_label,
             "type": primary_label,
             "metadata": dict(node)
         }

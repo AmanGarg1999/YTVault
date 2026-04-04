@@ -153,7 +153,7 @@ open http://localhost:8501
  └─────────┘ └──────┘ └────────┘ └─────────────────────┘
 ```
 
-**Full architecture details:** See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+**Full architecture details:** See [docs/technical/ARCHITECTURE.md](docs/technical/ARCHITECTURE.md)
 
 ---
 
@@ -243,7 +243,7 @@ pipeline:
   llm_max_workers: 2
 ```
 
-**Full configuration reference:** See [docs/CONFIGURATION.md](docs/CONFIGURATION.md)
+**Full configuration reference:** See [docs/technical/CONFIGURATION.md](docs/technical/CONFIGURATION.md)
 
 **Verified channels whitelist:** Edit `config/verified_channels.yaml` to auto-accept trusted channels.
 
@@ -253,11 +253,18 @@ pipeline:
 
 | Document | Description |
 |---|---|
-| [Technical Specification](Technical_Specification.md) | Full system design with Mermaid diagrams |
-| [Architecture Guide](docs/ARCHITECTURE.md) | System design, data flow, and component interactions |
-| [API Reference](docs/API_REFERENCE.md) | Module and function documentation |
-| [Developer Guide](docs/DEVELOPMENT.md) | Setup, testing, and contribution guidelines |
-| [Configuration Reference](docs/CONFIGURATION.md) | Complete config file documentation |
+| **Technical** | |
+| [Technical Specification](docs/technical/Technical_Specification.md) | Full system design with Mermaid diagrams |
+| [Architecture Guide](docs/technical/ARCHITECTURE.md) | System design, data flow, and component interactions |
+| [API Reference](docs/technical/API_REFERENCE.md) | Module and function documentation |
+| [Configuration Reference](docs/technical/CONFIGURATION.md) | Complete config file documentation |
+| [Developer Guide](docs/technical/DEVELOPMENT.md) | Setup, testing, and contribution guidelines |
+| **Usage** | |
+| [UI Quickstart](docs/usage/UI_QUICKSTART.md) | Guide for using the Streamlit interface |
+| [New Features Guide](docs/usage/NEW_FEATURES_QUICKSTART.md) | overview of latest additions |
+| **Research & Analysis** | |
+| [Executive Summary](docs/research/EXECUTIVE_SUMMARY.md) | High-level project overview |
+| [Analysis & Recommendations](docs/research/ANALYSIS_AND_RECOMMENDATIONS.md) | Deep dive into system capabilities |
 
 ---
 
@@ -265,71 +272,28 @@ pipeline:
 
 ```
 knowledgeVault-YT/
-├── config/
-│   ├── settings.yaml              # Main configuration
-│   ├── verified_channels.yaml     # Channel whitelist
-│   └── prompts/                   # LLM system prompts
-│       ├── triage_classifier.txt
-│       ├── text_normalizer.txt
-│       ├── rag_synthesizer.txt
-│       ├── entity_extractor.txt
-│       ├── topic_extractor.txt
-│       ├── claim_extractor.txt    # NEW: assertion extraction
-│       ├── quote_extractor.txt    # NEW: notable quotes
-│       ├── summarizer.txt         # Reduce-phase prompt
-│       ├── map_reduce_summarizer.txt  # Map-phase prompt
-│       └── epiphany_briefing.txt  # Cross-channel analysis
-├── src/
-│   ├── main.py                    # CLI entry point (Click)
-│   ├── config.py                  # Config loader
-│   ├── ingestion/                 # Ingestion pipeline
-│   │   ├── discovery.py           # URL parsing, yt-dlp
-│   │   ├── triage.py              # Two-phase triage engine
-│   │   ├── transcript.py          # Transcript fetching
-│   │   └── refinement.py          # SponsorBlock + LLM normalization
-│   ├── storage/                   # Data layer
-│   │   ├── sqlite_store.py        # Relational storage (12 migrations)
-│   │   ├── vector_store.py        # ChromaDB embeddings
-│   │   └── graph_store.py         # Neo4j graph + Claim nodes
-│   ├── intelligence/              # AI features
-│   │   ├── chunk_analyzer.py      # Per-chunk deep analysis
-│   │   ├── semantic_chunker.py    # Topic-boundary chunking
-│   │   ├── rag_engine.py          # Hybrid RAG query pipeline
-│   │   ├── summarizer.py          # Map-reduce summarization
-│   │   ├── epiphany_engine.py     # Cross-channel insights
-│   │   ├── entity_resolver.py     # Guest NER + deduplication
-│   │   ├── taxonomy_builder.py    # Topic hierarchy
-│   │   ├── explorer.py            # Graph traversal + visualization
-│   │   ├── query_parser.py        # Structured query syntax
-│   │   └── export.py              # Multi-format export
-│   ├── pipeline/                  # Orchestration
-│   │   ├── orchestrator.py        # 10-stage pipeline coordinator
-│   │   ├── checkpoint.py          # Crash-safe resume
-│   │   └── worker.py              # Multiprocessing background worker
-│   ├── utils/
-│   │   ├── llm_pool.py            # Concurrent LLM batch executor
-│   │   ├── retry.py               # Retry + circuit breaker
-│   │   ├── health.py              # Service health checks
-│   │   └── eta.py                 # Time estimates for ingestion
-│   └── ui/
-│       ├── app.py                 # Streamlit shell + routing
-│       └── pages/                 # 11 page modules
-│           ├── dashboard.py
-│           ├── harvest.py
-│           ├── ambiguity.py
-│           ├── research.py
-│           ├── guest_intel.py
-│           ├── explorer.py
-│           ├── pipeline_monitor.py
-│           ├── logs_monitor.py
-│           ├── pipeline_control.py
-│           ├── data_management.py
-│           └── export_center.py
-├── tests/                         # Test suite (110+ tests)
+├── config/                        # Configuration & Prompts
+├── data/                          # DBs and Logs (local persist)
+├── docs/                          # Documentation Hierarchy
+│   ├── archive/                   # Legacy documents
+│   ├── research/                  # Analysis & Reports
+│   ├── technical/                 # Architecture & Specs
+│   └── usage/                     # User guides & Quickstarts
+├── scripts/                       # Maintenance scripts
+├── src/                           # Source Code
+│   ├── main.py                    # CLI entry point
+│   ├── ingestion/                 # 10-stage pipeline modules
+│   ├── intelligence/              # AI/RAG features
+│   ├── pipeline/                  # Orchestration logic
+│   ├── storage/                   # Triple-store (SQL/Vector/Graph)
+│   ├── ui/                        # Streamlit interface
+│   └── utils/                     # Shared utilities
+├── tests/                         # Comprehensive test suite
+│   ├── ui/                        # UI-specific tests
+│   └── utils/                     # Utility tests
 ├── docker-compose.yml
 ├── Dockerfile
-├── pyproject.toml
-└── Technical_Specification.md
+└── pyproject.toml
 ```
 
 ---

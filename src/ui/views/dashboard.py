@@ -65,14 +65,14 @@ def render(db):
                 "delta_color": "positive"
             },
             {
-                "value": stats.get("total_guests", 0),
-                "label": "Guest Profiles",
+                "value": stats.get("total_subscribers", 0),
+                "label": "Total Followers",
                 "icon": "👥",
                 "delta_color": "info"
             },
             {
                 "value": f"{(stats.get('done', 0) / max(stats.get('total_videos', 1), 1) * 100):.0f}%",
-                "label": "Processing Complete",
+                "label": "Health Index",
                 "icon": "⚡",
                 "delta_color": "info"
             }
@@ -284,12 +284,81 @@ def render(db):
                         warning_card("Error Loading Details", error_msg)
                 
                 st.divider()
+
         else:
             info_card(
                 "Leaderboard Coming Soon",
                 "Videos will appear here once they're fully ingested and indexed. Start harvesting to populate this list!"
             )
+
+        # =====================================================================
+        # ENGAGEMENT LEADERBOARD
+        # =====================================================================
+        
+        st.divider()
+        section_header("Engagement Leaderboard", "🔥")
+        st.caption("📈 Videos with the highest engagement rate (likes + comments per view)")
+        
+        engaged = db.get_most_engaged_videos(limit=5)
+        if engaged:
+            for idx, row in enumerate(engaged, 1):
+                col1, col2, col3, col4, col5 = st.columns([1, 4, 1.5, 1.5, 1.5])
+                
+                with col1:
+                    rank_icon = "🥇" if idx == 1 else ("🥈" if idx == 2 else ("🥉" if idx == 3 else f"{idx}."))
+                    st.markdown(f"### {rank_icon}")
+                
+                with col2:
+                    st.markdown(f"**{row['title'][:55]}...**")
+                    st.caption(f"📝 {row['view_count']:,} views")
+                
+                with col3:
+                    st.metric("Engagement", f"{row['engagement_rate']*100:.1f}%")
+                
+                with col4:
+                    st.metric("Likes", f"{row['like_count']:,}")
+                
+                with col5:
+                    st.metric("Comments", f"{row['comment_count']:,}")
+                
+                st.divider()
+        else:
+            info_card("No Engagement Data", "Engagement metrics will appear once videos are harvested with likes and comments.")
     
+        # =====================================================================
+        # VIRAL MOMENTUM
+        # =====================================================================
+        
+        st.divider()
+        section_header("Viral Momentum", "🚀")
+        st.caption("⚡ Videos gaining views the fastest (hourly velocity)")
+        
+        momentum = db.get_high_momentum_videos(limit=5)
+        if momentum:
+            for idx, row in enumerate(momentum, 1):
+                col1, col2, col3, col4, col5 = st.columns([0.8, 4, 1.5, 1.5, 1.5])
+                
+                with col1:
+                    rank_icon = "🔥" if idx == 1 else (f"{idx}.")
+                    st.markdown(f"### {rank_icon}")
+                
+                with col2:
+                    st.markdown(f"**{row['title'][:55]}...**")
+                    st.caption(f"📺 {row['channel_name']}")
+                
+                with col3:
+                    st.metric("Velocity", f"{row['velocity']:.1f}/hr")
+                
+                with col4:
+                    st.metric("Total Views", f"{row['current_views']:,}")
+                
+                with col5:
+                    st.metric("Growth", f"+{row['growth']:,}")
+                
+                st.divider()
+        else:
+            info_card("No Momentum Data", "Velocity tracking requires at least two harvests per channel.")
+
     except Exception as e:
         import traceback
         st.error(f"❌ Dashboard Error: {e}")

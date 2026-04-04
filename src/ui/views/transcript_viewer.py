@@ -11,6 +11,7 @@ Enables verification workflow:
 import streamlit as st
 from src.storage.sqlite_store import SQLiteStore
 from src.config import get_settings
+from src.intelligence.analysis_engine import AnalysisEngine
 
 
 def render(db: SQLiteStore):
@@ -48,7 +49,7 @@ def render_single_transcript(db: SQLiteStore):
         SELECT v.video_id, v.title, c.name as channel, v.upload_date, v.duration_seconds
         FROM videos v
         JOIN channels c ON v.channel_id = c.channel_id
-        WHERE v.checkpoint_stage = 'DONE'
+        WHERE v.video_id IN (SELECT DISTINCT video_id FROM transcript_chunks)
         ORDER BY v.upload_date DESC
         LIMIT 100
     """).fetchall()
@@ -83,7 +84,7 @@ def render_single_transcript(db: SQLiteStore):
     st.divider()
     
     # Tabs for different views
-    tab1, tab2, tab3, tab4 = st.tabs(["Full Transcript", "Search", "Timestamp Jump", "Export"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Full Transcript", "Search", "Timestamp Jump", "🔥 Audience Highlights", "Export"])
     
     with tab1:
         st.subheader("Full Transcript")
@@ -173,6 +174,32 @@ def render_single_transcript(db: SQLiteStore):
                 st.warning("No transcript found at that timestamp")
     
     with tab4:
+        st.subheader("🔥 Audience Highlights")
+        st.caption("Segments with the highest re-watch interest on YouTube, correlated with transcript text.")
+        
+        analyzer = AnalysisEngine(db)
+        highlights = analyzer.get_heatmap_highlights(video_id)
+        
+        if not highlights:
+            st.info("No heatmap data available for this video yet. Heatmaps are harvested during the 'Discovery' stage.")
+        else:
+            for i, h in enumerate(highlights, 1):
+                # Format timestamp
+                mins = int(h.start_time // 60)
+                secs = int(h.start_time % 60)
+                timestamp_str = f"{mins:02d}:{secs:02d}"
+                
+                with st.expander(f"**Highlight {i}** ({timestamp_str}) - Interest Score: {h.score:.1f}", expanded=(i == 1)):
+                    st.markdown(f"> {h.transcript_text}")
+                    
+                    if st.button(f"Jump to {timestamp_str}", key=f"jump_h_{i}"):
+                        st.session_state.ts_min = mins
+                        st.session_state.ts_sec = secs
+                        # We would need a more complex way to force tab change,
+                        # for now just showing the info is great.
+                        st.success(f"Selected {timestamp_str}. Switch to 'Timestamp Jump' to see context.")
+
+    with tab5:
         st.subheader("Export Transcript")
         
         export_format = st.radio("Format", ["Text (.txt)", "Markdown (.md)"], key="export_fmt")
@@ -218,7 +245,7 @@ def render_compare_transcripts(db: SQLiteStore):
         SELECT v.video_id, v.title, c.name as channel, v.upload_date
         FROM videos v
         JOIN channels c ON v.channel_id = c.channel_id
-        WHERE v.checkpoint_stage = 'DONE'
+        WHERE v.video_id IN (SELECT DISTINCT video_id FROM transcript_chunks)
         ORDER BY v.upload_date DESC
         LIMIT 100
     """).fetchall()

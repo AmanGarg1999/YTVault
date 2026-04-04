@@ -1,35 +1,54 @@
-"""Research Console page for knowledgeVault-YT."""
+"""Research Console page for knowledgeVault-YT — Hybrid RAG search and chat."""
 
 import json
 import logging
 
 import streamlit as st
+from src.ui.components import (
+    page_header,
+    section_header,
+    progress_step,
+    info_card,
+    warning_card,
+    error_card,
+    metric_grid,
+    status_badge,
+    spacer,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def render(db):
-    """Render the Research Console page."""
-    st.markdown("""
-    <div class="main-header">
-        <h1>🔍 Research Console</h1>
-        <p>Ask natural language questions across your entire knowledge vault</p>
-    </div>
-    """, unsafe_allow_html=True)
+def render(db, vs):
+    """Render the Research Console page with professional UI."""
+    
+    # Professional page header
+    page_header(
+        title="Research Console",
+        subtitle="Ask natural language questions across your entire knowledge vault",
+        icon="🔍"
+    )
 
     try:
-        with st.sidebar.expander("🔧 Query Syntax"):
+        # Query Syntax Helper
+        with st.sidebar.expander("🔧 Query Syntax & Filters"):
             st.markdown("""
-            **Filters** (optional):
-            - `channel:name` — search within a channel
-            - `topic:"machine learning"` — topic-aware search
-            - `guest:"Elon Musk"` — guest-focused queries
-            - `after:2024-01` — date filter
-            - `before:2025-06` — date filter
-            - `lang:en` — language filter
-
-            **Example**:
-            `channel:lexfridman topic:AI after:2024 What is AGI?`
+            **Advanced Filters** (optional):
+            
+            | Filter | Example | Description |
+            |--------|---------|-------------|
+            | `channel:` | `channel:lexfridman` | Search within a channel |
+            | `topic:` | `topic:"machine learning"` | Topic-aware search |
+            | `guest:` | `guest:"Elon Musk"` | Guest-focused queries |
+            | `after:` | `after:2024-01` | Filter by date (after) |
+            | `before:` | `before:2025-06` | Filter by date (before) |
+            | `lang:` | `lang:en` | Language filter |
+            
+            **Example Combined Query**:
+            ```
+            channel:lexfridman topic:AI after:2024 
+            What is the definition of artificial general intelligence?
+            ```
             """)
 
         if "conversation" not in st.session_state:
@@ -125,18 +144,33 @@ def render(db):
 
                         # Week 1 Enhancement: Show raw data for verification
                         st.divider()
-                        st.subheader("🔍 Verification Layer")
+                        section_header("Verification Layer", "🔍")
                         
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            st.metric("Citations", len(response.citations))
-                        with col2:
-                            st.metric("Chunks Retrieved", response.total_chunks_retrieved)
-                        with col3:
-                            st.metric("Query Time", f"{response.latency_ms:.0f}ms")
+                        # Query metrics
+                        metrics = [
+                            {
+                                "value": len(response.citations),
+                                "label": "Citations",
+                                "icon": "📎",
+                                "delta_color": "info"
+                            },
+                            {
+                                "value": response.total_chunks_retrieved,
+                                "label": "Chunks Retrieved",
+                                "icon": "📦",
+                                "delta_color": "info"
+                            },
+                            {
+                                "value": f"{response.latency_ms:.0f}ms",
+                                "label": "Query Time",
+                                "icon": "⚡",
+                                "delta_color": "info"
+                            },
+                        ]
+                        metric_grid(metrics, cols=3)
                         
                         if response.verification_notes:
-                            st.info(response.verification_notes)
+                            info_card("Verification Notes", response.verification_notes)
                         
                         # Raw chunks with original text
                         if response.raw_chunks:
@@ -235,9 +269,10 @@ def render(db):
 
                     except Exception as e:
                         import traceback
-                        traceback.print_exc()
                         error_msg = f"Query failed: {e}. Make sure Ollama is running."
-                        st.error(error_msg)
+                        error_card("Query Processing Error", error_msg)
+                        with st.expander("🔍 Error Details"):
+                            st.code(traceback.format_exc())
                         st.session_state.conversation[-1]["answer"] = error_msg
 
         if st.session_state.conversation:
@@ -245,7 +280,10 @@ def render(db):
                 st.session_state.conversation = []
                 st.rerun()
     except Exception as e:
-        st.error(f"Failed to load Research Console: {e}")
+        error_card("Console Error", f"Failed to load Research Console: {e}")
+        with st.expander("🔍 Error Details"):
+            import traceback
+            st.code(traceback.format_exc())
         logger.error(f"Research Console error: {e}", exc_info=True)
 
 

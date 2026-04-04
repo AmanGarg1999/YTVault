@@ -206,7 +206,8 @@ def render(db, run_pipeline_background):
         total = stats.get("total_videos", 1) or 1
         st.markdown("#### Pipeline Stages Progress")
         for label, count in stages:
-            pct = min(1.0, count / total)
+            # Clamp progress between 0 and 1.0 to avoid Streamlit ValueError
+            pct = max(0.0, min(1.0, count / total))
             st.progress(pct, text=f"{label}: {count}/{total}")
 
     except Exception as e:

@@ -228,7 +228,11 @@ def extract_video_metadata(video_id: str) -> tuple[Video, Channel]:
         channel_id=channel_id,
         name=data.get("channel", data.get("uploader", "Unknown")),
         url=data.get("channel_url", ""),
-        description="",
+        description=(data.get("channel_description", "") or "")[:500],
+        follower_count=int(data.get("channel_follower_count", 0) or 0),
+        handle=data.get("uploader_id", ""),
+        thumbnail_url=data.get("thumbnails", [{}])[-1].get("url", "") if data.get("thumbnails") else "",
+        is_verified=bool(data.get("channel_is_verified", False)),
     )
     video = Video(
         video_id=data.get("id", video_id),
@@ -241,6 +245,11 @@ def extract_video_metadata(video_id: str) -> tuple[Video, Channel]:
         view_count=int(data.get("view_count", 0) or 0),
         tags=data.get("tags", []) or [],
         language_iso=data.get("language", "en") or "en",
+        like_count=int(data.get("like_count", 0) or 0),
+        comment_count=int(data.get("comment_count", 0) or 0),
+        category=data.get("categories", [""])[0] if data.get("categories") else "",
+        thumbnail_url=data.get("thumbnail", ""),
+        heatmap_json=json.dumps(data.get("heatmap", [])),
     )
     return video, channel
 

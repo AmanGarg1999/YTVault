@@ -18,6 +18,7 @@ STAGE_ORDER = [
     "METADATA_HARVESTED",
     "TRIAGE_COMPLETE",
     "TRANSCRIPT_FETCHED",
+    "TRANSLATED",            # NEW: Translate non-English transcripts
     "SPONSOR_FILTERED",
     "TEXT_NORMALIZED",
     "CHUNKED",

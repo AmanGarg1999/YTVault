@@ -25,12 +25,14 @@ def render(db, run_pipeline_background):
         <p>Manage active scans, pause/resume processing, and control video ingestion</p>
     </div>
     """, unsafe_allow_html=True)
+    st.write("DEBUG: Page header rendered")
 
     try:
         # =====================================================================
         # SECTION 1: Active Scans Control
         # =====================================================================
         st.markdown("### 🔄 Active Scans")
+        st.write("DEBUG: Section 1 started")
         
         active_scans = db.get_active_scans()
         
@@ -55,7 +57,9 @@ def render(db, run_pipeline_background):
                             progress = (scan.total_processed / scan.total_discovered) * 100
                         
                         st.metric("Progress", f"{scan.total_processed}/{scan.total_discovered}")
-                        st.progress(progress / 100, text=f"{progress:.0f}%")
+                        # Clamp progress between 0 and 1.0 to avoid Streamlit ValueError
+                        safe_progress = max(0.0, min(1.0, progress / 100))
+                        st.progress(safe_progress, text=f"{progress:.0f}%")
                     
                     # Status info
                     with col3:
@@ -115,6 +119,7 @@ def render(db, run_pipeline_background):
         # SECTION 2: Video-Level Queue Management
         # =====================================================================
         st.markdown("### 📹 Video Discovery Queue Management")
+        st.write("DEBUG: Section 2 started")
         
         # Get discovered but not yet processed videos
         discovered_videos = db.get_videos_by_status("DISCOVERED", limit=100)
@@ -164,6 +169,7 @@ def render(db, run_pipeline_background):
         # SECTION 3: Processing Status by Stage
         # =====================================================================
         st.markdown("### 📊 Processing Status by Pipeline Stage")
+        st.write("DEBUG: Section 3 started")
         
         stages = [
             ("METADATA_HARVESTED", "📥 Metadata Harvested"),
@@ -208,6 +214,7 @@ def render(db, run_pipeline_background):
         # SECTION 4: Triage Status Summary
         # =====================================================================
         st.markdown("### 🎯 Triage Decision Summary")
+        st.write("DEBUG: Section 4 started")
         
         triage_statuses = ["ACCEPTED", "REJECTED", "PENDING_REVIEW", "DISCOVERED"]
         

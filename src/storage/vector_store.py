@@ -28,10 +28,11 @@ class OllamaEmbeddingFunction:
 
     def __init__(self, model_name: str = "nomic-embed-text"):
         self.model_name = model_name
-        self.name = f"ollama-{self.model_name}"
+        self._name = f"ollama-{self.model_name}"
 
-    def get_name(self) -> str:
-        return self.name
+    def name(self):
+        """Return the name of this embedding function (callable method for ChromaDB)."""
+        return self._name
 
     def __call__(self, input: list[str]) -> list[list[float]]:
         """Generate embeddings for a list of texts.
@@ -285,6 +286,7 @@ class VectorStore:
         self,
         query: str,
         top_k: int = 15,
+        channel_ids: Optional[list[str]] = None,
         where: Optional[dict] = None,
         where_document: Optional[dict] = None,
     ) -> list[dict]:
@@ -293,12 +295,21 @@ class VectorStore:
         Args:
             query: Natural language query.
             top_k: Number of results to return.
-            where: Metadata filter (e.g., {"channel_id": "UCxxx"}).
+            channel_ids: List of channel IDs to filter by.
+            where: Custom metadata filter (merged with channel_ids if provided).
             where_document: Document content filter.
 
         Returns:
             List of result dicts with keys: chunk_id, text, metadata, distance.
         """
+        # Build metadata filter
+        final_where = where or {}
+        if channel_ids:
+            if len(channel_ids) == 1:
+                final_where["channel_id"] = channel_ids[0]
+            else:
+                final_where["channel_id"] = {"$in": channel_ids}
+
         # Generate embeddings explicitly to avoid ChromaDB dispatcher issues
         query_vecs = self.embedding_fn([query])
         
@@ -306,8 +317,8 @@ class VectorStore:
             "query_embeddings": query_vecs,
             "n_results": top_k,
         }
-        if where:
-            kwargs["where"] = where
+        if final_where:
+            kwargs["where"] = final_where
         if where_document:
             kwargs["where_document"] = where_document
 

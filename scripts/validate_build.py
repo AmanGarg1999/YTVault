@@ -73,24 +73,24 @@ except Exception as e:
 print("\n[6] Testing Streamlit Page Modules...")
 pages = [
     "dashboard",
-    "harvest",
-    "ambiguity",
-    "research",
-    "transcript_viewer",  # Week 1 Enhancement
-    "guest_intel",
+    "ingestion_hub",
+    "pipeline_center",
+    "intelligence_lab",
     "explorer",
-    "pipeline_monitor",
+    "guest_intel",
     "export_center",
     "logs_monitor",
-    "pipeline_control",
     "data_management",
     "reject_review",
+    "transcript_viewer",
+    "performance_metrics",
+    "comparative_lab",
 ]
 
 failed_pages = []
 for page in pages:
     try:
-        module = __import__(f"src.ui.pages.{page}", fromlist=[page])
+        module = __import__(f"src.ui.views.{page}", fromlist=[page])
         if hasattr(module, "render"):
             print(f"    ✓ {page:25} page module OK")
         else:

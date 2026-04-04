@@ -82,6 +82,15 @@ refinement:
   normalizer_chunk_size: 1000      # words
   normalizer_chunk_overlap: 100    # words
 
+# Translation Configuration (Multilingual Support)
+translation:
+  enabled: true                    # Enable translation of non-English content
+  model: "llama3.2:3b"             # LLM model for translation
+  target_language: "en"            # Always translate to English for analysis
+  max_chunk_size: 2000             # Max chars per translation (to stay within context)
+  temperature: 0.3                 # Low temperature for consistent translation
+  cache_translations: true         # Cache translated text in DB
+
 # Vector Chunking
 chunking:
   strategy: "sliding_window"       # "sliding_window" or "semantic"

@@ -33,6 +33,10 @@ class Channel:
     last_scanned_at: str = ""
     total_videos: int = 0
     processed_videos: int = 0
+    follower_count: int = 0
+    handle: str = ""
+    thumbnail_url: str = ""
+    is_verified: bool = False
 
 
 @dataclass
@@ -52,9 +56,15 @@ class Video:
     triage_confidence: float = 0.0
     transcript_strategy: str = ""
     needs_translation: bool = False
+    translated_text_stored: bool = False
     checkpoint_stage: str = "METADATA_HARVESTED"
     created_at: str = ""
     updated_at: str = ""
+    like_count: int = 0
+    comment_count: int = 0
+    category: str = ""
+    thumbnail_url: str = ""
+    heatmap_json: str = "[]"
 
 
 @dataclass
@@ -408,6 +418,35 @@ SCHEMA_MIGRATIONS = [
         );
         CREATE INDEX IF NOT EXISTS idx_deletion_history ON deletion_history(deleted_at);
     """),
+    # Version 13: Multilingual support - add translated text storage
+    (13, """
+        ALTER TABLE pipeline_temp_state ADD COLUMN translated_text TEXT DEFAULT '';
+        ALTER TABLE videos ADD COLUMN translated_text_stored BOOLEAN DEFAULT 0;
+    """),
+    # Version 14: Enhanced metadata (likes, comments, subs, categories, thumbnails, heatmaps)
+    (14, """
+        ALTER TABLE channels ADD COLUMN follower_count INTEGER DEFAULT 0;
+        ALTER TABLE channels ADD COLUMN handle TEXT DEFAULT '';
+        ALTER TABLE channels ADD COLUMN thumbnail_url TEXT DEFAULT '';
+        ALTER TABLE channels ADD COLUMN is_verified BOOLEAN DEFAULT 0;
+        ALTER TABLE videos ADD COLUMN like_count INTEGER DEFAULT 0;
+        ALTER TABLE videos ADD COLUMN comment_count INTEGER DEFAULT 0;
+        ALTER TABLE videos ADD COLUMN category TEXT DEFAULT '';
+        ALTER TABLE videos ADD COLUMN thumbnail_url TEXT DEFAULT '';
+        ALTER TABLE videos ADD COLUMN heatmap_json TEXT DEFAULT '[]';
+    """),
+    # Version 15: Historical performance tracking
+    (15, """
+        CREATE TABLE IF NOT EXISTS video_stats_history (
+            history_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            video_id TEXT REFERENCES videos(video_id),
+            snapshot_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            view_count INTEGER,
+            like_count INTEGER,
+            comment_count INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_stats_history_video ON video_stats_history(video_id);
+    """),
 ]
 
 
@@ -520,16 +559,23 @@ class SQLiteStore:
         try:
             self.conn.execute(
                 """INSERT INTO channels (channel_id, name, url, description, category,
-                       language_iso, discovered_at, total_videos)
-                   VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+                       language_iso, discovered_at, total_videos, follower_count,
+                       handle, thumbnail_url, is_verified)
+                   VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?)
                    ON CONFLICT(channel_id) DO UPDATE SET
                        name = excluded.name,
                        description = excluded.description,
                        total_videos = excluded.total_videos,
+                       follower_count = excluded.follower_count,
+                       handle = excluded.handle,
+                       thumbnail_url = excluded.thumbnail_url,
+                       is_verified = excluded.is_verified,
                        last_scanned_at = CURRENT_TIMESTAMP""",
                 (channel.channel_id, channel.name, channel.url,
                  channel.description, channel.category,
-                 channel.language_iso, channel.total_videos),
+                 channel.language_iso, channel.total_videos,
+                 channel.follower_count, channel.handle,
+                 channel.thumbnail_url, channel.is_verified),
             )
             self.conn.commit()
         except sqlite3.OperationalError as e:
@@ -565,18 +611,29 @@ class SQLiteStore:
             self.conn.execute(
                 """INSERT INTO videos (video_id, channel_id, title, url, description,
                        duration_seconds, upload_date, view_count, tags_json,
-                       language_iso, triage_status, checkpoint_stage)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DISCOVERED', 'METADATA_HARVESTED')""",
+                       language_iso, triage_status, checkpoint_stage,
+                       like_count, comment_count, category, thumbnail_url, heatmap_json)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DISCOVERED', 'METADATA_HARVESTED',
+                           ?, ?, ?, ?, ?)
+                   ON CONFLICT(video_id) DO UPDATE SET
+                       view_count = excluded.view_count,
+                       like_count = excluded.like_count,
+                       comment_count = excluded.comment_count,
+                       heatmap_json = excluded.heatmap_json,
+                       thumbnail_url = excluded.thumbnail_url,
+                       updated_at = CURRENT_TIMESTAMP""",
                 (video.video_id, video.channel_id, video.title, video.url,
                  video.description, video.duration_seconds, video.upload_date,
                  video.view_count, json.dumps(video.tags),
-                 video.language_iso),
+                 video.language_iso, video.like_count, video.comment_count,
+                 video.category, video.thumbnail_url, video.heatmap_json),
             )
             self.conn.commit()
             return True
-        except sqlite3.IntegrityError:
+        except sqlite3.Error as e:
+            logger.error(f"Error upserting video {video.video_id}: {e}")
             self.conn.rollback()
-            return False  # Duplicate video_id
+            return False
 
     def get_video(self, video_id: str) -> Optional[Video]:
         """Get a video by ID."""
@@ -588,6 +645,17 @@ class SQLiteStore:
         d = dict(row)
         d["tags"] = json.loads(d.pop("tags_json", "[]"))
         return Video(**d)
+
+    def record_stats_snapshot(
+        self, video_id: str, view_count: int, like_count: int, comment_count: int
+    ) -> None:
+        """Record a snapshot of a video's performance metrics."""
+        self.conn.execute(
+            """INSERT INTO video_stats_history (video_id, view_count, like_count, comment_count)
+               VALUES (?, ?, ?, ?)""",
+            (video_id, view_count, like_count, comment_count),
+        )
+        self.conn.commit()
 
     def get_videos_by_status(self, status: str, limit: int = 100) -> list[Video]:
         """Get videos by triage status."""
@@ -735,6 +803,61 @@ class SQLiteStore:
             d = dict(r)
             d["tags"] = json.loads(d.pop("tags_json", "[]"))
             result.append(Video(**d))
+        return result
+
+    def get_videos_for_channels(self, channel_ids: list[str], limit: int = 500) -> list[Video]:
+        """Get all videos belonging to a set of channels."""
+        if not channel_ids:
+            return []
+        placeholders = ",".join(["?"] * len(channel_ids))
+        rows = self.conn.execute(
+            f"SELECT * FROM videos WHERE channel_id IN ({placeholders}) LIMIT ?",
+            (*channel_ids, limit),
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["tags"] = json.loads(d.pop("tags_json", "[]"))
+            result.append(Video(**d))
+        return result
+
+    def get_high_momentum_videos(self, limit: int = 5) -> list[dict]:
+        """Identify videos with the highest hourly view growth.
+        
+        Compares current views with the oldest snapshot in history
+        to calculate velocity (views/hour).
+        """
+        rows = self.conn.execute(
+            """
+            WITH first_stats AS (
+                SELECT video_id, view_count, snapshot_at,
+                       ROW_NUMBER() OVER (PARTITION BY video_id ORDER BY snapshot_at ASC) as rn
+                FROM video_stats_history
+            )
+            SELECT 
+                v.video_id, 
+                v.title, 
+                c.name as channel_name,
+                v.view_count as current_views,
+                fs.view_count as initial_views,
+                (v.view_count - fs.view_count) as growth,
+                (julianday('now') - julianday(fs.snapshot_at)) * 24 as hours_elapsed
+            FROM videos v
+            JOIN channels c ON v.channel_id = c.channel_id
+            JOIN first_stats fs ON v.video_id = fs.video_id
+            WHERE fs.rn = 1 
+              AND hours_elapsed > 0.1  -- Need at least 6 minutes of history
+            ORDER BY (v.view_count - fs.view_count) / (hours_elapsed + 0.01) DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["velocity"] = d["growth"] / max(0.1, d["hours_elapsed"])
+            result.append(d)
         return result
 
     def get_manually_overridden_videos(self, limit: int = 100) -> list[Video]:
@@ -1016,24 +1139,25 @@ class SQLiteStore:
 
     def save_temp_state(
         self, video_id: str, raw_text: str = "",
-        segments_json: str = "[]", cleaned_text: str = ""
+        segments_json: str = "[]", cleaned_text: str = "", translated_text: str = ""
     ) -> None:
         """Save or update intermediate pipeline state for a video."""
         self.conn.execute(
-            """INSERT INTO pipeline_temp_state (video_id, raw_text, segments_json, cleaned_text)
-               VALUES (?, ?, ?, ?)
+            """INSERT INTO pipeline_temp_state (video_id, raw_text, segments_json, cleaned_text, translated_text)
+               VALUES (?, ?, ?, ?, ?)
                ON CONFLICT(video_id) DO UPDATE SET
                    raw_text = excluded.raw_text,
                    segments_json = excluded.segments_json,
-                   cleaned_text = excluded.cleaned_text""",
-            (video_id, raw_text, segments_json, cleaned_text),
+                   cleaned_text = excluded.cleaned_text,
+                   translated_text = excluded.translated_text""",
+            (video_id, raw_text, segments_json, cleaned_text, translated_text),
         )
         self.conn.commit()
 
     def get_temp_state(self, video_id: str) -> Optional[dict]:
         """Get intermediate pipeline state for a video.
 
-        Returns dict with keys: video_id, raw_text, segments_json, cleaned_text.
+        Returns dict with keys: video_id, raw_text, segments_json, cleaned_text, translated_text.
         """
         row = self.conn.execute(
             "SELECT * FROM pipeline_temp_state WHERE video_id = ?", (video_id,)
@@ -1353,7 +1477,50 @@ class SQLiteStore:
         row = self.conn.execute("SELECT COUNT(*) as cnt FROM transcript_chunks").fetchone()
         stats["total_chunks"] = row["cnt"]
 
+        # Channel totals
+        row = self.conn.execute("SELECT SUM(follower_count) as total_subs FROM channels").fetchone()
+        stats["total_subscribers"] = row["total_subs"] or 0
+
         return stats
+
+    # -------------------------------------------------------------------
+    # Analytics
+    # -------------------------------------------------------------------
+
+    def get_top_performing_videos(self, limit: int = 10) -> list[dict]:
+        """Get videos with highest view counts."""
+        rows = self.conn.execute(
+            """SELECT video_id, title, view_count, channel_id, upload_date
+               FROM videos
+               ORDER BY view_count DESC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_most_engaged_videos(self, limit: int = 10, min_views: int = 1000) -> list[dict]:
+        """Get videos with highest engagement rate (likes+comments / views)."""
+        rows = self.conn.execute(
+            """SELECT video_id, title, view_count, like_count, comment_count,
+                      (CAST(like_count + comment_count AS REAL) / NULLIF(view_count, 0)) as engagement_rate
+               FROM videos
+               WHERE view_count >= ?
+               ORDER BY engagement_rate DESC
+               LIMIT ?""",
+            (min_views, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_video_stats_history_data(self, video_id: str) -> list[dict]:
+        """Get historical stats for a specific video."""
+        rows = self.conn.execute(
+            """SELECT snapshot_at, view_count, like_count, comment_count
+               FROM video_stats_history
+               WHERE video_id = ?
+               ORDER BY snapshot_at ASC""",
+            (video_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     # -------------------------------------------------------------------
     # Full-Text Search (FTS5)

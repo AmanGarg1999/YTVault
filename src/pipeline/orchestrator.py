@@ -7,7 +7,10 @@ indexed knowledge graph. Handles both fresh scans and resumed scans.
 
 import json
 import logging
+import queue
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
 from src.config import ensure_data_dirs, get_settings
@@ -51,15 +54,14 @@ class PipelineOrchestrator:
         ensure_data_dirs()
         self.settings = get_settings()
         self.ollama_cfg = self.settings["ollama"]
-        self.db = SQLiteStore(self.settings["sqlite"]["path"])
-        self.checkpoint = CheckpointManager(self.db)
-        self.triage = TriageEngine()
-        self.normalizer = TextNormalizer()
-        self.translator = TranslationEngine()
-
-        # Performance metrics collector
-        self.metrics = PerformanceMetricsCollector(self.settings["sqlite"]["path"])
+        self._db_path = self.settings["sqlite"]["path"]
+        
+        self._db_path = self.settings["sqlite"]["path"]
         self.current_scan_id = None
+
+        # Callbacks for UI progress updates
+        self._on_progress = None
+        self._on_status = None
 
         # Vector store (lazy init — may fail if Ollama isn't running)
         self._vector_store: Optional[VectorStore] = None
@@ -67,12 +69,89 @@ class PipelineOrchestrator:
         # Graph store (lazy init — may fail if Neo4j isn't running)
         self._graph_store = None
 
-        # Callbacks for UI progress updates
-        self._on_progress = None
-        self._on_status = None
+    @property
+    def _thread_local(self) -> threading.local:
+        """Lazy-init thread local storage (handles cases where __init__ is mocked)."""
+        if not hasattr(self, "_tl"):
+            self._tl = threading.local()
+        return self._tl
 
     @property
-    def vector_store(self) -> VectorStore:
+    def db_path(self) -> str:
+        """Lazy-init DB path from settings if missing."""
+        if not hasattr(self, "_db_path"):
+            self._db_path = get_settings()["sqlite"]["path"]
+        return self._db_path
+
+    @property
+    def db(self) -> SQLiteStore:
+        """Get or create a thread-local SQLiteStore instance."""
+        if not hasattr(self._thread_local, "db"):
+            self._thread_local.db = SQLiteStore(self.db_path)
+        return self._thread_local.db
+
+    @db.setter
+    def db(self, value: SQLiteStore):
+        """Allow setting a specific DB instance (useful for testing)."""
+        self._thread_local.db = value
+
+    @property
+    def checkpoint(self) -> CheckpointManager:
+        """Get or create a thread-local CheckpointManager instance."""
+        if not hasattr(self._thread_local, "checkpoint"):
+            self._thread_local.checkpoint = CheckpointManager(self.db)
+        return self._thread_local.checkpoint
+
+    @checkpoint.setter
+    def checkpoint(self, value: CheckpointManager):
+        """Allow setting a specific CheckpointManager instance (useful for testing)."""
+        self._thread_local.checkpoint = value
+
+    # Callbacks for UI progress updates
+
+    @property
+    def metrics(self) -> PerformanceMetricsCollector:
+        """Lazy-init metrics collector."""
+        if not hasattr(self, "_metrics"):
+            self._metrics = PerformanceMetricsCollector(self.db_path)
+        return self._metrics
+
+    @metrics.setter
+    def metrics(self, value: PerformanceMetricsCollector):
+        self._metrics = value
+
+    @property
+    def triage(self) -> TriageEngine:
+        """Lazy-init triage engine."""
+        if not hasattr(self, "_triage"):
+            self._triage = TriageEngine()
+        return self._triage
+
+    @triage.setter
+    def triage(self, value: TriageEngine):
+        self._triage = value
+
+    @property
+    def normalizer(self) -> TextNormalizer:
+        """Lazy-init text normalizer."""
+        if not hasattr(self, "_normalizer"):
+            self._normalizer = TextNormalizer()
+        return self._normalizer
+
+    @normalizer.setter
+    def normalizer(self, value: TextNormalizer):
+        self._normalizer = value
+
+    @property
+    def translator(self) -> TranslationEngine:
+        """Lazy-init translation engine."""
+        if not hasattr(self, "_translator"):
+            self._translator = TranslationEngine()
+        return self._translator
+
+    @translator.setter
+    def translator(self, value: TranslationEngine):
+        self._translator = value
         if self._vector_store is None:
             self._vector_store = VectorStore()
         return self._vector_store
@@ -158,36 +237,87 @@ class PipelineOrchestrator:
                 finally:
                     discovery_queue.put(None)  # Sentinel
 
-            thread = Thread(target=discovery_worker, daemon=True)
+            thread = threading.Thread(target=discovery_worker, daemon=True)
             thread.start()
 
+            max_workers = self.settings.get("pipeline", {}).get("max_parallel_videos", 4)
             processed_count = 0
-            while True:
-                # Check for pause/stop requests
-                if self._check_stop_requested(scan_id):
-                    self._report_status("Pipeline stop requested - aborting")
-                    self.checkpoint.fail_scan(scan_id)
-                    return scan_id
-                
-                # Wait while paused
-                while self._check_pause_state(scan_id):
-                    import time
-                    time.sleep(1)
-                
-                item = discovery_queue.get()
-                if item is None:
-                    break
-                
-                vid, is_new = item
-                if is_new:
-                    self._report_status(f"Processing new video: {vid}")
-                    self._process_single_video(vid, scan_id)
-                
-                processed_count += 1
-                self.checkpoint.update_scan_progress(
-                    scan_id, total_processed=processed_count,
-                    last_video_id=vid,
-                )
+            active_futures = {} # vid -> future
+            
+            self._report_status(f"Starting parallel processing with max_workers={max_workers}")
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                while True:
+                    # 1. Check for stop requests
+                    if self._check_stop_requested(scan_id):
+                        self._report_status("Pipeline stop requested - aborting")
+                        # We don't cancel active futures here to allow clean DB state, 
+                        # but we stop submitting new ones.
+                        break
+                    
+                    # 2. Wait while paused
+                    while self._check_pause_state(scan_id):
+                        time.sleep(1)
+                    
+                    # 3. Reaper: clean up completed futures and update progress
+                    done_vids = [vid for vid, f in active_futures.items() if f.done()]
+                    for vid in done_vids:
+                        future = active_futures.pop(vid)
+                        processed_count += 1
+                        try:
+                            future.result()
+                        except Exception as e:
+                            logger.error(f"Video {vid} failed in parallel worker: {e}")
+                        
+                        self.checkpoint.update_scan_progress(
+                            scan_id, total_processed=processed_count,
+                            last_video_id=vid,
+                        )
+
+                    # 4. Get next item from discovery (non-blocking enough to allow reaped/flags)
+                    try:
+                        item = discovery_queue.get(timeout=0.5)
+                    except queue.Empty:
+                        if not thread.is_alive() and not active_futures:
+                            break # Everything done
+                        continue
+                    
+                    if item is None: # Sentinel from discovery worker
+                        if not active_futures:
+                            break
+                        continue # Wait for active futures to finish
+                    
+                    vid, is_new = item
+                    if is_new:
+                        self._report_status(f"Queuing video {vid}")
+                        active_futures[vid] = executor.submit(self._process_single_video, vid, scan_id)
+                    else:
+                        # Already processed (likely skipped during discovery)
+                        processed_count += 1
+                        self.checkpoint.update_scan_progress(
+                            scan_id, total_processed=processed_count,
+                            last_video_id=vid,
+                        )
+
+                # Final reaper for remaining active futures
+                while active_futures:
+                    done_vids = [vid for vid, f in active_futures.items() if f.done()]
+                    if not done_vids:
+                        time.sleep(1)
+                        continue
+                        
+                    for vid in done_vids:
+                        future = active_futures.pop(vid)
+                        processed_count += 1
+                        try:
+                            future.result()
+                        except Exception as e:
+                            logger.error(f"Video {vid} failed in final cleanup: {e}")
+                        
+                        self.checkpoint.update_scan_progress(
+                            scan_id, total_processed=processed_count,
+                            last_video_id=vid,
+                        )
 
             self.checkpoint.complete_scan(scan_id)
             self.db.set_control_state(scan_id, "RUNNING")
@@ -253,6 +383,77 @@ class PipelineOrchestrator:
         )
         return len(manually_overridden)
 
+    def repair_vault_health(self) -> dict:
+        """Systematically identify and repair data gaps across the vault.
+        
+        Returns:
+            Dict with repair counts by category.
+        """
+        self._report_status("Starting Comprehensive Vault Health Check...")
+        
+        counts = {"transcripts": 0, "summaries": 0, "heatmaps": 0}
+        
+        # 1. Identify missing transcripts (Critical)
+        missing_transcripts = self.db.get_videos_missing_transcripts()
+        counts["transcripts"] = len(missing_transcripts)
+        
+        # 2. Identify missing summaries (New Stage)
+        missing_summaries = self.db.get_videos_missing_summaries()
+        counts["summaries"] = len(missing_summaries)
+        
+        # 3. Identify missing heatmaps (V14 Migration)
+        missing_heatmaps = self.db.get_videos_missing_heatmaps()
+        counts["heatmaps"] = len(missing_heatmaps)
+        
+        total_to_repair = len(set(
+            [v.video_id for v in missing_transcripts] +
+            [v.video_id for v in missing_summaries] +
+            [v.video_id for v in missing_heatmaps]
+        ))
+        
+        if total_to_repair == 0:
+            self._report_status("✅ Vault Health is 100%. No repairs needed.")
+            return counts
+            
+        self._report_status(f"Repairing {total_to_repair} videos with identified gaps...")
+        
+        processed_ids = set()
+        
+        # Process in priority order (Earliest stage gaps first)
+        # 1. Missing Heatmaps -> Reset to METADATA_HARVESTED
+        for video in missing_heatmaps:
+            if video.video_id in processed_ids: continue
+            self._report_status(f"Repairing Heatmap/MetaData: {video.title[:40]}...")
+            self.db.update_checkpoint_stage(video.video_id, "METADATA_HARVESTED")
+            video = self.db.get_video(video.video_id)
+            self._resume_video(video, "health_repair")
+            processed_ids.add(video.video_id)
+
+        # 2. Missing Transcripts -> Reset to TRIAGE_COMPLETE
+        for video in missing_transcripts:
+            if video.video_id in processed_ids: continue
+            self._report_status(f"Repairing Transcript: {video.title[:40]}...")
+            self.db.update_checkpoint_stage(video.video_id, "TRIAGE_COMPLETE")
+            video = self.db.get_video(video.video_id)
+            self._resume_video(video, "health_repair")
+            processed_ids.add(video.video_id)
+            
+        # 3. Missing Summaries -> Reset to CHUNK_ANALYZED (if chunks exist) or TRIAGE_COMPLETE
+        for video in missing_summaries:
+            if video.video_id in processed_ids: continue
+            self._report_status(f"Repairing Summary: {video.title[:40]}...")
+            chunks = self.db.get_chunks_for_video(video.video_id)
+            if chunks:
+                self.db.update_checkpoint_stage(video.video_id, "CHUNK_ANALYZED")
+            else:
+                self.db.update_checkpoint_stage(video.video_id, "TRIAGE_COMPLETE")
+            video = self.db.get_video(video.video_id)
+            self._resume_video(video, "health_repair")
+            processed_ids.add(video.video_id)
+            
+        self._report_status(f"Vault Health Repair completed for {len(processed_ids)} videos.")
+        return counts
+
     # -------------------------------------------------------------------
     # Stage Implementations
     # -------------------------------------------------------------------
@@ -309,6 +510,7 @@ class PipelineOrchestrator:
         self.checkpoint.update_scan_progress(
             scan_id, total_discovered=discovered_count
         )
+        self.db.sync_channel_video_counts() # Update counts in channels table
         self._report_status(f"Discovery complete: {discovered_count} videos found")
 
     def batch_triage(self, video_ids: list[str]) -> dict[str, str]:
@@ -458,6 +660,9 @@ class PipelineOrchestrator:
                 elif next_stage == "CHUNK_ANALYZED":
                     self._stage_chunk_analysis(video, scan_id)
 
+                elif next_stage == "SUMMARIZED":
+                    self._stage_summarize(video, scan_id)
+
                 elif next_stage == "EMBEDDED":
                     self._stage_embed(video, scan_id)
 
@@ -476,9 +681,10 @@ class PipelineOrchestrator:
                 )
                 break  # Stop processing, checkpoint is at last successful stage
 
-    def _stage_triage(self, video, scan_id: str) -> None:
+    def _stage_triage(self, video, scan_id: str = None) -> None:
         """Stage 2: Run triage classification."""
-        with StageTimer(self.metrics, "TRIAGE", video.video_id, scan_id):
+        sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
+        with StageTimer(self.metrics, "TRIAGE", video.video_id, sid):
             result = self.triage.classify(video)
             self.db.update_triage_status(
                 video.video_id,
@@ -492,6 +698,7 @@ class PipelineOrchestrator:
                 message=f"Triage: {video.title[:50]}... → {result.decision.value} ({result.confidence:.0%})",
                 video_id=video.video_id,
                 channel_id=video.channel_id,
+                scan_id=sid,
                 stage="TRIAGE",
             )
             logger.info(
@@ -499,9 +706,10 @@ class PipelineOrchestrator:
                 f"({result.phase}, {result.latency_ms:.0f}ms)"
             )
 
-    def _stage_transcript(self, video, scan_id: str) -> bool:
+    def _stage_transcript(self, video, scan_id: str = None) -> bool:
         """Stage 3: Fetch transcript. Returns True if transcript was found."""
-        with StageTimer(self.metrics, "TRANSCRIPT_FETCHED", video.video_id, scan_id):
+        sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
+        with StageTimer(self.metrics, "TRANSCRIPT_FETCHED", video.video_id, sid):
             result = fetch_transcript(video.video_id)
             if result.success:
                 self.db.update_transcript_strategy(
@@ -527,15 +735,10 @@ class PipelineOrchestrator:
                 self.checkpoint.advance(video.video_id, "DONE")
                 return False
 
-    def _stage_translate(self, video, scan_id: str) -> None:
-        """Stage 4 (NEW): Translate non-English transcripts to English.
-        
-        Only runs if:
-        1. Video language is not English
-        2. Translation is enabled in config
-        3. A transcript exists
-        """
-        with StageTimer(self.metrics, "TRANSLATED", video.video_id, scan_id):
+    def _stage_translate(self, video, scan_id: str = None) -> None:
+        """Stage 4 (NEW): Translate non-English transcripts to English."""
+        sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
+        with StageTimer(self.metrics, "TRANSLATED", video.video_id, sid):
             state = self.db.get_temp_state(video.video_id)
             if not state:
                 logger.debug(f"No temp state for {video.video_id}, skipping translation")
@@ -610,22 +813,23 @@ class PipelineOrchestrator:
                     error_detail=result.error,
                 )
 
-    def _stage_sponsor_filter(self, video, scan_id: str) -> None:
-        """Stage 5: Strip SponsorBlock segments (reads stored data, no re-fetch)."""
-        with StageTimer(self.metrics, "SPONSOR_FILTERED", video.video_id, scan_id):
+    def _stage_sponsor_filter(self, video, scan_id: str = None) -> None:
+        """Stage 5: Strip SponsorBlock segments."""
+        sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
+        with StageTimer(self.metrics, "SPONSOR_FILTERED", video.video_id, sid):
             state = self.db.get_temp_state(video.video_id)
-        if not state or not state["segments_json"]:
-            return
+            if not state or not state["segments_json"]:
+                return
 
-        # Deserialize stored segments
-        try:
-            segments_data = json.loads(state["segments_json"])
-            segments = [
-                TimestampedSegment(text=s["text"], start=s["start"], duration=s["duration"])
-                for s in segments_data
-            ]
-        except (json.JSONDecodeError, KeyError):
-            return
+            # Deserialize stored segments
+            try:
+                segments_data = json.loads(state["segments_json"])
+                segments = [
+                    TimestampedSegment(text=s["text"], start=s["start"], duration=s["duration"])
+                    for s in segments_data
+                ]
+            except (json.JSONDecodeError, KeyError):
+                return
 
             # Fetch SponsorBlock data and filter
             sponsor_segments = fetch_sponsor_segments(video.video_id)
@@ -644,12 +848,10 @@ class PipelineOrchestrator:
                 translated_text=state.get("translated_text", ""),
             )
 
-    def _stage_normalize(self, video, scan_id: str) -> None:
-        """Stage 6: Normalize transcript text via LLM.
-        
-        Uses translated text if available, otherwise uses raw text.
-        """
-        with StageTimer(self.metrics, "TEXT_NORMALIZED", video.video_id, scan_id):
+    def _stage_normalize(self, video, scan_id: str = None) -> None:
+        """Stage 6: Normalize transcript text via LLM."""
+        sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
+        with StageTimer(self.metrics, "TEXT_NORMALIZED", video.video_id, sid):
             state = self.db.get_temp_state(video.video_id)
             if not state:
                 return
@@ -668,9 +870,10 @@ class PipelineOrchestrator:
             translated_text=state.get("translated_text", ""),
         )
 
-    def _stage_chunk(self, video, scan_id: str) -> None:
+    def _stage_chunk(self, video, scan_id: str = None) -> None:
         """Stage 7: Chunking with semantic or sliding-window strategy."""
-        with StageTimer(self.metrics, "CHUNKED", video.video_id, scan_id):
+        sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
+        with StageTimer(self.metrics, "CHUNKED", video.video_id, sid):
             state = self.db.get_temp_state(video.video_id)
             if not state:
                 return
@@ -727,9 +930,10 @@ class PipelineOrchestrator:
             self.db.insert_chunks(chunks)
             self.db.delete_temp_state(video.video_id)
 
-    def _stage_chunk_analysis(self, video, scan_id: str) -> None:
+    def _stage_chunk_analysis(self, video, scan_id: str = None) -> None:
         """Stage 6.5: Deep analysis of each chunk (topics, entities, claims, quotes)."""
-        with StageTimer(self.metrics, "CHUNK_ANALYZED", video.video_id, scan_id):
+        sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
+        with StageTimer(self.metrics, "CHUNK_ANALYZED", video.video_id, sid):
             from src.intelligence.chunk_analyzer import ChunkAnalyzer
 
             analyzer = ChunkAnalyzer(self.db)
@@ -739,9 +943,10 @@ class PipelineOrchestrator:
                 f"{totals['claims']}C {totals['quotes']}Q"
             )
 
-    def _stage_embed(self, video, scan_id: str) -> None:
+    def _stage_embed(self, video, scan_id: str = None) -> None:
         """Stage 7: Embed chunks into ChromaDB."""
-        with StageTimer(self.metrics, "EMBEDDED", video.video_id, scan_id):
+        sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
+        with StageTimer(self.metrics, "EMBEDDED", video.video_id, sid):
             chunks = self.db.get_chunks_for_video(video.video_id)
             if chunks:
                 channel = self.db.get_channel(video.channel_id)
@@ -752,14 +957,10 @@ class PipelineOrchestrator:
                     language_iso=video.language_iso,
                 )
 
-    def _stage_graph_sync(self, video, scan_id: str) -> None:
-        """Stage 8: Sync to Neo4j knowledge graph (optional).
-
-        Uses pre-computed chunk-level analysis (from CHUNK_ANALYZED stage)
-        instead of re-extracting from raw text. This means the graph
-        reflects analysis of the ENTIRE video, not just the first N chars.
-        """
-        with StageTimer(self.metrics, "GRAPH_SYNCED", video.video_id, scan_id):
+    def _stage_graph_sync(self, video, scan_id: str = None) -> None:
+        """Stage 8: Synchronize video, topics, and guests to Neo4j."""
+        sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
+        with StageTimer(self.metrics, "GRAPH_SYNCED", video.video_id, sid):
             try:
                 graph = self.graph_store
 
@@ -785,7 +986,6 @@ class PipelineOrchestrator:
                     guests.append(guest)
                     graph.upsert_guest(guest.canonical_name)
                     graph.link_guest_to_video(guest.canonical_name, video.video_id)
-
                 # Create Topic nodes and relationships
                 for topic in topics:
                     graph.link_video_to_topic(
@@ -804,14 +1004,37 @@ class PipelineOrchestrator:
                 claims = self.db.get_claims_for_video(video.video_id)
                 for claim in claims:
                     graph.upsert_claim(
-                        claim_text=claim.claim_text,
-                        speaker=claim.speaker,
+                        claim_id=claim.claim_id,
                         video_id=video.video_id,
+                        speaker=claim.speaker,
+                        text=claim.claim_text,
                         topic=claim.topic,
                     )
-
             except Exception as e:
-                logger.warning(f"Graph sync skipped for {video.video_id}: {e}")
+                logger.error(f"Graph sync failed for {video.video_id}: {e}")
+
+    def _stage_summarize(self, video, scan_id: str = None) -> None:
+        """Stage 6.8: Generate hierarchical Map-Reduce summary."""
+        sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
+        with StageTimer(self.metrics, "SUMMARIZED", video.video_id, sid):
+            from src.intelligence.summarizer import SummarizerEngine
+            summarizer = SummarizerEngine(self.db)
+            summarizer.generate_summary(video.video_id)
+            self._report_status("Map-Reduce summary generated")
+
+    def _stage_embed(self, video, scan_id: str = None) -> None:
+        """Stage 7: Embed chunks into ChromaDB."""
+        sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
+        with StageTimer(self.metrics, "EMBEDDED", video.video_id, sid):
+            chunks = self.db.get_chunks_for_video(video.video_id)
+            if chunks:
+                channel = self.db.get_channel(video.channel_id)
+                self.vector_store.upsert_chunks(
+                    chunks,
+                    channel_id=video.channel_id,
+                    upload_date=video.upload_date,
+                    language_iso=video.language_iso,
+                )
 
     def _extract_topics(self, text: str) -> list[dict]:
         """Extract topics from transcript text via LLM.

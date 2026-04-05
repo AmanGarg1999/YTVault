@@ -99,10 +99,37 @@ def render_monitor_tab(db, run_pipeline_background):
                 
                 with col4:
                     global_orch = getattr(st, "_global_orchestrators", {})
-                    is_running = (getattr(scan, "scan_id", "") in global_orch or
-                                  getattr(scan, "source_url", "") in global_orch)
-                    status_label = "🟢 RUNNING" if is_running else "🟡 PAUSED"
-                    st.markdown(f"**{status_label}**", help="Running or paused state")
+                    scan_id = getattr(scan, "scan_id", "")
+                    source_url = getattr(scan, "source_url", "")
+                    
+                    is_in_memory = (scan_id in global_orch or source_url in global_orch)
+                    
+                    # Get DB control state
+                    control = db.get_control_state(scan_id)
+                    db_status = control.status if control else "RUNNING"
+                    
+                    if is_in_memory:
+                        if db_status == "PAUSED":
+                            status_label = "🟡 PAUSED"
+                        else:
+                            status_label = "🟢 RUNNING"
+                    else:
+                        if db_status == "RUNNING":
+                            status_label = "🔌 DISCONNECTED"
+                        elif db_status == "PAUSED":
+                            status_label = "🟡 PAUSED"
+                        else:
+                            status_label = "🔴 STOPPED"
+                            
+                    st.markdown(f"**{status_label}**")
+                    
+                    # Add Re-attach button if disconnected but supposed to be running
+                    if not is_in_memory and db_status == "RUNNING":
+                        if st.button("🔗 Re-attach", key=f"reattach_{scan_id}", use_container_width=True):
+                            run_pipeline_background(source_url, db, scan_id=scan_id)
+                            st.success(f"Re-attached to {scan_id}")
+                            time.sleep(0.5)
+                            st.rerun()
 
     # =====================================================================
     # Channel Health Section

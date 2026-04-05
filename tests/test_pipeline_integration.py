@@ -155,9 +155,7 @@ class TestPipelineSingleVideo:
         mock_list = MagicMock()
         mock_list.find_manually_created_transcript.return_value = mock_transcript
 
-        mock_api_instance = MagicMock()
-        mock_api_instance.list.return_value = mock_list
-        mock_transcript_api.return_value = mock_api_instance
+        mock_transcript_api.list_transcripts.return_value = mock_list
 
         # SponsorBlock: no segments (404)
         mock_response = MagicMock()

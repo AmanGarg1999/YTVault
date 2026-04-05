@@ -101,6 +101,7 @@ chunking:
 
 # Pipeline Concurrency
 pipeline:
+  max_parallel_videos: 4          # number of videos to process concurrently
   llm_max_workers: 8               # concurrent Ollama calls (increased from 2, hardware supports max 20)
   discovery_rate_limit_delay: 1.0  # seconds between yt-dlp requests
   batch_size_triage: 10           # videos per triage batch

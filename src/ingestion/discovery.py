@@ -220,7 +220,7 @@ def extract_video_metadata(video_id: str) -> tuple[Video, Channel]:
     """
     _apply_rate_limit()  # Rate limiting
     url = f"https://www.youtube.com/watch?v={video_id}"
-    raw = _run_ytdlp(["--dump-json", url])
+    raw = _run_ytdlp(["--dump-json", "--no-playlist", url])
     data = json.loads(raw)
 
     channel_id = data.get("channel_id", "")
@@ -288,9 +288,17 @@ def extract_channel_info(url: str) -> Channel:
     # Fallback: Create a basic channel object with just the URL
     # The channel will be populated when individual videos are processed
     logger.warning(f"Using minimal channel info for {url}")
+    
+    # Try to extract channel ID from URL if possible
+    channel_id = "unknown"
+    if "/channel/" in url:
+        channel_id = url.split("/channel/")[-1].split("/")[0]
+    elif "/@ " in url: # Space to avoid matching the regex in replace
+         channel_id = url.split("/@")[-1].split("/")[0]
+            
     return Channel(
-        channel_id="unknown",
-        name="Unknown Channel",
+        channel_id=channel_id,
+        name=channel_id if channel_id != "unknown" else "Unknown Channel",
         url=url,
         description="",
     )

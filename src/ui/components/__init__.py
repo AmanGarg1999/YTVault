@@ -18,6 +18,7 @@ from .ui_helpers import (
     success_card,
     warning_card,
     error_card,
+    video_card,
     
     # Progress & Loading
     progress_step,
@@ -46,6 +47,7 @@ __all__ = [
     "success_card",
     "warning_card",
     "error_card",
+    "video_card",
     "progress_step",
     "loading_spinner",
     "data_table",

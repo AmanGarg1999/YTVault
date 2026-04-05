@@ -1,33 +1,39 @@
-"""Ingestion Hub - Unified interface for all content intake operations."""
-
-import logging
-import time
-import pandas as pd
 import streamlit as st
+import logging
+import pandas as pd
+import time
 
 logger = logging.getLogger(__name__)
+
+from src.ui.components import (
+    page_header,
+    section_header,
+    video_card,
+    spacer,
+    info_card,
+    success_card,
+)
 
 
 def render(db, run_pipeline_background, run_bulk_pipeline_background):
     """Render the unified Ingestion Hub with all intake operations."""
     
-    st.markdown("""
-    <div class="main-header">
-        <h1>🌾 Ingestion Hub</h1>
-        <p>Start harvests, triage videos, manage overrides, and reprocess content</p>
-    </div>
-    """, unsafe_allow_html=True)
+    page_header(
+        "Ingestion Hub",
+        "Start harvests, manage overrides, and reprocess content",
+        icon="🌾"
+    )
 
     try:
         # =====================================================================
-        # TABS: Start Harvest, Pending Review, Rejected Videos, Reprocessing
+        # TABS: Start Harvest, Bulk Re-harvest, Reprocessing, Pending Review
         # =====================================================================
-        tab_harvest, tab_pending, tab_rejected, tab_reprocess, tab_bulk = st.tabs([
+        tab_harvest, tab_bulk, tab_reprocess, tab_pending, tab_rejected = st.tabs([
             "🚀 Start Harvest",
-            "📋 Pending Review",
-            "🚫 Rejected Videos",
+            "📦 Bulk Re-harvest",
             "🔄 Reprocessing",
-            "📦 Bulk Re-harvest"
+            "📋 Pending Review",
+            "🚫 Rejected Videos"
         ])
 
         # =====================================================================
@@ -37,28 +43,28 @@ def render(db, run_pipeline_background, run_bulk_pipeline_background):
             render_harvest_tab(db, run_pipeline_background)
 
         # =====================================================================
-        # TAB 2: AMBIGUITY QUEUE - Pending Review
+        # TAB 2: BULK RE-HARVEST - Multi-channel backfill
         # =====================================================================
-        with tab_pending:
-            render_pending_tab(db)
+        with tab_bulk:
+            render_bulk_tab(db, run_bulk_pipeline_background)
 
         # =====================================================================
-        # TAB 3: REJECTED VIDEOS Review & Override
-        # =====================================================================
-        with tab_rejected:
-            render_rejected_tab(db, run_pipeline_background)
-
-        # =====================================================================
-        # TAB 4: REPROCESSING - Force-accepted videos
+        # TAB 3: REPROCESSING - Force-accepted videos
         # =====================================================================
         with tab_reprocess:
             render_reprocess_tab(db, run_pipeline_background)
 
         # =====================================================================
-        # TAB 5: BULK RE-HARVEST - Multi-channel backfill
+        # TAB 4: PENDING REVIEW - Manual triage
         # =====================================================================
-        with tab_bulk:
-            render_bulk_tab(db, run_bulk_pipeline_background)
+        with tab_pending:
+            render_pending_tab(db)
+
+        # =====================================================================
+        # TAB 5: REJECTED VIDEOS - Override rejections
+        # =====================================================================
+        with tab_rejected:
+            render_rejected_tab(db, run_pipeline_background)
 
     except Exception as e:
         st.error(f"Ingestion Hub error: {e}")
@@ -351,17 +357,9 @@ def render_reprocess_tab(db, run_pipeline_background):
         st.markdown("### Individual Reprocessing")
 
         for i, video in enumerate(manually_overridden[:20]):
-            with st.container(border=True):
-                col1, col2 = st.columns([3, 1])
-                
-                with col1:
-                    st.markdown(f"🔄 **{video.title[:60]}...** (Manual Override)")
-                    
-                    lang = getattr(video, "language_iso", "en")
-                    if lang != "en":
-                        st.caption(f"🌐 {LANGUAGE_MAP.get(lang, lang.upper())}")
-                
-                with col2:
+            cols = video_card(video, key_prefix=f"reproc_{i}")
+            if cols:
+                with cols[3]:
                     if st.button("▶️ Process", key=f"process_single_{i}_{video.video_id}"):
                         from src.pipeline.orchestrator import PipelineOrchestrator
                         orchestrator = PipelineOrchestrator()

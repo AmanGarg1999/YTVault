@@ -789,7 +789,6 @@ class SQLiteStore:
         """Get set of all known video IDs."""
         rows = self.conn.execute("SELECT video_id FROM videos").fetchall()
         return {r["video_id"] for r in rows}
-
     def get_resumable_videos(self) -> list[Video]:
         """Get accepted videos that haven't reached DONE checkpoint."""
         rows = self.conn.execute(
@@ -804,6 +803,81 @@ class SQLiteStore:
             d["tags"] = json.loads(d.pop("tags_json", "[]"))
             result.append(Video(**d))
         return result
+
+    def get_videos_missing_transcripts(self, limit: int = 200) -> list[Video]:
+        """Get accepted videos that are missing transcripts."""
+        rows = self.conn.execute(
+            """SELECT v.* FROM videos v
+               LEFT JOIN transcript_chunks tc ON v.video_id = tc.video_id
+               WHERE v.triage_status = 'ACCEPTED'
+                 AND tc.chunk_id IS NULL
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["tags"] = json.loads(d.pop("tags_json", "[]"))
+            result.append(Video(**d))
+        return result
+
+    def get_videos_missing_summaries(self, limit: int = 200) -> list[Video]:
+        """Get accepted videos that are missing summaries."""
+        rows = self.conn.execute(
+            """SELECT v.* FROM videos v
+               LEFT JOIN video_summaries vs ON v.video_id = vs.video_id
+               WHERE v.triage_status = 'ACCEPTED'
+                 AND (vs.summary_text IS NULL OR vs.summary_text = '')
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["tags"] = json.loads(d.pop("tags_json", "[]"))
+            result.append(Video(**d))
+        return result
+
+    def get_videos_missing_heatmaps(self, limit: int = 200) -> list[Video]:
+        """Get accepted videos that have empty or default heatmap JSON."""
+        rows = self.conn.execute(
+            """SELECT * FROM videos 
+               WHERE triage_status = 'ACCEPTED' 
+                 AND (heatmap_json IS NULL OR heatmap_json = '[]')
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["tags"] = json.loads(d.pop("tags_json", "[]"))
+            result.append(Video(**d))
+        return result
+
+
+    def get_temp_state(self, video_id: str) -> Optional[dict]:
+        """Get the temporary processing state for a video."""
+        row = self.conn.execute(
+            "SELECT * FROM pipeline_temp_state WHERE video_id = ?", (video_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def save_temp_state(
+        self, video_id: str, raw_text: str = "", segments_json: str = "[]",
+        cleaned_text: str = "", translated_text: str = ""
+    ) -> None:
+        """Save temporary processing state for a video."""
+        self.conn.execute(
+            """INSERT INTO pipeline_temp_state (video_id, raw_text, segments_json, cleaned_text, translated_text)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(video_id) DO UPDATE SET
+                   raw_text = CASE WHEN excluded.raw_text != '' THEN excluded.raw_text ELSE raw_text END,
+                   segments_json = CASE WHEN excluded.segments_json != '[]' THEN excluded.segments_json ELSE segments_json END,
+                   cleaned_text = CASE WHEN excluded.cleaned_text != '' THEN excluded.cleaned_text ELSE cleaned_text END,
+                   translated_text = CASE WHEN excluded.translated_text != '' THEN excluded.translated_text ELSE translated_text END""",
+            (video_id, raw_text, segments_json, cleaned_text, translated_text),
+        )
+        self.conn.commit()
 
     def get_videos_for_channels(self, channel_ids: list[str], limit: int = 500) -> list[Video]:
         """Get all videos belonging to a set of channels."""
@@ -1861,6 +1935,31 @@ class SQLiteStore:
             self.conn.rollback()
         
         return deleted
+
+    def sync_channel_video_counts(self, channel_id: str = None) -> None:
+        """Synchronize the total_videos and processed_videos counts in channels table."""
+        try:
+            if channel_id:
+                # Update specific channel
+                self.conn.execute(
+                    """UPDATE channels 
+                       SET total_videos = (SELECT COUNT(*) FROM videos WHERE channel_id = ?),
+                           processed_videos = (SELECT COUNT(*) FROM videos WHERE channel_id = ? AND checkpoint_stage = 'DONE')
+                       WHERE channel_id = ?""",
+                    (channel_id, channel_id, channel_id),
+                )
+            else:
+                # Update all channels
+                self.conn.execute(
+                    """UPDATE channels 
+                       SET total_videos = (SELECT COUNT(*) FROM videos v WHERE v.channel_id = channels.channel_id),
+                           processed_videos = (SELECT COUNT(*) FROM videos v WHERE v.channel_id = channels.channel_id AND v.checkpoint_stage = 'DONE')"""
+                )
+            self.conn.commit()
+            logger.debug(f"Synced video counts for {'channel ' + channel_id if channel_id else 'all channels'}")
+        except Exception as e:
+            logger.error(f"Failed to sync channel video counts: {e}")
+            self.conn.rollback()
 
     def delete_channel_data(self, channel_id: str, reason: str = "") -> dict:
         """

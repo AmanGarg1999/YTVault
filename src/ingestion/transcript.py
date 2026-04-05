@@ -167,6 +167,10 @@ def _try_fetch(
             )
             for seg in raw_segments
         ]
+        
+        if not segments:
+            return None
+
         full_text = " ".join(seg.text for seg in segments)
         strategy_type = "manual" if manual else "auto"
         logger.info(

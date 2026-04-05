@@ -17,7 +17,7 @@ import json
 logger = logging.getLogger(__name__)
 
 
-def render(db):
+def render(db, run_repair=None, get_diagnostics=None):
     """Render the Data Management Center page."""
     st.markdown("""
     <div class="main-header">
@@ -352,7 +352,57 @@ def render(db):
         st.markdown("---")
 
         # =====================================================================
-        # SECTION 5: Storage Optimization Tips
+        # SECTION 5: Vault Health & Repair (UPDATED)
+        # =====================================================================
+        st.markdown("### 🏥 Vault Health & Repair")
+        
+        if get_diagnostics:
+            diag = get_diagnostics(db)
+            
+            # Health Overview Metrics
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Total Videos", diag["total"])
+            with col2:
+                st.metric("Transcripts", f"{diag['pct_transcripts']}%", delta=f"-{diag['missing_transcripts']} missing" if diag['missing_transcripts'] else None, delta_color="inverse")
+            with col3:
+                st.metric("Summaries", f"{diag['pct_summaries']}%", delta=f"-{diag['missing_summaries']} missing" if diag['missing_summaries'] else None, delta_color="inverse")
+            with col4:
+                st.metric("Heatmaps", f"{diag['pct_heatmaps']}%", delta=f"-{diag['missing_heatmaps']} missing" if diag['missing_heatmaps'] else None, delta_color="inverse")
+            
+            # Progress Bars
+            st.write("#### Data Coverage")
+            st.progress(diag['pct_transcripts'] / 100, text=f"Transcripts: {diag['pct_transcripts']}%")
+            st.progress(diag['pct_summaries'] / 100, text=f"Summaries: {diag['pct_summaries']}%")
+            st.progress(diag['pct_heatmaps'] / 100, text=f"Heatmaps: {diag['pct_heatmaps']}%")
+            
+            st.info("""
+            **Vault Repair** systematically fixes identified gaps:
+            - **Missing Transcripts**: Resets videos to re-fetch transcripts.
+            - **Missing Summaries**: Triggers the new Map-Reduce summarization stage.
+            - **Missing Heatmaps**: Refreshes metadata to include audience interest heatmaps.
+            """)
+            
+            if st.button("🚀 RUN FULL VAULT REPAIR", type="primary", use_container_width=True):
+                if run_repair:
+                    run_repair()
+                    st.success("✅ Unified Vault Repair started in background!")
+                    st.toast("Vault health repair in progress...", icon="🏥")
+                    db.log_pipeline_event(
+                        level="INFO",
+                        message="Manual full vault health repair started",
+                        stage="REPAIR"
+                    )
+                    st.rerun()
+                else:
+                    st.error("Repair runner not available")
+        else:
+            st.warning("Diagnostics engine not available")
+
+        st.markdown("---")
+
+        # =====================================================================
+        # SECTION 6: Storage Optimization Tips
         # =====================================================================
         st.markdown("### 💾 Storage Optimization Tips")
         

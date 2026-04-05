@@ -101,32 +101,57 @@ st.markdown("""
     p { line-height: 1.6; color: var(--neutral-300); }
     
     /* =====================================================================
-       MAIN CONTENT AREA
+       PROGRESS BARS & ANIMATIONS
        ===================================================================== */
     
-    .main-header {
-        background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%);
-        background-clip: padding-box;
-        padding: 2rem 2.5rem;
-        border-radius: 16px;
-        color: white;
-        margin-bottom: 2rem;
-        box-shadow: 0 20px 40px rgba(14, 165, 233, 0.15);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+    @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
     }
     
-    .main-header h1 {
-        margin: 0;
-        font-size: 1.8rem;
-        font-weight: 700;
-        color: white;
+    .stProgress > div > div > div > div {
+        background: linear-gradient(90deg, 
+            var(--primary-500) 0%, 
+            var(--primary-100) 50%, 
+            var(--primary-500) 100%
+        );
+        background-size: 200% 100%;
+        animation: shimmer 2s infinite linear;
+    }
+
+    /* Pulse for active status */
+    @keyframes pulse-green {
+        0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+        70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
     }
     
-    .main-header p {
-        margin: 0.5rem 0 0;
-        opacity: 0.9;
-        font-size: 0.95rem;
-        color: rgba(255, 255, 255, 0.85);
+    .status-pulse {
+        width: 8px;
+        height: 8px;
+        background-color: var(--success-500);
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 8px;
+        animation: pulse-green 2s infinite;
+    }
+
+    /* =====================================================================
+       GLOBAL COMMAND BAR
+       ===================================================================== */
+    
+    .command-bar-container {
+        background: rgba(30, 41, 59, 0.8);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid rgba(14, 165, 233, 0.2);
+        padding: 0.75rem 2rem;
+        position: sticky;
+        top: 0;
+        z-index: 999;
+        margin: -4rem -4rem 2rem -4rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
     }
     
     /* =====================================================================
@@ -535,9 +560,18 @@ def run_bulk_pipeline_background(urls: list[str], db: SQLiteStore, force_metadat
             thread_db = SQLiteStore(settings["sqlite"]["path"])
             orchestrator = PipelineOrchestrator()
             
+            # Set callbacks to ensure progress is logged to DB
+            orchestrator.set_callbacks(
+                on_status=lambda msg: orchestrator.db.log_pipeline_event(
+                    level="INFO", message=msg, stage="BULK"
+                )
+            )
+            
             for i, url in enumerate(urls):
                 logger.info(f"Bulk start {i+1}/{len(urls)}: {url}")
                 orchestrator.run(url, force_metadata_refresh=force_metadata_refresh)
+                # Sync counts after each channel in bulk
+                orchestrator.db.sync_channel_video_counts()
                 
         except Exception as e:
             logger.error(f"Bulk background pipeline failed: {e}", exc_info=True)
@@ -557,6 +591,69 @@ def run_bulk_pipeline_background(urls: list[str], db: SQLiteStore, force_metadat
     }
     thread.start()
     return unique_id
+
+
+def run_repair_background():
+    """Run the comprehensive vault health repair in a background thread."""
+    from src.pipeline.orchestrator import PipelineOrchestrator
+    import threading
+    import time
+    
+    unique_id = f"repair_{int(time.time())}"
+    
+    def target():
+        thread_db = None
+        orchestrator = None
+        try:
+            settings = get_settings()
+            thread_db = SQLiteStore(settings["sqlite"]["path"])
+            orchestrator = PipelineOrchestrator()
+            orchestrator.repair_vault_health()
+        except Exception as e:
+            logger.error(f"Background repair failed: {e}", exc_info=True)
+        finally:
+            if unique_id in st._global_orchestrators:
+                del st._global_orchestrators[unique_id]
+            if orchestrator:
+                orchestrator.close()
+            if thread_db:
+                thread_db.close()
+
+    thread = threading.Thread(target=target, daemon=True)
+    st._global_orchestrators[unique_id] = {
+        "thread": thread,
+        "orchestrator": None,
+        "start_time": time.time(),
+    }
+    thread.start()
+    return unique_id
+
+
+def get_vault_diagnostics(db):
+    """Get a summary of vault health and gaps."""
+    total_accepted = db.conn.execute(
+        "SELECT COUNT(*) FROM videos WHERE triage_status = 'ACCEPTED'"
+    ).fetchone()[0]
+    
+    if total_accepted == 0:
+        return {
+            "total": 0, "transcripts": 0, "summaries": 0, "heatmaps": 0,
+            "pct_transcripts": 100, "pct_summaries": 100, "pct_heatmaps": 100
+        }
+        
+    missing_tx = len(db.get_videos_missing_transcripts())
+    missing_sm = len(db.get_videos_missing_summaries())
+    missing_hm = len(db.get_videos_missing_heatmaps())
+    
+    return {
+        "total": total_accepted,
+        "missing_transcripts": missing_tx,
+        "missing_summaries": missing_sm,
+        "missing_heatmaps": missing_hm,
+        "pct_transcripts": int(((total_accepted - missing_tx) / total_accepted) * 100),
+        "pct_summaries": int(((total_accepted - missing_sm) / total_accepted) * 100),
+        "pct_heatmaps": int(((total_accepted - missing_hm) / total_accepted) * 100),
+    }
 
 
 db = init_db()
@@ -605,24 +702,35 @@ with st.sidebar:
             for error in health["errors"]:
                 st.caption(f"⚠️ {error}")
 
-st.sidebar.markdown("---")
+# Categorized Navigation Structure
+NAV_STRUCTURE = {
+    "Research": [
+        "🏠 Dashboard", 
+        "🔬 Intelligence Lab",
+        "🧬 Comparative Lab",
+        "📜 Transcripts", 
+    ],
+    "Operations": [
+        "🌾 Ingestion Hub", 
+        "📊 Pipeline Center",
+        "⚖️ Review Center", # New View planned
+    ],
+    "System": [
+        "⚡ Performance",
+        "📤 Export & Integration",
+        "⚙️ Admin & Settings"
+    ]
+}
 
-# Define navigation options with better organization
-nav_options = [
-    "🏠 Dashboard", 
-    "🌾 Ingestion Hub", 
-    "📊 Pipeline Center",
-    "⚡ Performance",
-    "🔬 Intelligence Lab",
-    "🧬 Comparative Lab",
-    "📜 Transcripts", 
-    "📤 Export & Integration",
-    "⚙️ Admin & Settings"
-]
+# Flatten for radio component
+nav_options = []
+for category, items in NAV_STRUCTURE.items():
+    nav_options.extend(items)
 
 # Support programmatic navigation
 if "navigate" in st.session_state:
     target_page = st.session_state.pop("navigate")
+    # Handle flat page names
     if target_page in nav_options:
         st.session_state.current_page = target_page
 
@@ -630,21 +738,47 @@ if "navigate" in st.session_state:
 if "current_page" not in st.session_state:
     st.session_state.current_page = "🏠 Dashboard"
 
-page = st.sidebar.radio(
-    "Navigate",
-    nav_options,
-    index=nav_options.index(st.session_state.current_page),
-    label_visibility="collapsed",
-    key="page_radio" # Use key to force sync if session_state.current_page changes
-)
-st.session_state.current_page = page
+# Render Sidebar with Categorized Navigation
+with st.sidebar:
+    st.markdown("## Navigation")
+    
+    # We use a custom radio implementation to show categories
+    selected_page = st.session_state.current_page
+    
+    for category, items in NAV_STRUCTURE.items():
+        st.markdown(f"**{category.upper()}**")
+        for item in items:
+            # Simple button-based nav or styled radio
+            if st.sidebar.button(
+                item, 
+                key=f"nav_{item}", 
+                use_container_width=True,
+                type="secondary" if item != selected_page else "primary"
+            ):
+                st.session_state.current_page = item
+                st.rerun()
+        st.markdown("")
+
+page = st.session_state.current_page
 
 
-# ---------------------------------------------------------------------------
-# Sidebar Footer - Help & Resources
-# ---------------------------------------------------------------------------
-
+# Sidebar Footer - Active Scans Tray & Help
 st.sidebar.markdown("---")
+with st.sidebar:
+    active_scans = db.get_active_scans()
+    if active_scans:
+        with st.container(border=True):
+            st.markdown(f"**<span class='status-pulse'></span> {len(active_scans)} Active Scans**", unsafe_allow_html=True)
+            for scan in active_scans[:3]:
+                progress = (scan.total_processed / max(scan.total_discovered, 1))
+                safe_progress = max(0.0, min(1.0, progress))
+                st.caption(f"Scan {scan.scan_id[-4:]}: {safe_progress:.0%}")
+                st.progress(safe_progress)
+            if len(active_scans) > 3:
+                st.caption(f"+ {len(active_scans) - 3} more...")
+    else:
+        st.caption("No active background scans")
+
 st.sidebar.markdown("""
 <div style="
     padding: 1rem;
@@ -658,7 +792,7 @@ st.sidebar.markdown("""
         📖 <a href='#' style='color: #0ea5e9; text-decoration: none;'>Documentation</a> • 
         💡 <a href='#' style='color: #0ea5e9; text-decoration: none;'>Support</a>
     </p>
-    <p style="margin: 0.5rem 0 0; opacity: 0.7;">v1.0 • Local-First Intelligence</p>
+    <p style="margin: 0.5rem 0 0; opacity: 0.7;">v1.1 • Architecture Overhaul</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -667,16 +801,50 @@ st.sidebar.markdown("""
 # Page Routing
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Global Command Bar & Rendering
+# ---------------------------------------------------------------------------
+
+# Inject Global Command Bar at the top of the main area
+st.markdown("""
+<div class="command-bar-container">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+        <span style="font-size: 1.2rem;">🔍</span>
+        <span style="font-weight: 600; color: var(--neutral-400);">COMMAND BAR</span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# Command Bar Functionality (hidden until triggered or persistent)
+with st.container():
+    col_cmd, col_btn = st.columns([5, 1])
+    with col_cmd:
+        harvest_url = st.text_input(
+            "Quick Harvest URL", 
+            placeholder="Paste a YouTube URL here to start a harvest from any page...",
+            label_visibility="collapsed",
+            key="global_harvest_input"
+        )
+    with col_btn:
+        if st.button("🚀 Harvest", type="primary", use_container_width=True, key="global_harvest_btn"):
+            if harvest_url:
+                run_pipeline_background(harvest_url, db)
+                st.toast(f"Harvest started for {harvest_url[:30]}...", icon="🚀")
+                st.rerun()
+
+st.markdown("<br>", unsafe_allow_html=True)
+
 PAGE_MAP = {
     "🏠 Dashboard": lambda: dashboard.render(db),
     "🌾 Ingestion Hub": lambda: ingestion_hub.render(db, run_pipeline_background, run_bulk_pipeline_background),
     "📊 Pipeline Center": lambda: pipeline_center.render(db, run_pipeline_background),
+    "⚖️ Review Center": lambda: reject_review.render(db), # Using existing reject_review for now
     "⚡ Performance": lambda: performance_metrics.render(),
     "🔬 Intelligence Lab": lambda: intelligence_lab.render(db, vs),
     "🧬 Comparative Lab": lambda: comparative_lab.render(db, vs),
     "📜 Transcripts": lambda: transcript_viewer.render(db),
     "📤 Export & Integration": lambda: export_center.render(db),
-    "⚙️ Admin & Settings": lambda: data_management.render(db),
+    "⚙️ Admin & Settings": lambda: data_management.render(db, run_repair_background, get_vault_diagnostics),
 }
 
 PAGE_MAP[page]()

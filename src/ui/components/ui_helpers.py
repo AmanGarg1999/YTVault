@@ -128,26 +128,23 @@ def metric_grid(metrics: List[Dict[str, Any]], cols: int = 4) -> None:
 
 def status_badge(status: str, text: str = "") -> str:
     """
-    Generate HTML for a status badge.
+    Generate HTML for a premium status badge.
     
     Args:
-        status: "success", "warning", "error", "info"
+        status: "success", "warning", "error", "info", "primary"
         text: Badge label
-    
-    Returns:
-        HTML string for status badge
-    
-    Example:
-        st.markdown(status_badge("success", "Processing") + " Running...", unsafe_allow_html=True)
     """
     status_classes = {
         "success": "status-success",
         "warning": "status-warning",
         "error": "status-error",
-        "info": "status-info"
+        "info": "status-info",
+        "primary": "status-info" # Defaulting to info color for primary
     }
-    class_name = status_classes.get(status, "status-info")
-    return f'<span class="status-badge {class_name}">{text or status.upper()}</span>'
+    class_name = status_classes.get(status.lower(), "status-info")
+    
+    # Adding a subtle glow effect in the style for premium feel
+    return f'<span class="status-badge {class_name}" style="box-shadow: 0 2px 8px rgba(0,0,0,0.2);">{text or status.upper()}</span>'
 
 
 def inline_status(status: str, text: str = "") -> None:
@@ -237,6 +234,54 @@ def error_card(title: str, content: str) -> None:
         <span style="color: #cbd5e1; font-size: 0.9rem;">{content}</span>
     </div>
     """, unsafe_allow_html=True)
+
+
+def video_card(
+    video: Any,
+    show_thumbnail: bool = True,
+    show_actions: bool = True,
+    key_prefix: str = "vid"
+) -> Any:
+    """
+    Render a premium video card. Returns action columns if show_actions is True.
+    """
+    with st.container(border=True):
+        col_img, col_info = st.columns([1, 3]) if show_thumbnail else (None, st.container())
+        
+        if show_thumbnail and col_img:
+            with col_img:
+                st.image(f"https://img.youtube.com/vi/{video.video_id}/mqdefault.jpg", use_container_width=True)
+        
+        with col_info:
+            st.markdown(f"**{video.title}**")
+            
+            dur_min = video.duration_seconds // 60
+            dur_sec = video.duration_seconds % 60
+            
+            status = getattr(video, 'triage_status', 'PENDING')
+            status_color = "info"
+            if status == "ACCEPTED": status_color = "success"
+            elif status == "REJECTED": status_color = "error"
+            elif status == "PENDING_REVIEW": status_color = "warning"
+            
+            badge_html = status_badge(status_color, status)
+            
+            st.markdown(f"""
+            <div style="display: flex; gap: 0.75rem; align-items: center; margin-top: 0.25rem; font-size: 0.85rem; color: #888;">
+                {badge_html}
+                <span>⏱️ {dur_min}m {dur_sec}s</span>
+                <span>👁️ {getattr(video, 'view_count', 0):,}</span>
+                <span>🎯 {getattr(video, 'triage_confidence', 0):.0%}</span>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            if hasattr(video, 'triage_reason') and video.triage_reason:
+                st.caption(f"Reason: {video.triage_reason}")
+            
+            if show_actions:
+                st.markdown("<br>", unsafe_allow_html=True)
+                return st.columns([1, 1, 1, 1])
+    return None
 
 
 # ===========================================================================

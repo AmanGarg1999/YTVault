@@ -126,13 +126,10 @@ def render(db):
                 ).fetchone()[0]
                 
                 if needs_translation > 0:
-                    col_trans, col_action = st.columns([3, 1])
-                    with col_trans:
-                        st.warning(f"⚠️ **{needs_translation}** non-English videos ready for translation")
-                    with col_action:
-                        if st.button("📝 View", key="view_translation_queue"):
-                            st.session_state.navigate = "🌾 Ingestion Hub"
-                            st.rerun()
+                    warning_card(
+                        f"{needs_translation} Videos Need Translation",
+                        "Non-English content is ready for automated translation. Visit the Ingestion Hub to process."
+                    )
         except Exception as e:
             logger.warning(f"Could not load language statistics: {e}")
         
@@ -180,31 +177,27 @@ def render(db):
         
         with col_left:
             section_header("📋 Pending Review", "⏳")
-            pending = db.get_videos_by_status("PENDING_REVIEW", limit=5)
+            pending = db.get_videos_by_status("PENDING_REVIEW", limit=3)
             if pending:
                 for v in pending:
-                    confidence_badge = status_badge(
-                        "warning" if v.triage_confidence < 0.7 else "info",
-                        f"{v.triage_confidence:.0%} confidence"
-                    )
-                    st.markdown(f"""
-                    **{v.title[:60]}...** {confidence_badge}
-                    """, unsafe_allow_html=True)
+                    st.markdown(f"- **{v.title[:50]}...**")
+                if st.button("Manage Review Queue", type="primary", use_container_width=True):
+                    st.session_state.navigate = "⚖️ Review Center"
+                    st.rerun()
             else:
-                success_card("All Clear!", "No videos pending review. Great job!")
+                success_card("All Clear!", "No videos pending review.")
         
         with col_right:
             section_header("🔄 Active Scans", "⚙️")
             scans = db.get_active_scans()
             if scans:
                 for s in scans:
-                    progress_pct = (s.total_processed / max(s.total_discovered, 1)) * 100
-                    st.markdown(f"""
-                    **Scan {s.scan_id[-8:]}** — {s.scan_type}
-                    - Progress: {s.total_processed}/{s.total_discovered} ({progress_pct:.0f}%)
-                    """)
+                    progress_pct = (s.total_processed / max(s.total_discovered, 1))
+                    st.caption(f"Scan {s.scan_id[-8:]} — {s.scan_type} ({progress_pct:.0%})")
+                    safe_pct = max(0.0, min(1.0, progress_pct))
+                    st.progress(safe_pct)
             else:
-                info_card("No Active Scans", "All harvest operations are idle. Start a new scan to begin ingestion.")
+                info_card("No Active Scans", "System is idle.")
         
         # =====================================================================
         # KNOWLEDGE DENSITY LEADERBOARD

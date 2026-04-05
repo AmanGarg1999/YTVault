@@ -23,6 +23,7 @@ STAGE_ORDER = [
     "TEXT_NORMALIZED",
     "CHUNKED",
     "CHUNK_ANALYZED",
+    "SUMMARIZED",
     "EMBEDDED",
     "GRAPH_SYNCED",
     "DONE",

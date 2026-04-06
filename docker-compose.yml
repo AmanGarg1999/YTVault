@@ -8,6 +8,7 @@ services:
       - ./config:/app/config
       - ./src:/app/src
       - ./tests:/app/tests
+      - ./scripts:/app/scripts
     environment:
       - OLLAMA_HOST=http://host.docker.internal:11434
       - NEO4J_URI=bolt://neo4j:7687

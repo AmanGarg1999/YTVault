@@ -27,6 +27,7 @@ from src.ui.views import (
     explorer, guest_intel, export_center,
     logs_monitor, data_management, reject_review,
     transcript_viewer, performance_metrics, comparative_lab,
+    topic_explorer, blueprint_center
 )
 
 # ---------------------------------------------------------------------------
@@ -707,7 +708,9 @@ NAV_STRUCTURE = {
     "Research": [
         "🏠 Dashboard", 
         "🔬 Intelligence Lab",
-        "🧬 Comparative Lab",
+        "🧬 Topic Explorer",
+        "📋 Blueprint Center",
+        "⚖️ Comparative Lab",
         "📜 Transcripts", 
     ],
     "Operations": [
@@ -841,7 +844,9 @@ PAGE_MAP = {
     "⚖️ Review Center": lambda: reject_review.render(db), # Using existing reject_review for now
     "⚡ Performance": lambda: performance_metrics.render(),
     "🔬 Intelligence Lab": lambda: intelligence_lab.render(db, vs),
-    "🧬 Comparative Lab": lambda: comparative_lab.render(db, vs),
+    "🧬 Topic Explorer": lambda: topic_explorer.render(db),
+    "⚖️ Comparative Lab": lambda: comparative_lab.render(db, vs),
+    "📋 Blueprint Center": lambda: blueprint_center.render(db),
     "📜 Transcripts": lambda: transcript_viewer.render(db),
     "📤 Export & Integration": lambda: export_center.render(db),
     "⚙️ Admin & Settings": lambda: data_management.render(db, run_repair_background, get_vault_diagnostics),

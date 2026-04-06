@@ -96,7 +96,59 @@ class SummarizerEngine:
                 timeline_json=json.dumps(data.get("narrative_timeline", [])),
             )
 
+            # Persist summary
             self.db.upsert_video_summary(summary)
+
+            # --- Advanced Intelligence Persistence ---
+            
+            # 1. Actionable Blueprints
+            blueprint_steps = data.get("actionable_blueprint", [])
+            if blueprint_steps:
+                self.db.upsert_blueprint(video_id, blueprint_steps)
+
+            # 2. Expert Clashes (Disagreements)
+            disagreements = data.get("expert_disagreements", [])
+            video_obj = self.db.get_video(video_id)
+            channel_name = "Unknown"
+            if video_obj:
+                channel = self.db.get_channel(video_obj.channel_id)
+                if channel:
+                    channel_name = channel.name
+
+            for d in disagreements:
+                from src.storage.sqlite_store import ExpertClash
+                self.db.insert_clash(ExpertClash(
+                    topic=d.get("topic", "General"),
+                    expert_a=channel_name,
+                    expert_b=d.get("target", "Unknown"),
+                    claim_a=d.get("speaker_claim", ""),
+                    claim_b=d.get("target_claim", ""),
+                    source_a=video_id
+                ))
+
+            # 3. Sentiment Heatmap
+            timeline = data.get("narrative_timeline", [])
+            for entry in timeline:
+                from src.storage.sqlite_store import VideoSentiment
+                # We approximate chunk_id link by matching topic if possible, 
+                # but for now we store video-level timeline sentiment.
+                self.db.insert_sentiment(VideoSentiment(
+                    video_id=video_id,
+                    score=entry.get("sentiment_score", 0.0),
+                    label=entry.get("sentiment_label", "Neutral")
+                ))
+
+            # 4. External Citations
+            refs = data.get("references", [])
+            for r in refs:
+                if isinstance(r, dict):
+                    self.db.insert_citation(
+                        video_id=video_id,
+                        name=r.get("name", ""),
+                        url=r.get("url", ""),
+                        c_type=r.get("type", "OTHER")
+                    )
+
             logger.info(f"Map-reduce summary complete for {video_id} ({len(groups)} groups)")
             return summary
 

@@ -148,6 +148,45 @@ class Quote:
 
 
 @dataclass
+class ActionableBlueprint:
+    video_id: str
+    steps_json: str = "[]"
+    created_at: str = ""
+
+
+@dataclass
+class ExpertClash:
+    clash_id: int = 0
+    topic: str = ""
+    expert_a: str = ""
+    expert_b: str = ""
+    claim_a: str = ""
+    claim_b: str = ""
+    source_a: Optional[str] = None
+    source_b: Optional[str] = None
+    created_at: str = ""
+
+
+@dataclass
+class VideoSentiment:
+    video_id: str
+    chunk_id: Optional[str] = None
+    score: float = 0.0
+    label: str = ""
+    created_at: str = ""
+
+
+@dataclass
+class ExternalCitation:
+    citation_id: int = 0
+    video_id: str = ""
+    name: str = ""
+    url: str = ""
+    type: str = ""
+    created_at: str = ""
+
+
+@dataclass
 class PipelineLog:
     """Pipeline activity log entry."""
     log_id: int = 0
@@ -446,6 +485,44 @@ SCHEMA_MIGRATIONS = [
             comment_count INTEGER
         );
         CREATE INDEX IF NOT EXISTS idx_stats_history_video ON video_stats_history(video_id);
+    """),
+    # Version 16: Advanced Intelligence Suite (Clashes, Blueprints, Sentiment, Citations)
+    (16, """
+        CREATE TABLE IF NOT EXISTS actionable_blueprints (
+            video_id    TEXT PRIMARY KEY REFERENCES videos(video_id),
+            steps_json  TEXT DEFAULT '[]',
+            created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS expert_clashes (
+            clash_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+            topic       TEXT NOT NULL,
+            expert_a    TEXT NOT NULL,
+            expert_b    TEXT NOT NULL,
+            claim_a     TEXT NOT NULL,
+            claim_b     TEXT NOT NULL,
+            source_a    TEXT REFERENCES videos(video_id),
+            source_b    TEXT REFERENCES videos(video_id),
+            created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS video_sentiment (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            video_id    TEXT REFERENCES videos(video_id),
+            chunk_id    TEXT REFERENCES transcript_chunks(chunk_id),
+            score       REAL DEFAULT 0.0,
+            label       TEXT DEFAULT 'Neutral',
+            created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS external_citations (
+            citation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            video_id    TEXT REFERENCES videos(video_id),
+            name        TEXT NOT NULL,
+            url         TEXT DEFAULT '',
+            type        TEXT DEFAULT 'OTHER',
+            created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_clashes_topic ON expert_clashes(topic);
+        CREATE INDEX IF NOT EXISTS idx_sentiment_video ON video_sentiment(video_id);
+        CREATE INDEX IF NOT EXISTS idx_citations_video ON external_citations(video_id);
     """),
 ]
 
@@ -1208,6 +1285,112 @@ class SQLiteStore:
         return [Quote(**dict(r)) for r in rows]
 
     # -------------------------------------------------------------------
+    # Actionable Blueprints
+    # -------------------------------------------------------------------
+
+    def upsert_blueprint(self, video_id: str, steps: list[str]) -> None:
+        """Insert or update an actionable blueprint for a video."""
+        self.conn.execute(
+            """INSERT INTO actionable_blueprints (video_id, steps_json)
+               VALUES (?, ?)
+               ON CONFLICT(video_id) DO UPDATE SET
+                   steps_json = excluded.steps_json,
+                   created_at = CURRENT_TIMESTAMP""",
+            (video_id, json.dumps(steps)),
+        )
+        self.conn.commit()
+
+    def get_blueprint(self, video_id: str) -> Optional[ActionableBlueprint]:
+        """Get the actionable blueprint for a specific video."""
+        row = self.conn.execute(
+            "SELECT * FROM actionable_blueprints WHERE video_id = ?", (video_id,)
+        ).fetchone()
+        return ActionableBlueprint(**dict(row)) if row else None
+
+    def get_all_blueprints(self) -> list[dict]:
+        """Get all blueprints with video titles."""
+        rows = self.conn.execute(
+            """SELECT b.*, v.title, c.name as channel_name 
+               FROM actionable_blueprints b
+               JOIN videos v ON b.video_id = v.video_id
+               JOIN channels c ON v.channel_id = c.channel_id
+               ORDER BY b.created_at DESC"""
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # -------------------------------------------------------------------
+    # Expert Clashes
+    # -------------------------------------------------------------------
+
+    def insert_clash(self, clash: ExpertClash) -> int:
+        """Record a conflict/clash between two experts."""
+        cursor = self.conn.execute(
+            """INSERT INTO expert_clashes 
+               (topic, expert_a, expert_b, claim_a, claim_b, source_a, source_b)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (clash.topic, clash.expert_a, clash.expert_b, 
+             clash.claim_a, clash.claim_b, 
+             clash.source_a if clash.source_a else None, 
+             clash.source_b if clash.source_b else None),
+        )
+        self.conn.commit()
+        return cursor.lastrowid
+
+    def get_clashes_by_topic(self, topic: str) -> list[ExpertClash]:
+        """Get all recorded clashes for a specific topic."""
+        rows = self.conn.execute(
+            "SELECT * FROM expert_clashes WHERE topic = ?", (topic,)
+        ).fetchall()
+        return [ExpertClash(**dict(r)) for r in rows]
+
+    # -------------------------------------------------------------------
+    # Video Sentiment
+    # -------------------------------------------------------------------
+
+    def insert_sentiment(self, sentiment: VideoSentiment) -> None:
+        """Record sentiment for a transcript chunk (or video timeline if chunk_id is None)."""
+        self.conn.execute(
+            """INSERT INTO video_sentiment (video_id, chunk_id, score, label)
+               VALUES (?, ?, ?, ?)""",
+            (sentiment.video_id, 
+             sentiment.chunk_id if sentiment.chunk_id else None, 
+             sentiment.score, sentiment.label),
+        )
+        self.conn.commit()
+
+    def get_video_sentiment_series(self, video_id: str) -> list[dict]:
+        """Get the chronological sentiment series for a video."""
+        rows = self.conn.execute(
+            """SELECT vs.*, tc.start_timestamp 
+               FROM video_sentiment vs
+               LEFT JOIN transcript_chunks tc ON vs.chunk_id = tc.chunk_id
+               WHERE vs.video_id = ?
+               ORDER BY vs.id ASC""",
+            (video_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # -------------------------------------------------------------------
+    # External Citations
+    # -------------------------------------------------------------------
+
+    def insert_citation(self, video_id: str, name: str, url: str, c_type: str = "OTHER") -> int:
+        """Record an external citation (paper, book, etc.)."""
+        cursor = self.conn.execute(
+            "INSERT INTO external_citations (video_id, name, url, type) VALUES (?, ?, ?, ?)",
+            (video_id, name, url, c_type),
+        )
+        self.conn.commit()
+        return cursor.lastrowid
+
+    def get_citations_for_video(self, video_id: str) -> list[ExternalCitation]:
+        """Get all external citations for a video."""
+        rows = self.conn.execute(
+            "SELECT * FROM external_citations WHERE video_id = ?", (video_id,)
+        ).fetchall()
+        return [ExternalCitation(**dict(r)) for r in rows]
+
+    # -------------------------------------------------------------------
     # Pipeline Temp State
     # -------------------------------------------------------------------
 
@@ -1515,6 +1698,58 @@ class SQLiteStore:
             
         result.sort(key=lambda x: x["density_score"], reverse=True)
         return result[:limit]
+
+    def get_consolidated_topics(self) -> list[dict]:
+        """Aggregate all topics across the vault, with channel and video counts."""
+        query = """
+        WITH topic_items AS (
+            SELECT 
+                v.channel_id,
+                json_extract(t.value, '$.name') as topic_name,
+                v.video_id
+            FROM video_summaries, json_each(topics_json) as t
+            JOIN videos v ON video_summaries.video_id = v.video_id
+        )
+        SELECT 
+            topic_name as name,
+            COUNT(DISTINCT channel_id) as channel_count,
+            COUNT(DISTINCT video_id) as video_count,
+            GROUP_CONCAT(DISTINCT channel_id) as channel_ids
+        FROM topic_items
+        WHERE topic_name IS NOT NULL
+        GROUP BY topic_name
+        ORDER BY video_count DESC;
+        """
+        rows = self.conn.execute(query).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_topic_details(self, topic_name: str) -> list[dict]:
+        """Get all videos and summary snippets associated with a specific topic."""
+        query = """
+        SELECT 
+            v.video_id,
+            v.title,
+            v.url,
+            v.upload_date,
+            c.name as channel_name,
+            vs.summary_text,
+            vs.takeaways_json,
+            t.value as topic_data
+        FROM video_summaries vs
+        JOIN videos v ON vs.video_id = v.video_id
+        JOIN channels c ON v.channel_id = c.channel_id,
+        json_each(vs.topics_json) as t
+        WHERE json_extract(t.value, '$.name') = ?
+        ORDER BY v.upload_date DESC
+        """
+        rows = self.conn.execute(query, (topic_name,)).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["takeaways"] = json.loads(d.pop("takeaways_json", "[]"))
+            d["topic_meta"] = json.loads(d.pop("topic_data", "{}"))
+            result.append(d)
+        return result
 
     # -------------------------------------------------------------------
     # Pipeline Statistics

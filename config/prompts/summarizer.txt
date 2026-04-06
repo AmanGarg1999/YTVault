@@ -25,9 +25,16 @@ Your output MUST be a valid JSON object with the following structure:
   ],
   "takeaways": ["Takeaway 1", "Takeaway 2"],
   "primary_entities": ["Entity 1", "Entity 2"],
-  "references": ["Book X", "Research Paper Y", "Company Z"],
+  "references": [
+    {"name": "Book X", "type": "BOOK", "url": "optional_link"},
+    {"name": "Research Paper Y", "type": "PAPER", "url": "optional_link"}
+  ],
+  "actionable_blueprint": ["Step 1: Do X", "Step 2: Do Y"],
+  "expert_disagreements": [
+    {"target": "Expert Name", "topic": "Topic", "speaker_claim": "...", "target_claim": "..."}
+  ],
   "narrative_timeline": [
-    {"topic": "Name", "timestamp_hint": "Start of discussion"}
+    {"topic": "Name", "timestamp_hint": "00:00", "sentiment_score": 0.8, "sentiment_label": "Bullish"}
   ]
 }
 

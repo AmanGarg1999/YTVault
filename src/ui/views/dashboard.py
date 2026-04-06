@@ -14,6 +14,7 @@ from src.ui.components import (
     status_badge,
     key_value_display,
     spacer,
+    tts_button,
 )
 
 logger = logging.getLogger(__name__)
@@ -243,7 +244,11 @@ def render(db):
                         summary = summarizer.get_or_generate_summary(row['video_id'])
                         if summary:
                             with st.expander("📝 Deep Video Insights", expanded=True):
-                                st.write(summary.summary_text)
+                                col_text, col_tts = st.columns([4, 1])
+                                with col_text:
+                                    st.write(summary.summary_text)
+                                with col_tts:
+                                    tts_button(summary.summary_text, key=f"tts_dash_{row['video_id']}")
                                 
                                 col_topics, col_takeaways = st.columns(2)
                                 with col_topics:
@@ -268,6 +273,38 @@ def render(db):
                                             st.markdown(f"📌 {tk}")
                                     except Exception:
                                         st.write("No takeaways available.")
+                                
+                                # --- Advanced Suite additions ---
+                                st.divider()
+                                col_sent, col_cite = st.columns(2)
+                                
+                                with col_sent:
+                                    st.markdown("**🌡️ Sentiment Heatmap**")
+                                    sentiment_data = db.get_video_sentiment_series(row['video_id'])
+                                    if sentiment_data:
+                                        # Simple Sparkline-style visualization using markdown
+                                        sent_str = ""
+                                        for s in sentiment_data:
+                                            score = s.get("score", 0.0)
+                                            color = "#10b981" if score > 0.3 else ("#ef4444" if score < -0.3 else "#3b82f6")
+                                            sent_str += f"<span style='color: {color}; font-size: 1.5rem;' title='{s.get('label', 'Neutral')}'>▮</span>"
+                                        st.markdown(f"<div style='letter-spacing: -2px;'>{sent_str}</div>", unsafe_allow_html=True)
+                                        st.caption("Timeline: Left (Start) → Right (End)")
+                                    else:
+                                        st.caption("No sentiment data available for this video.")
+
+                                with col_cite:
+                                    st.markdown("**🖇️ External Citations**")
+                                    citations = db.get_citations_for_video(row['video_id'])
+                                    if citations:
+                                        for c in citations:
+                                            icon = "📄" if c.type == "PAPER" else ("📚" if c.type == "BOOK" else "🔗")
+                                            if c.url:
+                                                st.markdown(f"{icon} [{c.name}]({c.url})")
+                                            else:
+                                                st.markdown(f"{icon} {c.name}")
+                                    else:
+                                        st.caption("No citations detected.")
                                 
                                 if st.button("✕ Close", key=f"close_dash_{row['video_id']}", use_container_width=True):
                                     st.session_state[f"show_sum_{row['video_id']}"] = False

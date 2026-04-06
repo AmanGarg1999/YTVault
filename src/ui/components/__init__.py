@@ -34,6 +34,7 @@ from .ui_helpers import (
     # Utilities
     create_columns_equal,
     spacer,
+    tts_button,
 )
 
 __all__ = [
@@ -55,4 +56,5 @@ __all__ = [
     "form_section",
     "create_columns_equal",
     "spacer",
+    "tts_button",
 ]

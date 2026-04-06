@@ -178,14 +178,16 @@ class SummarizerEngine:
         if len(combined_bullets) > 15000:
             combined_bullets = combined_bullets[:15000] + "\n[... truncated ...]"
 
-        response = ollama.chat(
-            model=self.deep_model,
-            messages=[
-                {"role": "system", "content": self.reduce_prompt},
-                {"role": "user", "content": combined_bullets},
-            ],
-            options={"num_predict": 1500, "temperature": 0.1},
-        )
+        from src.utils.llm_pool import get_llm_semaphore
+        with get_llm_semaphore():
+            response = ollama.chat(
+                model=self.deep_model,
+                messages=[
+                    {"role": "system", "content": self.reduce_prompt},
+                    {"role": "user", "content": combined_bullets},
+                ],
+                options={"num_predict": 1500, "temperature": 0.1},
+            )
         return self._parse_json_response(response["message"]["content"].strip())
 
     def _parse_json_response(self, content: str) -> Optional[dict]:

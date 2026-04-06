@@ -186,18 +186,20 @@ class TriageEngine:
     def _call_ollama_triage(self, user_prompt: str) -> dict:
         """Call Ollama for triage classification with retry and timeout."""
         timeout = self.ollama_cfg.get("timeout_seconds", 30)
+        from src.utils.llm_pool import get_llm_semaphore
         try:
-            response = ollama.chat(
-                model=self.ollama_cfg["triage_model"],
-                messages=[
-                    {"role": "system", "content": self.triage_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                options={
-                    "num_predict": self.ollama_cfg.get("triage_max_tokens", 100),
-                    "temperature": self.ollama_cfg.get("temperature", 0.1),
-                },
-            )
+            with get_llm_semaphore():
+                response = ollama.chat(
+                    model=self.ollama_cfg["triage_model"],
+                    messages=[
+                        {"role": "system", "content": self.triage_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    options={
+                        "num_predict": self.ollama_cfg.get("triage_max_tokens", 100),
+                        "temperature": self.ollama_cfg.get("temperature", 0.1),
+                    },
+                )
             return response
         except Exception as e:
             if "timeout" in str(e).lower():

@@ -6,6 +6,7 @@ Ollama inference calls concurrently, with configurable parallelism.
 """
 
 import logging
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Callable, Optional
@@ -13,6 +14,21 @@ from typing import Callable, Optional
 from src.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# Global semaphore to enforce strict concurrency across all LLMPool instances
+_LLM_SEMAPHORE = None
+_SEMAPHORE_LOCK = threading.Lock()
+
+def get_llm_semaphore():
+    """Get or initialize the global LLM concurrency semaphore."""
+    global _LLM_SEMAPHORE
+    with _SEMAPHORE_LOCK:
+        if _LLM_SEMAPHORE is None:
+            settings = get_settings()
+            max_workers = settings.get("pipeline", {}).get("llm_max_workers", 8)
+            _LLM_SEMAPHORE = threading.BoundedSemaphore(max_workers)
+            logger.info(f"Global LLM Semaphore initialized with {max_workers} slots")
+    return _LLM_SEMAPHORE
 
 
 @dataclass
@@ -40,28 +56,30 @@ class LLMResult:
 class LLMPool:
     """Thread pool for batching LLM inference calls.
 
-    Usage:
-        pool = LLMPool(max_workers=3)
-        tasks = [
-            LLMTask("video_1", triage_fn, args=(video_1,)),
-            LLMTask("video_2", triage_fn, args=(video_2,)),
-        ]
-        results = pool.submit_batch(tasks)
+    Now uses a global semaphore to ensure that total concurrent LLM calls
+    across the entire application do not exceed pipeline.llm_max_workers.
     """
 
     def __init__(self, max_workers: Optional[int] = None):
         settings = get_settings()
+        # Pool-specific limit (must be <= global limit to be meaningful)
         self.max_workers = max_workers or settings.get("pipeline", {}).get(
-            "llm_max_workers", 2
+            "llm_max_workers", 8
         )
-        logger.info(f"LLMPool initialized with {self.max_workers} workers")
+        self.semaphore = get_llm_semaphore()
+        logger.debug(f"LLMPool instance created (pool limit: {self.max_workers})")
+
+    def _execute_with_semaphore(self, task: LLMTask) -> object:
+        """Worker wrapper that respects the global LLM concurrency limit."""
+        with self.semaphore:
+            return task.fn(*task.args, **task.kwargs)
 
     def submit_batch(
         self,
         tasks: list[LLMTask],
         on_complete: Optional[Callable[[LLMResult], None]] = None,
     ) -> list[LLMResult]:
-        """Execute a batch of LLM tasks concurrently.
+        """Execute a batch of LLM tasks concurrently, respecting global limits.
 
         Args:
             tasks: List of LLMTask objects to execute.
@@ -75,9 +93,11 @@ class LLMPool:
 
         results = []
 
+        # We still use a local ThreadPoolExecutor for this batch, 
+        # but the actual execution is gated by the global semaphore.
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             future_to_task = {
-                executor.submit(task.fn, *task.args, **task.kwargs): task
+                executor.submit(self._execute_with_semaphore, task): task
                 for task in tasks
             }
 

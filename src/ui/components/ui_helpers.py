@@ -15,7 +15,6 @@ from typing import Optional, Dict, Any, List
 def page_header(
     title: str,
     subtitle: Optional[str] = None,
-    icon: str = "🧠",
     show_divider: bool = True
 ) -> None:
     """
@@ -24,16 +23,12 @@ def page_header(
     Args:
         title: Main heading text
         subtitle: Optional subheading
-        icon: Leading emoji/icon
         show_divider: Whether to show divider after header
-    
-    Example:
-        page_header("Research Console", "Hybrid RAG Search & Chat", icon="🔍")
     """
     st.markdown(f"""
-    <div class="main-header">
-        <h1>{icon} {title}</h1>
-        {f'<p>{subtitle}</p>' if subtitle else ''}
+    <div style="margin-bottom: 2rem;">
+        <h1 style="color: white; margin-bottom: 0.5rem;">{title}</h1>
+        {f'<p style="color: var(--neutral-400); font-size: 1.1rem; max-width: 800px;">{subtitle}</p>' if subtitle else ''}
     </div>
     """, unsafe_allow_html=True)
     
@@ -41,15 +36,14 @@ def page_header(
         st.divider()
 
 
-def section_header(title: str, icon: str = "📌") -> None:
+def section_header(title: str) -> None:
     """
     Render a section header within a page.
     
     Args:
         title: Section heading
-        icon: Leading emoji/icon
     """
-    st.markdown(f"### {icon} {title}")
+    st.markdown(f"### {title}")
 
 
 # ===========================================================================
@@ -60,8 +54,7 @@ def metric_card(
     value: Any,
     label: str,
     delta: Optional[str] = None,
-    delta_color: str = "neutral",
-    icon: str = "📊"
+    delta_color: str = "neutral"
 ) -> None:
     """
     Render a single metric card with optional delta.
@@ -71,24 +64,20 @@ def metric_card(
         label: Metric label
         delta: Optional change indicator (e.g., "+5.2%", "-2")
         delta_color: "positive", "negative", "neutral"
-        icon: Leading emoji
-    
-    Example:
-        metric_card(1425, "Videos Processed", "+12%", "positive", "✅")
     """
     delta_html = ""
     if delta:
         color_map = {
             "positive": "#10b981",
             "negative": "#ef4444",
-            "neutral": "#6b7280"
+            "neutral": "#64748b"
         }
-        delta_color_hex = color_map.get(delta_color, "#6b7280")
-        delta_html = f'<div style="color: {delta_color_hex}; font-size: 0.85rem; margin-top: 0.25rem;">{delta}</div>'
+        delta_color_hex = color_map.get(delta_color, "#64748b")
+        delta_html = f'<div style="color: {delta_color_hex}; font-size: 0.85rem; margin-top: 0.5rem; font-weight: 500;">{delta}</div>'
     
     st.markdown(f"""
     <div class="metric-card">
-        <div class="label">{icon} {label}</div>
+        <div class="label">{label}</div>
         <div class="value">{value}</div>
         {delta_html}
     </div>
@@ -105,8 +94,8 @@ def metric_grid(metrics: List[Dict[str, Any]], cols: int = 4) -> None:
     
     Example:
         metrics = [
-            {"value": 1425, "label": "Videos", "delta": "+12%", "delta_color": "positive", "icon": "✅"},
-            {"value": 3847, "label": "Chunks", "icon": "📦"},
+            {"value": 1425, "label": "Videos", "delta": "+12%", "delta_color": "positive"},
+            {"value": 3847, "label": "Chunks"},
         ]
         metric_grid(metrics, cols=3)
     """
@@ -117,8 +106,7 @@ def metric_grid(metrics: List[Dict[str, Any]], cols: int = 4) -> None:
                 metric["value"],
                 metric["label"],
                 metric.get("delta"),
-                metric.get("delta_color", "neutral"),
-                metric.get("icon", "📊")
+                metric.get("delta_color", "neutral")
             )
 
 
@@ -139,12 +127,43 @@ def status_badge(status: str, text: str = "") -> str:
         "warning": "status-warning",
         "error": "status-error",
         "info": "status-info",
-        "primary": "status-info" # Defaulting to info color for primary
+        "primary": "status-primary"
     }
     class_name = status_classes.get(status.lower(), "status-info")
     
-    # Adding a subtle glow effect in the style for premium feel
-    return f'<span class="status-badge {class_name}" style="box-shadow: 0 2px 8px rgba(0,0,0,0.2);">{text or status.upper()}</span>'
+    # Use modern palette colors for badges
+    colors = {
+        "status-success": "#059669",
+        "status-warning": "#d97706",
+        "status-error": "#dc2626",
+        "status-info": "#2563eb",
+        "status-primary": "#6366f1"
+    }
+    bg_colors = {
+        "status-success": "rgba(16, 185, 129, 0.1)",
+        "status-warning": "rgba(245, 158, 11, 0.1)",
+        "status-error": "rgba(239, 68, 68, 0.1)",
+        "status-info": "rgba(59, 130, 246, 0.1)",
+        "status-primary": "rgba(99, 102, 241, 0.1)"
+    }
+    
+    color = colors.get(class_name, "#2563eb")
+    bg = bg_colors.get(class_name, "rgba(59, 130, 246, 0.1)")
+    
+    return f'''
+    <span style="
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 6px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        background: {bg};
+        color: {color};
+        border: 1px solid {color}33;
+    ">{text or status.upper()}</span>
+    '''
 
 
 def inline_status(status: str, text: str = "") -> None:
@@ -165,25 +184,18 @@ def inline_status(status: str, text: str = "") -> None:
 # CARD COMPONENTS
 # ===========================================================================
 
-def info_card(title: str, content: str, icon: str = "ℹ️") -> None:
-    """
-    Render an informational card.
-    
-    Args:
-        title: Card title
-        content: Card content (markdown supported)
-        icon: Leading emoji
-    """
+def info_card(title: str, content: str) -> None:
+    """Render an informational card."""
     st.markdown(f"""
     <div style="
-        background: rgba(30, 41, 59, 0.6);
-        border-left: 4px solid #0ea5e9;
+        background: rgba(99, 102, 241, 0.05);
+        border-left: 4px solid var(--primary-500);
         border-radius: 8px;
-        padding: 1rem;
+        padding: 1.25rem;
         margin: 1rem 0;
     ">
-        <strong style="color: #0ea5e9;">{icon} {title}</strong><br>
-        <span style="color: #cbd5e1; font-size: 0.9rem;">{content}</span>
+        <strong style="color: var(--primary-500); display: block; margin-bottom: 0.5rem;">{title}</strong>
+        <span style="color: var(--neutral-300); font-size: 0.95rem;">{content}</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -192,14 +204,14 @@ def success_card(title: str, content: str) -> None:
     """Render a success card."""
     st.markdown(f"""
     <div style="
-        background: rgba(16, 185, 129, 0.1);
-        border-left: 4px solid #10b981;
+        background: rgba(16, 185, 129, 0.05);
+        border-left: 4px solid var(--success-500);
         border-radius: 8px;
-        padding: 1rem;
+        padding: 1.25rem;
         margin: 1rem 0;
     ">
-        <strong style="color: #10b981;">✅ {title}</strong><br>
-        <span style="color: #cbd5e1; font-size: 0.9rem;">{content}</span>
+        <strong style="color: var(--success-500); display: block; margin-bottom: 0.5rem;">{title}</strong>
+        <span style="color: var(--neutral-300); font-size: 0.95rem;">{content}</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -208,14 +220,14 @@ def warning_card(title: str, content: str) -> None:
     """Render a warning card."""
     st.markdown(f"""
     <div style="
-        background: rgba(245, 158, 11, 0.1);
-        border-left: 4px solid #f59e0b;
+        background: rgba(245, 158, 11, 0.05);
+        border-left: 4px solid var(--warning-500);
         border-radius: 8px;
-        padding: 1rem;
+        padding: 1.25rem;
         margin: 1rem 0;
     ">
-        <strong style="color: #f59e0b;">⚠️ {title}</strong><br>
-        <span style="color: #cbd5e1; font-size: 0.9rem;">{content}</span>
+        <strong style="color: var(--warning-500); display: block; margin-bottom: 0.5rem;">{title}</strong>
+        <span style="color: var(--neutral-300); font-size: 0.95rem;">{content}</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -224,14 +236,14 @@ def error_card(title: str, content: str) -> None:
     """Render an error card."""
     st.markdown(f"""
     <div style="
-        background: rgba(239, 68, 68, 0.1);
-        border-left: 4px solid #ef4444;
+        background: rgba(239, 68, 68, 0.05);
+        border-left: 4px solid var(--error-500);
         border-radius: 8px;
-        padding: 1rem;
+        padding: 1.25rem;
         margin: 1rem 0;
     ">
-        <strong style="color: #ef4444;">❌ {title}</strong><br>
-        <span style="color: #cbd5e1; font-size: 0.9rem;">{content}</span>
+        <strong style="color: var(--error-500); display: block; margin-bottom: 0.5rem;">{title}</strong>
+        <span style="color: var(--neutral-300); font-size: 0.95rem;">{content}</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -267,16 +279,16 @@ def video_card(
             badge_html = status_badge(status_color, status)
             
             st.markdown(f"""
-            <div style="display: flex; gap: 0.75rem; align-items: center; margin-top: 0.25rem; font-size: 0.85rem; color: #888;">
+            <div style="display: flex; gap: 0.75rem; align-items: center; margin-top: 0.5rem; font-size: 0.8rem; color: #888;">
                 {badge_html}
-                <span>⏱️ {dur_min}m {dur_sec}s</span>
-                <span>👁️ {getattr(video, 'view_count', 0):,}</span>
-                <span>🎯 {getattr(video, 'triage_confidence', 0):.0%}</span>
+                <span style="opacity: 0.8;">{dur_min}m {dur_sec}s</span>
+                <span style="opacity: 0.8;">{getattr(video, 'view_count', 0):,} views</span>
+                <span style="color: var(--primary-500); font-weight: 500;">{getattr(video, 'triage_confidence', 0):.0%} confidence</span>
             </div>
             """, unsafe_allow_html=True)
             
             if hasattr(video, 'triage_reason') and video.triage_reason:
-                st.caption(f"Reason: {video.triage_reason}")
+                st.caption(f"Note: {video.triage_reason}")
             
             if show_actions:
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -304,31 +316,27 @@ def progress_step(
         status: "pending", "in_progress", "completed", "error"
     """
     progress_percent = (step / total) * 100
-    status_icon = {
-        "pending": "⭕",
-        "in_progress": "🔄",
-        "completed": "✅",
-        "error": "❌"
-    }.get(status, "⭕")
     
     st.markdown(f"""
-    <div style="margin: 0.75rem 0;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-            <span style="font-weight: 500;">{status_icon} {label}</span>
-            <span style="font-size: 0.85rem; color: #888;">{step}/{total}</span>
+    <div style="margin: 1.25rem 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+            <span style="font-weight: 600; color: white; display: flex; align-items: center; gap: 0.5rem;">
+                {label}
+            </span>
+            <span style="font-size: 0.75rem; color: var(--neutral-500); font-weight: 700; letter-spacing: 0.05em;">{step}/{total}</span>
         </div>
         <div style="
             width: 100%;
             height: 6px;
-            background: rgba(30, 41, 59, 0.8);
-            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 999px;
             overflow: hidden;
         ">
             <div style="
                 width: {progress_percent}%;
                 height: 100%;
-                background: linear-gradient(90deg, #0ea5e9, #06b6d4);
-                transition: width 0.3s ease;
+                background: linear-gradient(90deg, #6366f1, #8b5cf6);
+                transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
             "></div>
         </div>
     </div>
@@ -387,22 +395,12 @@ def data_table(
 def key_value_display(items: Dict[str, Any]) -> None:
     """
     Render a key-value display panel.
-    
-    Args:
-        items: Dictionary of key-value pairs to display
-    
-    Example:
-        key_value_display({
-            "Status": "Processing",
-            "Progress": "45/100",
-            "ETA": "2m 30s"
-        })
     """
-    html = '<div style="display: grid; grid-template-columns: auto 1fr; gap: 1rem;">'
+    html = '<div style="display: grid; grid-template-columns: auto 1fr; gap: 1.25rem; background: rgba(15, 23, 42, 0.3); padding: 1.5rem; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.05);">'
     for key, value in items.items():
         html += f'''
-        <div style="font-weight: 600; color: #0ea5e9;">{key}:</div>
-        <div style="color: #cbd5e1;">{value}</div>
+        <div style="font-weight: 700; color: var(--primary-400); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">{key}</div>
+        <div style="color: var(--neutral-200);">{value}</div>
         '''
     html += '</div>'
     st.markdown(html, unsafe_allow_html=True)
@@ -413,23 +411,16 @@ def key_value_display(items: Dict[str, Any]) -> None:
 # ===========================================================================
 
 def form_section(title: str, help_text: str = "") -> None:
-    """
-    Render a visually distinct form section header.
-    
-    Args:
-        title: Section title
-        help_text: Optional help text
-    """
+    """Render a visually distinct form section header."""
     st.markdown(f"""
     <div style="
-        padding: 1rem;
-        background: rgba(14, 165, 233, 0.05);
-        border-left: 4px solid #0ea5e9;
-        border-radius: 8px;
-        margin: 1.5rem 0 1rem 0;
+        padding: 1.25rem;
+        background: rgba(99, 102, 241, 0.03);
+        border-bottom: 2px solid rgba(99, 102, 241, 0.1);
+        margin: 2rem 0 1.5rem 0;
     ">
-        <strong style="font-size: 1.1rem; color: #0ea5e9;">📝 {title}</strong>
-        {f'<p style="margin: 0.5rem 0 0; color: #888; font-size: 0.9rem;">{help_text}</p>' if help_text else ''}
+        <strong style="font-size: 1.25rem; color: white;">{title}</strong>
+        {f'<p style="margin: 0.5rem 0 0; color: var(--neutral-500); font-size: 0.95rem;">{help_text}</p>' if help_text else ''}
     </div>
     """, unsafe_allow_html=True)
 
@@ -455,6 +446,90 @@ def create_columns_equal(count: int, gap: str = "small"):
             st.write("Column 1")
     """
     return st.columns(count, gap=gap)
+
+
+def tts_button(text: str, label: str = "Listen", key: Optional[str] = None) -> None:
+    """
+    Render a browser-native Text-To-Speech button.
+    
+    Uses the Web Speech API (window.speechSynthesis) which works 
+    entirely in the user's browser with zero server-side dependencies.
+    """
+    import json
+    
+    # Clean text to avoid JS injection/errors
+    safe_text = json.dumps(text.replace('"', '\\"').replace("\n", " "))
+    
+    button_uuid = key or f"tts_{hash(text) % 10**8}"
+    
+    js_code = f"""
+    <style>
+        .tts-btn {{
+            background: rgba(14, 165, 233, 0.1);
+            color: #0ea5e9;
+            border: 1px solid rgba(14, 165, 233, 0.3);
+            border-radius: 4px;
+            padding: 4px 12px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }}
+        .tts-btn:hover {{
+            background: rgba(14, 165, 233, 0.2);
+            border-color: #0ea5e9;
+        }}
+        .tts-btn.speaking {{
+            background: #0ea5e9;
+            color: white;
+            animation: pulse 1.5s infinite;
+        }}
+        @keyframes pulse {{
+            0% {{ opacity: 1; }}
+            50% {{ opacity: 0.7; }}
+            100% {{ opacity: 1; }}
+        }}
+    </style>
+    
+    <button id="btn-{button_uuid}" class="tts-btn" onclick="toggleSpeech()">
+        <span>{label}</span>
+    </button>
+    
+    <script>
+    var synth = window.speechSynthesis;
+    var utterance = null;
+    var isSpeaking = false;
+    
+    function toggleSpeech() {{
+        const btn = document.getElementById('btn-{button_uuid}');
+        
+        if (isSpeaking) {{
+            synth.cancel();
+            isSpeaking = false;
+            btn.classList.remove('speaking');
+            btn.innerHTML = '<span>{label}</span>';
+        }} else {{
+            // Cancel any current speech across the page
+            synth.cancel();
+            
+            utterance = new SpeechSynthesisUtterance({safe_text});
+            utterance.onend = function() {{
+                isSpeaking = false;
+                btn.classList.remove('speaking');
+                btn.innerHTML = '<span>{label}</span>';
+            }};
+            
+            synth.speak(utterance);
+            isSpeaking = true;
+            btn.classList.add('speaking');
+            btn.innerHTML = '<span>Stop</span>';
+        }}
+    }}
+    </script>
+    """
+    st.components.v1.html(js_code, height=45)
 
 
 def spacer(height: str = "1rem") -> None:

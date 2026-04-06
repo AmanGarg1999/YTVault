@@ -14,6 +14,7 @@ from src.ui.components import (
     metric_grid,
     status_badge,
     spacer,
+    tts_button,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,13 +26,12 @@ def render(db, vs):
     # Professional page header
     page_header(
         title="Research Console",
-        subtitle="Ask natural language questions across your entire knowledge vault",
-        icon="🔍"
+        subtitle="Ask natural language questions across your entire knowledge vault"
     )
 
     try:
         # Query Syntax Helper
-        with st.sidebar.expander("🔧 Query Syntax & Filters"):
+        with st.sidebar.expander("Query Syntax & Filters"):
             st.markdown("""
             **Advanced Filters** (optional):
             
@@ -58,9 +58,13 @@ def render(db, vs):
             with st.chat_message("user"):
                 st.markdown(entry["question"])
             with st.chat_message("assistant"):
-                st.markdown(entry["answer"])
+                col_ans, col_tts = st.columns([6, 1])
+                with col_ans:
+                    st.markdown(entry["answer"])
+                with col_tts:
+                    tts_button(entry["answer"], key=f"tts_hist_{hash(entry['answer'])}")
                 if entry.get("citations"):
-                    with st.expander(f"📎 {len(entry['citations'])} sources"):
+                    with st.expander(f"Sources: {len(entry['citations'])}"):
                         for c in entry["citations"]:
                             st.markdown(
                                 f"- [{c['source_id']}] **{c['video_title']}** "
@@ -95,7 +99,11 @@ def render(db, vs):
                             conv_history = "\n\n".join(history_parts)
 
                         response = rag.query(question, conversation_history=conv_history)
-                        st.markdown(response.answer)
+                        col_ans, col_tts = st.columns([6, 1])
+                        with col_ans:
+                            st.markdown(response.answer)
+                        with col_tts:
+                            tts_button(response.answer, key="tts_current")
 
                         citations_data = []
                         if response.citations:
@@ -106,7 +114,7 @@ def render(db, vs):
                                 grouped[c.video_title].append(c)
 
                             for video_title, group in grouped.items():
-                                with st.expander(f"📁 Theme: {video_title} ({len(group)} citations)", expanded=True):
+                                with st.expander(f"Theme: {video_title} ({len(group)} citations)", expanded=True):
                                     for c in group:
                                         col1, col2 = st.columns([5, 1])
                                         with col1:
@@ -120,14 +128,14 @@ def render(db, vs):
                                                 topic = c.topic
                                             elif isinstance(c, dict):
                                                 topic = c.get("topic", "")
-                                            st.caption(f"📂 Topic: {topic or 'General Context'}")
+                                            st.caption(f"Topic: {topic or 'General Context'}")
                                         with col2:
                                             c1, c2 = st.columns(2)
                                             with c1:
-                                                if st.button("✂️", key=f"clip_{c.source_id}", help="Extract raw MP4 clip"):
-                                                    st.toast(f"Extracting {c.timestamp_str} clip.", icon="✂️")
+                                                if st.button("Clip", key=f"clip_{c.source_id}", help="Extract raw MP4 clip"):
+                                                    st.toast(f"Extracting {c.timestamp_str} clip.")
                                             with c2:
-                                                if st.button("📝", key=f"sum_{c.source_id}", help="Summarize full video"):
+                                                if st.button("Summary", key=f"sum_{c.source_id}", help="Summarize full video"):
                                                     st.session_state[f"show_sum_{c.video_id}"] = True
 
                                     if st.session_state.get(f"show_sum_{c.video_id}", False):
@@ -144,26 +152,23 @@ def render(db, vs):
 
                         # Week 1 Enhancement: Show raw data for verification
                         st.divider()
-                        section_header("Verification Layer", "🔍")
+                        section_header("Verification Layer")
                         
                         # Query metrics
                         metrics = [
                             {
                                 "value": len(response.citations),
                                 "label": "Citations",
-                                "icon": "📎",
                                 "delta_color": "info"
                             },
                             {
                                 "value": response.total_chunks_retrieved,
                                 "label": "Chunks Retrieved",
-                                "icon": "📦",
                                 "delta_color": "info"
                             },
                             {
                                 "value": f"{response.latency_ms:.0f}ms",
                                 "label": "Query Time",
-                                "icon": "⚡",
                                 "delta_color": "info"
                             },
                         ]
@@ -174,7 +179,7 @@ def render(db, vs):
                         
                         # Raw chunks with original text
                         if response.raw_chunks:
-                            with st.expander("📋 Raw Source Chunks (Original Text)", expanded=False):
+                            with st.expander("Raw Source Chunks (Original Text)", expanded=False):
                                 for i, raw in enumerate(response.raw_chunks, 1):
                                     with st.expander(
                                         f"{i}. {raw['chunk_id'][:20]}... ({raw['channel']}) [{raw['timestamp']}]",
@@ -209,7 +214,7 @@ def render(db, vs):
                         
                         # Full transcripts for reference
                         if response.full_transcripts:
-                            with st.expander(f"📚 Full Transcripts ({len(response.full_transcripts)} videos)", expanded=False):
+                            with st.expander(f"Full Transcripts ({len(response.full_transcripts)} videos)", expanded=False):
                                 for transcript in response.full_transcripts:
                                     with st.expander(
                                         f"{transcript['title'][:50]} ({transcript['duration']})",
@@ -246,8 +251,8 @@ def render(db, vs):
                             )
 
                         meta = (
-                            f"⏱️ {response.latency_ms:.0f}ms │ "
-                            f"📄 {response.total_chunks_retrieved} retrieved → "
+                            f"{response.latency_ms:.0f}ms │ "
+                            f"{response.total_chunks_retrieved} retrieved - "
                             f"{response.total_chunks_used} used"
                             f"{conf_str}"
                         )
@@ -255,7 +260,7 @@ def render(db, vs):
 
                         if response.query_plan and response.query_plan.channel_filter:
                             st.caption(
-                                f"🔧 Filters: channel={response.query_plan.channel_filter}, "
+                                f"Filters: channel={response.query_plan.channel_filter}, "
                                 f"topic={response.query_plan.topic_filter or '—'}, "
                                 f"guest={response.query_plan.guest_filter or '—'}"
                             )
@@ -271,12 +276,12 @@ def render(db, vs):
                         import traceback
                         error_msg = f"Query failed: {e}. Make sure Ollama is running."
                         error_card("Query Processing Error", error_msg)
-                        with st.expander("🔍 Error Details"):
+        with st.expander("Error Details"):
                             st.code(traceback.format_exc())
                         st.session_state.conversation[-1]["answer"] = error_msg
 
         if st.session_state.conversation:
-            if st.sidebar.button("🗑️ Clear Conversation"):
+            if st.sidebar.button("Clear Conversation"):
                 st.session_state.conversation = []
                 st.rerun()
     except Exception as e:
@@ -293,26 +298,25 @@ def _render_inline_summary(db, citation):
     summarizer = SummarizerEngine(db)
     summary = summarizer.get_or_generate_summary(citation.video_id)
     if summary:
-        with st.info(f"📝 Active Insights: {citation.video_title}"):
-            st.markdown(f"**Executive Summary:** {summary.summary_text}")
+        with st.info(f"Active Insights: {citation.video_title}"):
+            col_sum, col_tts = st.columns([4, 1])
+            with col_sum:
+                st.markdown(f"**Executive Summary:** {summary.summary_text}")
+            with col_tts:
+                tts_button(summary.summary_text, key=f"tts_inline_{citation.source_id}")
 
             t_col1, t_col2 = st.columns(2)
             with t_col1:
-                st.markdown("#### 📊 Topics & Sentiment")
+                st.markdown("#### Topics & Sentiment")
                 topics = json.loads(summary.topics_json)
                 for t in topics:
-                    s_icon = "⚖️"
-                    if t.get("sentiment") == "Bullish":
-                        s_icon = "📈"
-                    elif t.get("sentiment") == "Bearish":
-                        s_icon = "📉"
-                    st.markdown(f"- **{t['name']}** {s_icon}")
+                    st.markdown(f"- **{t['name']}** ({t.get('sentiment', 'Neutral')})")
                     if t.get("opportunities"):
                         for opp in t["opportunities"]:
-                            st.caption(f"   💡 *Opp:* {opp}")
+                            st.caption(f"   Opportunity: {opp}")
 
             with t_col2:
-                st.markdown("#### ⏳ Narrative Timeline")
+                st.markdown("#### Narrative Timeline")
                 timeline = json.loads(summary.timeline_json)
                 if timeline:
                     for item in timeline:
@@ -323,7 +327,7 @@ def _render_inline_summary(db, citation):
             st.markdown("---")
             r_col1, r_col2 = st.columns(2)
             with r_col1:
-                st.markdown("#### 📚 Bibliography/References")
+                st.markdown("#### Bibliography & References")
                 refs = json.loads(summary.references_json)
                 if refs:
                     for r in refs:
@@ -332,11 +336,11 @@ def _render_inline_summary(db, citation):
                     st.caption("No explicit references detected.")
 
             with r_col2:
-                st.markdown("#### 🏆 Top Takeaways")
+                st.markdown("#### Top Takeaways")
                 takes = json.loads(summary.takeaways_json)
                 for t in takes:
                     st.markdown(f"- {t}")
 
-            if st.button("✖️ Close Insights", key=f"close_sum_{citation.source_id}"):
+            if st.button("Close Insights", key=f"close_sum_{citation.source_id}"):
                 st.session_state[f"show_sum_{citation.video_id}"] = False
                 st.rerun()

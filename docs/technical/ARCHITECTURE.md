@@ -86,7 +86,7 @@ graph TB
 
 ### Ingestion Pipeline
 
-The pipeline processes each video through **10 sequential stages**. Each stage transition is atomically committed to SQLite, enabling crash-safe resume.
+The pipeline processes each video through **11 sequential stages**. Each stage transition is atomically committed to SQLite, enabling crash-safe resume. Parallelism is strictly governed by a global LLM concurrency semaphore.
 
 ```
 URL Input
@@ -101,26 +101,38 @@ URL Input
 [3] TRANSCRIPT ────── youtube-transcript-api → Priority-ordered fetch
   │                   (manual_en → auto_en → manual_any → auto_any)
   ▼
-[4] SPONSOR FILTER ── SponsorBlock API → Strip sponsored segments
+[4] TRANSLATE ─────── Ollama 3B → Non-English to English translation
   │
   ▼
-[5] NORMALIZE ─────── Ollama 3B → Remove fillers, fix punctuation
+[5] SPONSOR FILTER ── SponsorBlock API → Strip sponsored segments
   │
   ▼
-[6] CHUNK ─────────── Sliding window (400w) or Semantic (topic boundaries)
+[6] NORMALIZE ─────── Ollama 3B → Remove fillers, fix punctuation
   │
   ▼
-[7] CHUNK ANALYSIS ── Per-chunk: topics + entities + claims + quotes
+[7] CHUNK ─────────── Sliding window (400w) or Semantic (topic boundaries)
+  │
+  ▼
+[8] CHUNK ANALYSIS ── Per-chunk: topics + entities + claims + quotes
   │                   (parallelized via LLMPool, uses both 3B and 8B models)
   ▼
-[8] EMBED ─────────── nomic-embed-text → ChromaDB upsert
+[9] SUMMARIZE ─────── Map-Reduce synthesis of video insights
   │
   ▼
-[9] GRAPH SYNC ────── Aggregated chunk data → Neo4j (full video coverage)
+[10] EMBED ────────── nomic-embed-text → ChromaDB upsert
+  │
+  ▼
+[11] GRAPH SYNC ───── Aggregated chunk data → Neo4j (full video coverage)
   │                   Guest resolution + Topic/Claim/Quote nodes
   ▼
-[10] DONE
+[DONE]
 ```
+
+### Concurrency & Locking Guardrails
+
+- **Global LLM Semaphore**: All LLM calls (LLMPool, Summarizer, Embedding) share a `threading.BoundedSemaphore` initialized with `llm_max_workers`. This prevents hardware thrashing when multiple videos process in parallel.
+- **Scan-Level Video Locking**: Videos are locked using `locked_by_scan_id` in SQLite. This ensures that parallel orchestrators or resumed scans never attempt to process the same video simultaneously.
+- **Atomic Multi-Store Deletion**: Deletion logic coordinates cleanups across SQLite, ChromaDB, and Neo4j (`DETACH DELETE`) to prevent orphaned nodes and vector drift.
 
 ### Query Flow (RAG)
 

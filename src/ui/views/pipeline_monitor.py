@@ -12,7 +12,7 @@ def render(db, run_pipeline_background):
     """Render the Pipeline Monitor page with advanced channel and video insights."""
     st.markdown("""
     <div class="main-header">
-        <h1>📊 Pipeline Monitor</h1>
+        <h1>Pipeline Monitor</h1>
         <p>Real-time pipeline progress, channel health, and video quality metrics</p>
     </div>
     """, unsafe_allow_html=True)
@@ -21,7 +21,7 @@ def render(db, run_pipeline_background):
         # =====================================================================
         # SECTION 1: Active Scans Quick Status
         # =====================================================================
-        st.markdown("### 🔄 Active Ingestion Scans")
+        st.markdown("### Active Ingestion Scans")
         active_scans = db.get_active_scans()
 
         if active_scans:
@@ -33,7 +33,7 @@ def render(db, run_pipeline_background):
                     col1, col2, col3, col4 = st.columns([3, 1.5, 1.5, 1])
                     with col1:
                         st.markdown(f"**Scan ID:** `{getattr(scan, 'scan_id', 'unknown')}`")
-                        st.caption(f"📍 {getattr(scan, 'source_url', 'N/A')[:60]}...")
+                        st.caption(f"Source: {getattr(scan, 'source_url', 'N/A')[:60]}...")
                     with col2:
                         st.metric("Progress", f"{processed}/{discovered}")
                     with col3:
@@ -46,10 +46,10 @@ def render(db, run_pipeline_background):
                         global_orch = getattr(st, "_global_orchestrators", {})
                         is_running = (getattr(scan, "scan_id", "") in global_orch or
                                       getattr(scan, "source_url", "") in global_orch)
-                        status_label = "🟢 RUNNING" if is_running else "🟡 PAUSED"
-                        st.markdown(f"**{status_label}**")
+                        status_label = "RUNNING" if is_running else "PAUSED"
+                        st.markdown(f"**Status: {status_label}**")
 
-            if st.button("🔄 Refresh Status", type="secondary", key="refresh_scans"):
+            if st.button("Refresh Status", type="secondary", key="refresh_scans"):
                 st.rerun()
         else:
             st.info("No active scans running at the moment.")
@@ -59,7 +59,7 @@ def render(db, run_pipeline_background):
         # =====================================================================
         # SECTION 2: Channel Quality & Performance Breakdown
         # =====================================================================
-        st.markdown("### 📺 Channel Health & Quality Dashboard")
+        st.markdown("### Channel Health & Quality Dashboard")
         
         try:
             channels = db.get_all_channels()
@@ -100,7 +100,7 @@ def render(db, run_pipeline_background):
             if channel_data:
                 # Display channels with expandable details
                 for idx, ch_summary in enumerate(channel_data):
-                    with st.expander(f"📺 **{ch_summary['name']}** | {ch_summary['completed']}/{ch_summary['videos']} videos | Quality: {ch_summary['quality_score']:.0f}%", expanded=False):
+                    with st.expander(f"**{ch_summary['name']}** | {ch_summary['completed']}/{ch_summary['videos']} videos | Quality: {ch_summary['quality_score']:.0f}%", expanded=False):
                         col1, col2, col3 = st.columns(3)
                         
                         with col1:
@@ -118,7 +118,7 @@ def render(db, run_pipeline_background):
                         st.markdown(f"**Channel ID:** `{ch_summary['channel_id']}`")
                         
                         # Video details sub-section
-                        st.markdown("#### 📹 Recent Videos in Channel")
+                        st.markdown("#### Recent Videos in Channel")
                         videos = db.get_videos_by_channel(ch_summary['channel_id'], limit=5)
                         if videos:
                             video_records = []
@@ -144,7 +144,7 @@ def render(db, run_pipeline_background):
                                 st.dataframe(df, use_container_width=True, hide_index=True)
                         
                         # Guest list for channel
-                        st.markdown("#### 👥 Channel Guests")
+                        st.markdown("#### Channel Guests")
                         all_guests = set()
                         for v in db.get_videos_by_channel(ch_summary['channel_id']):
                             guests = _get_video_guests(db, v.video_id)
@@ -159,19 +159,19 @@ def render(db, run_pipeline_background):
                             st.caption("No guests identified yet")
                         
                         # Quick actions
-                        st.markdown("#### ⚙️ Channel Actions")
+                        st.markdown("#### Channel Actions")
                         col1, col2 = st.columns(2)
                         with col1:
-                            if st.button("🔄 Re-harvest", key=f"harvest_{ch_summary['channel_id']}", use_container_width=True):
+                            if st.button("Re-harvest", key=f"harvest_{ch_summary['channel_id']}", use_container_width=True):
                                 if getattr(ch_summary['ch_obj'], 'url', None):
                                     run_pipeline_background(ch_summary['ch_obj'].url, db)
                                     st.success(f"Re-harvest queued for {ch_summary['name']}")
-                                    st.toast("⏱️ Harvest started")
+                                    st.toast("Harvest started")
                                     time.sleep(0.5)
                                     st.rerun()
                         
                         with col2:
-                            if st.button("📊 Refresh", key=f"refresh_{ch_summary['channel_id']}", use_container_width=True):
+                            if st.button("Refresh", key=f"refresh_{ch_summary['channel_id']}", use_container_width=True):
                                 st.rerun()
             else:
                 st.info("No channels ingested yet. Start a Harvest to begin!")
@@ -181,7 +181,7 @@ def render(db, run_pipeline_background):
         # =====================================================================
         # SECTION 3: Overall Pipeline Health
         # =====================================================================
-        st.markdown("### 📊 Overall Pipeline Health")
+        st.markdown("### Overall Pipeline Health")
         try:
             stats = db.get_pipeline_stats()
         except Exception as e:
@@ -189,12 +189,12 @@ def render(db, run_pipeline_background):
             stats = {}
 
         stages = [
-            ("📥 Discovered", stats.get("discovered", 0) + stats.get("accepted", 0)
+            ("Discovered", stats.get("discovered", 0) + stats.get("accepted", 0)
              + stats.get("rejected", 0) + stats.get("pending_review", 0)),
-            ("✅ Triage Passed", stats.get("accepted", 0)),
-            ("📝 Transcripts", stats.get("transcript_fetched", 0)),
-            ("🧹 Refined", stats.get("refined", 0)),
-            ("🔍 Indexed", stats.get("done", 0)),
+            ("Triage Passed", stats.get("accepted", 0)),
+            ("Transcripts", stats.get("transcript_fetched", 0)),
+            ("Refinement", stats.get("refined", 0)),
+            ("Indexing", stats.get("done", 0)),
         ]
 
         cols = st.columns(len(stages))

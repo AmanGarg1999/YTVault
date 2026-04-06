@@ -18,8 +18,7 @@ def render(db):
     # 1. Page Header
     page_header(
         title="Topic Explorer",
-        subtitle="Consolidated thematic insights across your entire knowledge vault",
-        icon="🧬"
+        subtitle="Consolidated thematic insights across your entire knowledge vault"
     )
 
     # 2. Fetch Consolidated Topics
@@ -30,10 +29,10 @@ def render(db):
         return
 
     # 3. Sidebar Filters & Stats
-    st.sidebar.markdown("### 📊 Vault Summary")
+    st.sidebar.markdown("### Vault Summary")
     st.sidebar.metric("Unique Topics", len(topics))
     
-    search_query = st.sidebar.text_input("🔍 Search Topics", "")
+    search_query = st.sidebar.text_input("Search Topics", "")
     
     # Filter topics based on search
     if search_query:
@@ -51,7 +50,7 @@ def render(db):
 
 def _render_topic_gallery(topics):
     """Render the grid of topic cards."""
-    st.markdown("#### 📁 Knowledge Clusters")
+    st.markdown("#### Knowledge Clusters")
     
     # Responsive grid for topics
     cols = st.columns(3)
@@ -63,21 +62,21 @@ def _render_topic_gallery(topics):
                 # Metrics in a small row
                 st.markdown(f"""
                 <div style="display: flex; gap: 1rem; color: #888; font-size: 0.9rem;">
-                    <span>📹 {topic['video_count']} Videos</span>
-                    <span>📺 {topic['channel_count']} Channels</span>
+                    <span>{topic['video_count']} Videos</span>
+                    <span>{topic['channel_count']} Channels</span>
                 </div>
                 """, unsafe_allow_html=True)
                 
                 spacer("0.5rem")
                 
-                if st.button("Deep Dive →", key=f"btn_{topic['name']}"):
+                if st.button("Deep Dive", key=f"btn_{topic['name']}"):
                     st.session_state.selected_topic = topic["name"]
                     st.rerun()
 
 def _render_topic_detail(db, topic_name):
     """Render the detailed view for a single topic."""
     
-    if st.button("← Back to Gallery"):
+    if st.button("Back to Gallery"):
         st.session_state.selected_topic = None
         st.rerun()
         
@@ -93,15 +92,15 @@ def _render_topic_detail(db, topic_name):
     st.markdown(f"# {topic_name}")
     
     m_grid = [
-        {"value": len(details), "label": "Source Videos", "icon": "📹"},
-        {"value": len(channels), "label": "Discussing Channels", "icon": "📺"},
+        {"value": len(details), "label": "Source Videos"},
+        {"value": len(channels), "label": "Discussing Channels"},
     ]
     metric_grid(m_grid, cols=2)
     
     st.divider()
     
     # 1. Synthesized Perspective (Aggregate takeaways)
-    section_header("Consolidated Insights", "💡")
+    section_header("Consolidated Insights")
     
     # Create a mega-summary for TTS
     all_takeaways = []
@@ -117,16 +116,16 @@ def _render_topic_detail(db, topic_name):
     with col1:
         st.markdown(takeaway_text)
     with col2:
-        tts_button(f"Topic Summary for {topic_name}: {takeaway_text}", label="🔊 Listen to Brief")
+        tts_button(f"Topic Summary for {topic_name}: {takeaway_text}", label="Listen to Brief")
 
     st.divider()
 
     # 2. Channel Perspectives
-    section_header("Expert Perspectives", "🎙️")
+    section_header("Expert Perspectives")
     
     for channel in channels:
         channel_clips = [d for d in details if d["channel_name"] == channel]
-        with st.expander(f"📺 {channel} ({len(channel_clips)} insights)", expanded=False):
+        with st.expander(f"{channel} ({len(channel_clips)} insights)", expanded=False):
             for clip in channel_clips:
                 st.markdown(f"**Video:** [{clip['title']}]({clip['url']}) (`{clip['upload_date']}`)")
                 st.info(clip["summary_text"])
@@ -134,13 +133,10 @@ def _render_topic_detail(db, topic_name):
                 # Check for specific topic meta
                 meta = clip.get("topic_meta", {})
                 if meta.get("sentiment"):
-                    s_icon = "⚖️"
-                    if meta["sentiment"] == "Bullish": s_icon = "📈"
-                    elif meta["sentiment"] == "Bearish": s_icon = "📉"
-                    st.caption(f"Sentiment: {s_icon} {meta['sentiment']}")
+                    st.caption(f"Sentiment: {meta['sentiment']}")
                 
                 if meta.get("opportunities"):
-                    st.markdown("**💡 Opportunities Identified:**")
+                    st.markdown("**Opportunities Identified:**")
                     for opp in meta["opportunities"]:
                         st.caption(f" - {opp}")
                 
@@ -150,7 +146,7 @@ def _render_topic_detail(db, topic_name):
     clashes = db.get_clashes_by_topic(topic_name)
     if clashes:
         st.divider()
-        section_header("Expert Clashes & Debates", "⚔️")
+        section_header("Expert Clashes & Debates")
         for clash in clashes:
             with st.container(border=True):
                 col_a, col_vs, col_b = st.columns([2, 1, 2])
@@ -166,7 +162,7 @@ def _render_topic_detail(db, topic_name):
                 st.caption(f"Topic: {clash.topic} | Source A: [View Video](https://www.youtube.com/watch?v={clash.source_a})")
 
     # 4. Source Library
-    section_header("Source Library", "📚")
+    section_header("Source Library")
     st.dataframe(
         [{"Date": d["upload_date"], "Channel": d["channel_name"], "Title": d["title"]} for d in details],
         use_container_width=True,

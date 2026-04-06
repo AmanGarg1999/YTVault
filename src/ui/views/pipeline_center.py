@@ -14,7 +14,7 @@ def render(db, run_pipeline_background):
     
     st.markdown("""
     <div class="main-header">
-        <h1>📊 Pipeline Center</h1>
+        <h1>Pipeline Center</h1>
         <p>Monitor active scans, manage processing, and view real-time pipeline logs</p>
     </div>
     """, unsafe_allow_html=True)
@@ -24,9 +24,9 @@ def render(db, run_pipeline_background):
         # TABS: Monitor, Control, Logs
         # =====================================================================
         tab_monitor, tab_control, tab_logs = st.tabs([
-            "🔄 Active Scans",
-            "🎮 Control",
-            "📋 Logs"
+            "Active Scans",
+            "Control",
+            "Logs"
         ])
 
         # =====================================================================
@@ -55,7 +55,7 @@ def render(db, run_pipeline_background):
 def render_monitor_tab(db, run_pipeline_background):
     """Tab 1: Active scans monitoring with channel health."""
     
-    st.markdown("### 🔄 Active Ingestion Scans")
+    st.markdown("### Active Ingestion Scans")
     active_scans = db.get_active_scans()
 
     if not active_scans:
@@ -63,7 +63,7 @@ def render_monitor_tab(db, run_pipeline_background):
     else:
         col_refresh = st.columns([1])
         with col_refresh[0]:
-            if st.button("🔄 Refresh", type="secondary", key="refresh_scans"):
+            if st.button("Refresh", type="secondary", key="refresh_scans"):
                 st.rerun()
 
         st.markdown("---")
@@ -77,7 +77,7 @@ def render_monitor_tab(db, run_pipeline_background):
                 
                 with col1:
                     st.markdown(f"**Scan ID:** `{getattr(scan, 'scan_id', 'unknown')}`")
-                    st.caption(f"📍 {getattr(scan, 'source_url', 'N/A')[:60]}...")
+                    st.caption(f"{getattr(scan, 'source_url', 'N/A')[:60]}...")
                     
                     # Calculate progress bar
                     if discovered > 0:
@@ -110,22 +110,22 @@ def render_monitor_tab(db, run_pipeline_background):
                     
                     if is_in_memory:
                         if db_status == "PAUSED":
-                            status_label = "🟡 PAUSED"
+                            status_label = "PAUSED"
                         else:
-                            status_label = "🟢 RUNNING"
+                            status_label = "RUNNING"
                     else:
                         if db_status == "RUNNING":
-                            status_label = "🔌 DISCONNECTED"
+                            status_label = "DISCONNECTED"
                         elif db_status == "PAUSED":
-                            status_label = "🟡 PAUSED"
+                            status_label = "PAUSED"
                         else:
-                            status_label = "🔴 STOPPED"
+                            status_label = "STOPPED"
                             
                     st.markdown(f"**{status_label}**")
                     
                     # Add Re-attach button if disconnected but supposed to be running
                     if not is_in_memory and db_status == "RUNNING":
-                        if st.button("🔗 Re-attach", key=f"reattach_{scan_id}", use_container_width=True):
+                        if st.button("Re-attach", key=f"reattach_{scan_id}", use_container_width=True):
                             run_pipeline_background(source_url, db, scan_id=scan_id)
                             st.success(f"Re-attached to {scan_id}")
                             time.sleep(0.5)
@@ -135,7 +135,7 @@ def render_monitor_tab(db, run_pipeline_background):
     # Channel Health Section
     # =====================================================================
     st.markdown("---")
-    st.markdown("### 📺 Channel Health Dashboard")
+    st.markdown("### Channel Health Dashboard")
     
     try:
         channels = db.get_all_channels()
@@ -155,7 +155,7 @@ def render_monitor_tab(db, run_pipeline_background):
                     # Calculate quality metrics
                     quality_score = (done / total * 0.4) + (accepted / max(1, accepted + rejected) * 0.6 if accepted + rejected > 0 else 0) * 100
                     
-                    with st.expander(f"📺 **{getattr(ch, 'name', 'Unknown')[:30]}** | {done}/{total} videos | Quality: {quality_score:.0f}%", expanded=False):
+                    with st.expander(f"{getattr(ch, 'name', 'Unknown')[:30]} | {done}/{total} videos | Quality: {quality_score:.0f}%", expanded=False):
                         col1, col2, col3 = st.columns(3)
                         
                         with col1:
@@ -173,7 +173,7 @@ def render_monitor_tab(db, run_pipeline_background):
                         st.markdown(f"**Channel ID:** `{ch.channel_id}`")
                         
                         # Video details sub-section
-                        st.markdown("#### 📹 Recent Videos in Channel")
+                        st.markdown("#### Recent Videos in Channel")
                         recent_vids = videos[:5]
                         video_records = []
                         for v in recent_vids:
@@ -190,23 +190,23 @@ def render_monitor_tab(db, run_pipeline_background):
                             st.dataframe(df, use_container_width=True, hide_index=True)
                         
                         # Quick actions
-                        st.markdown("#### ⚙️ Channel Actions")
+                        st.markdown("#### Channel Actions")
                         col_btn1, col_btn2 = st.columns(2)
                         with col_btn1:
-                            if st.button("🔄 Re-harvest", key=f"reharvest_btn_{ch.channel_id}", use_container_width=True):
+                            if st.button("Re-harvest", key=f"reharvest_btn_{ch.channel_id}", use_container_width=True):
                                 if getattr(ch, 'url', None):
                                     with st.spinner("Initiating harvest..."):
                                         logger.info(f"Triggering re-harvest for channel: {ch.name} ({ch.url})")
                                         run_pipeline_background(ch.url, db)
                                         st.success(f"Re-harvest queued for {ch.name}")
-                                        st.toast(f"🚀 Harvest started for {ch.name}")
+                                        st.toast(f"Harvest started for {ch.name}")
                                         time.sleep(1.2) # Allow time for background thread to init
                                         st.rerun()
                                 else:
                                     st.error("No URL available for this channel.")
                         
                         with col_btn2:
-                            if st.button("📊 Refresh", key=f"refresh_ch_view_{ch.channel_id}", use_container_width=True):
+                            if st.button("Refresh", key=f"refresh_ch_view_{ch.channel_id}", use_container_width=True):
                                 st.rerun()
                 except Exception as e:
                     logger.warning(f"Error processing channel {ch.channel_id}: {e}")
@@ -247,7 +247,7 @@ def _get_video_topics(db, video_id: str) -> list[str]:
 def render_control_tab(db, run_pipeline_background):
     """Tab 2: Pipeline control operations (pause/resume/stop)."""
     
-    st.markdown("### 🎮 Scan Control Operations")
+    st.markdown("### Scan Control Operations")
     
     active_scans = db.get_active_scans()
     
@@ -282,12 +282,12 @@ def render_control_tab(db, run_pipeline_background):
             with col3:
                 current_status = control.status if control else "RUNNING"
                 status_emoji = {
-                    "RUNNING": "🟢",
-                    "PAUSED": "🟡",
-                    "STOPPED": "🔴",
-                }.get(current_status, "⚪")
+                    "RUNNING": "",
+                    "PAUSED": "",
+                    "STOPPED": "",
+                }.get(current_status, "")
                 
-                st.markdown(f"{status_emoji} {current_status}")
+                st.markdown(f"{current_status}")
             
             # Control buttons
             with col4:
@@ -295,18 +295,18 @@ def render_control_tab(db, run_pipeline_background):
                 
                 with col_pause:
                     if current_status == "RUNNING":
-                        if st.button("⏸️", key=f"pause_{idx}_{scan_id}", help="Pause scan"):
+                        if st.button("Pause", key=f"pause_{idx}_{scan_id}", help="Pause scan"):
                             db.set_control_state(scan_id, "PAUSED")
                             st.success(f"Paused {scan_id}")
                             st.rerun()
                     else:
-                        if st.button("▶️", key=f"resume_{idx}_{scan_id}", help="Resume scan"):
+                        if st.button("Resume", key=f"resume_{idx}_{scan_id}", help="Resume scan"):
                             db.set_control_state(scan_id, "RUNNING")
                             st.success(f"Resumed {scan_id}")
                             st.rerun()
                 
                 with col_stop:
-                    if st.button("⏹️", key=f"stop_{idx}_{scan_id}", help="Stop scan"):
+                    if st.button("Stop", key=f"stop_{idx}_{scan_id}", help="Stop scan"):
                         db.set_control_state(scan_id, "STOPPED")
                         st.warning(f"Stopped {scan_id}")
                         st.rerun()
@@ -315,7 +315,7 @@ def render_control_tab(db, run_pipeline_background):
 def render_logs_tab(db):
     """Tab 3: Real-time activity feed with filtering."""
     
-    st.markdown("### 📋 Live Pipeline Activity Feed")
+    st.markdown("### Live Pipeline Activity Feed")
     
     col1, col2, col3 = st.columns(3)
     
@@ -355,12 +355,12 @@ def render_logs_tab(db):
         for log in reversed(logs):
             # Color by level
             level_color = {
-                "SUCCESS": "🟢",
-                "INFO": "🔵",
-                "WARNING": "🟡",
-                "ERROR": "🔴",
-                "DEBUG": "⚪",
-            }.get(log.level, "⚪")
+                "SUCCESS": "",
+                "INFO": "",
+                "WARNING": "",
+                "ERROR": "",
+                "DEBUG": "",
+            }.get(log.level, "")
             
             with st.container(border=True):
                 col1, col2 = st.columns([4, 1])
@@ -373,12 +373,12 @@ def render_logs_tab(db):
                     except:
                         rel_time = log.timestamp
                     
-                    st.markdown(f"{level_color} **[{log.stage}]** {log.message}")
+                    st.markdown(f"**[{log.stage}]** {log.message}")
                     st.caption(f"{rel_time} • {log.video_id[:8] if log.video_id else 'N/A'}")
                 
                 with col2:
                     if log.error_detail:
-                        with st.expander("📋 Error Details"):
+                        with st.expander("Error Details"):
                             st.code(log.error_detail, language="text")
     else:
         st.info("No logs found.")

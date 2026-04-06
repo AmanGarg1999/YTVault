@@ -20,8 +20,7 @@ def render(db, run_pipeline_background, run_bulk_pipeline_background):
     
     page_header(
         "Ingestion Hub",
-        "Start harvests, manage overrides, and reprocess content",
-        icon="🌾"
+        "Start harvests, manage overrides, and reprocess content"
     )
 
     try:
@@ -29,11 +28,11 @@ def render(db, run_pipeline_background, run_bulk_pipeline_background):
         # TABS: Start Harvest, Bulk Re-harvest, Reprocessing, Pending Review
         # =====================================================================
         tab_harvest, tab_bulk, tab_reprocess, tab_pending, tab_rejected = st.tabs([
-            "🚀 Start Harvest",
-            "📦 Bulk Re-harvest",
-            "🔄 Reprocessing",
-            "📋 Pending Review",
-            "🚫 Rejected Videos"
+            "Start Harvest",
+            "Bulk Re-harvest",
+            "Reprocessing",
+            "Pending Review",
+            "Rejected Videos"
         ])
 
         # =====================================================================
@@ -74,7 +73,7 @@ def render(db, run_pipeline_background, run_bulk_pipeline_background):
 def render_harvest_tab(db, run_pipeline_background):
     """Tab 1: Start new ingestion jobs."""
     
-    st.markdown("### 🚀 Start New Harvest")
+    st.markdown("### Start New Harvest")
     
     url = st.text_input(
         "YouTube URL",
@@ -85,7 +84,7 @@ def render_harvest_tab(db, run_pipeline_background):
 
     col1, col2 = st.columns([1, 3])
     with col1:
-        start_btn = st.button("🚀 Start Harvest", type="primary", use_container_width=True, key="start_harvest_btn_ingestion")
+        start_btn = st.button("Start Harvest", type="primary", use_container_width=True, key="start_harvest_btn_ingestion")
 
     if start_btn and url:
         try:
@@ -94,25 +93,25 @@ def render_harvest_tab(db, run_pipeline_background):
             
             col_msg, col_status = st.columns([3, 1])
             with col_msg:
-                st.success(f"🚀 Ingestion queued for **{parsed.url_type}**: {url}")
+                st.success(f"Ingestion queued for **{parsed.url_type}**: {url}")
             
             with col_status:
                 st.info(f"Type: {parsed.url_type}")
 
             run_pipeline_background(url, db)
-            st.info("📊 Harvest started in background. Monitor progress in **Pipeline Center**.")
-            st.toast("Harvest started!", icon="🚀")
+            st.info("Harvest started in background. Monitor progress in **Pipeline Center**.")
+            st.toast("Harvest started!")
             time.sleep(1)
             st.rerun()
 
         except ValueError as e:
-            st.error(f"❌ Invalid URL: {e}")
+            st.error(f"Invalid URL: {e}")
         except Exception as e:
-            st.error(f"❌ Failed to start harvest: {e}")
+            st.error(f"Failed to start harvest: {e}")
 
     # Show recent harvests
     st.markdown("---")
-    st.markdown("### 📜 Recent Harvest History")
+    st.markdown("### Recent Harvest History")
     
     try:
         scans = db.get_active_scans()
@@ -139,12 +138,12 @@ def render_harvest_tab(db, run_pipeline_background):
 def render_pending_tab(db):
     """Tab 2: Ambiguity Queue - Manual triage."""
     
-    st.markdown("### 📋 Videos Pending Manual Review")
+    st.markdown("### Videos Pending Manual Review")
     
     pending = db.get_videos_by_status("PENDING_REVIEW", limit=50)
 
     if not pending:
-        st.success("🎉 Queue is empty! All videos have been classified.")
+        st.success("Queue is empty! All videos have been classified.")
     else:
         # Summary stats
         col1, col2, col3 = st.columns(3)
@@ -165,17 +164,17 @@ def render_pending_tab(db):
         # Batch actions
         col1, col2, col3 = st.columns(3)
         with col1:
-            if st.button("✅ Accept All", type="primary", key="batch_accept_pending"):
+            if st.button("Accept All", type="primary", key="batch_accept_pending"):
                 for v in pending:
                     db.update_triage_status(v.video_id, "ACCEPTED", "manual_batch_accept")
-                st.success(f"✅ Accepted {len(pending)} videos")
+                st.success(f"Accepted {len(pending)} videos")
                 time.sleep(0.5)
                 st.rerun()
         with col2:
-            if st.button("❌ Reject All", key="batch_reject_pending"):
+            if st.button("Reject All", key="batch_reject_pending"):
                 for v in pending:
                     db.update_triage_status(v.video_id, "REJECTED", "manual_batch_reject")
-                st.success(f"❌ Rejected {len(pending)} videos")
+                st.success(f"Rejected {len(pending)} videos")
                 time.sleep(0.5)
                 st.rerun()
 
@@ -192,7 +191,7 @@ def render_pending_tab(db):
                     # Show language if not English
                     lang = getattr(video, "language_iso", "en")
                     if lang != "en":
-                        st.caption(f"🌐 Language: {LANGUAGE_MAP.get(lang, lang.upper())}")
+                        st.caption(f"Language: {LANGUAGE_MAP.get(lang, lang.upper())}")
                     
                     try:
                         st.image(
@@ -213,7 +212,7 @@ def render_pending_tab(db):
                         st.caption(f"Reason: {video.triage_reason}")
 
                 with col2:
-                    if st.button("✅", key=f"acc_pending_{i}_{video.video_id}",
+                    if st.button("Accept", key=f"acc_pending_{i}_{video.video_id}",
                                  help="Accept as knowledge-dense"):
                         db.update_triage_status(
                             video.video_id, "ACCEPTED", "manual_accept", 1.0
@@ -221,7 +220,7 @@ def render_pending_tab(db):
                         st.rerun()
 
                 with col3:
-                    if st.button("❌", key=f"rej_pending_{i}_{video.video_id}",
+                    if st.button("Reject", key=f"rej_pending_{i}_{video.video_id}",
                                  help="Reject as noise"):
                         db.update_triage_status(
                             video.video_id, "REJECTED", "manual_reject", 1.0
@@ -229,20 +228,20 @@ def render_pending_tab(db):
                         st.rerun()
 
                 with col4:
-                    st.link_button("▶️", video.url, help="Watch on YouTube")
+                    st.link_button("Watch", video.url, help="Watch on YouTube")
 
 
 def render_rejected_tab(db, run_pipeline_background):
     """Tab 3: Rejected Videos - Override and force accept."""
     
-    st.markdown("### 🚫 Rejected Videos Review")
+    st.markdown("### Rejected Videos Review")
     
     rejected = db.get_videos_by_status_sorted(
         "REJECTED", order_by="updated_at DESC", limit=100
     )
 
     if not rejected:
-        st.success("🎉 No rejected videos! Your triage is perfect.")
+        st.success("No rejected videos! Your triage is perfect.")
     else:
         # Statistics section
         col1, col2, col3 = st.columns(3)
@@ -275,16 +274,16 @@ def render_rejected_tab(db, run_pipeline_background):
         # Batch actions
         col1, col2, col3 = st.columns(3)
         with col1:
-            if st.button("✅ Force Accept All", type="primary", key="batch_override_all"):
+            if st.button("Force Accept All", type="primary", key="batch_override_all"):
                 count = 0
                 for v in rejected:
                     db.manual_override_rejected_video(v.video_id, db_session=None)
                     count += 1
-                st.success(f"🔄 {count} rejected videos marked for reprocessing!")
+                st.success(f"{count} rejected videos marked for reprocessing!")
                 time.sleep(0.5)
                 st.rerun()
         with col2:
-            if st.button("❌ Permanently Reject All", key="batch_permanent_reject"):
+            if st.button("Permanently Reject All", key="batch_permanent_reject"):
                 for v in rejected:
                     db.conn.execute(
                         "UPDATE videos SET triage_status = 'PERMANENTLY_REJECTED' WHERE video_id = ?",
@@ -308,13 +307,13 @@ def render_rejected_tab(db, run_pipeline_background):
                     # Show language if not English
                     lang = getattr(video, "language_iso", "en")
                     if lang != "en":
-                        st.caption(f"🌐 {LANGUAGE_MAP.get(lang, lang.upper())}")
+                        st.caption(f"Language: {LANGUAGE_MAP.get(lang, lang.upper())}")
                     
                     st.caption(f"Reason: {video.triage_reason}")
                     st.caption(f"Confidence: {video.triage_confidence:.0%}")
 
                 with col2:
-                    if st.button("✅ Override", key=f"override_{i}_{video.video_id}",
+                    if st.button("Override", key=f"override_{i}_{video.video_id}",
                                  help="Force accept for reprocessing"):
                         db.manual_override_rejected_video(video.video_id, db_session=None)
                         st.success("Marked for reprocessing!")
@@ -322,13 +321,13 @@ def render_rejected_tab(db, run_pipeline_background):
                         st.rerun()
 
                 with col3:
-                    st.link_button("▶️", video.url, help="Watch on YouTube")
+                    st.link_button("Watch", video.url, help="Watch on YouTube")
 
 
 def render_reprocess_tab(db, run_pipeline_background):
     """Tab 4: Reprocessing - Force-accepted and manual overrides."""
     
-    st.markdown("### 🔄 Videos Ready for Reprocessing")
+    st.markdown("### Videos Ready for Reprocessing")
     
     manually_overridden = db.get_manually_overridden_videos(limit=50)
     
@@ -339,13 +338,13 @@ def render_reprocess_tab(db, run_pipeline_background):
         with col1:
             st.info(f"**{len(manually_overridden)}** videos ready to be re-ingested after manual override")
         with col2:
-            if st.button("🔄 Process All", type="primary", key="process_all_overridden"):
+            if st.button("Process All", type="primary", key="process_all_overridden"):
                 from src.pipeline.orchestrator import PipelineOrchestrator
                 orchestrator = PipelineOrchestrator()
                 try:
                     count = orchestrator.process_manually_overridden_videos()
-                    st.success(f"⚡ Processing {count} manually-overridden videos in background")
-                    st.toast(f"Processing {count} videos!", icon="⚡")
+                    st.success(f"Processing {count} manually-overridden videos in background")
+                    st.toast(f"Processing {count} videos!")
                     time.sleep(1)
                     st.rerun()
                 except Exception as e:
@@ -360,7 +359,7 @@ def render_reprocess_tab(db, run_pipeline_background):
             cols = video_card(video, key_prefix=f"reproc_{i}")
             if cols:
                 with cols[3]:
-                    if st.button("▶️ Process", key=f"process_single_{i}_{video.video_id}"):
+                    if st.button("Process", key=f"process_single_{i}_{video.video_id}"):
                         from src.pipeline.orchestrator import PipelineOrchestrator
                         orchestrator = PipelineOrchestrator()
                         try:
@@ -397,7 +396,7 @@ LANGUAGE_MAP = {
 def render_bulk_tab(db, run_bulk_pipeline_background):
     """Tab 5: Bulk Re-harvest - Select multiple channels for backfill."""
     
-    st.markdown("### 📦 Bulk Channel Re-harvest")
+    st.markdown("### Bulk Channel Re-harvest")
     st.info("Select channels to re-scan. This will refresh likes, comments, and follower counts for all videos.")
     
     channels = db.get_all_channels()
@@ -418,12 +417,12 @@ def render_bulk_tab(db, run_bulk_pipeline_background):
         help="If checked, the pipeline will re-fetch metadata for ALL videos, even if they are already in the database."
     )
     
-    if st.button("🚀 Start Bulk Harvest", type="primary", disabled=not selected_channels):
+    if st.button("Start Bulk Harvest", type="primary", disabled=not selected_channels):
         urls = [c.url for c in selected_channels]
         run_bulk_pipeline_background(urls, db, force_metadata_refresh=force_refresh)
-        st.success(f"🚀 Bulk harvest started for {len(urls)} channels!")
+        st.success(f"Bulk harvest started for {len(urls)} channels!")
         st.info("Monitor the sequential progress in the **Pipeline Center** logs.")
-        st.toast("Bulk harvest started!", icon="📦")
+        st.toast("Bulk harvest started!")
         time.sleep(1)
         st.rerun()
 

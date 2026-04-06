@@ -13,7 +13,7 @@ def render(db, run_pipeline_background):
     
     st.markdown("""
     <div class="main-header">
-        <h1>🌾 Ingestion Hub</h1>
+        <h1>Ingestion Hub</h1>
         <p>Start harvests, manage triage queue, and override rejections</p>
     </div>
     """, unsafe_allow_html=True)
@@ -23,10 +23,10 @@ def render(db, run_pipeline_background):
         # TABS: Start Scan, Pending Review, Rejected, Force-Accepted
         # =====================================================================
         tab_start, tab_pending, tab_rejected, tab_overrides = st.tabs([
-            "🚀 Start Scan",
-            "📋 Pending Review",
-            "❌ Rejected Videos",
-            "⚡ Force-Accepted"
+            "Start Scan",
+            "Pending Review",
+            "Rejected Videos",
+            "Force-Accepted"
         ])
 
         # =====================================================================
@@ -61,7 +61,7 @@ def render(db, run_pipeline_background):
 def _render_start_scan_tab(db, run_pipeline_background):
     """Tab 1: Start a new ingestion scan."""
     
-    st.markdown("### 🚀 Start New Ingestion Scan")
+    st.markdown("### Start New Ingestion Scan")
     st.markdown("""
     Paste a YouTube URL to begin ingestion. Supports:
     - **Channels:** `youtube.com/@channelname` or `youtube.com/channel/XXXX`
@@ -77,17 +77,17 @@ def _render_start_scan_tab(db, run_pipeline_background):
 
     col1, col2 = st.columns([1, 3])
     with col1:
-        start_btn = st.button("🚀 Start Harvest", type="primary", use_container_width=True, key="start_harvest_btn")
+        start_btn = st.button("Start Harvest", type="primary", use_container_width=True, key="start_harvest_btn")
 
     if start_btn and url:
         try:
             from src.ingestion.discovery import parse_youtube_url
             parsed = parse_youtube_url(url)
-            st.success(f"🚀 Ingestion queued for **{parsed.url_type}**: {url}")
+            st.success(f"Ingestion queued for **{parsed.url_type}**: {url}")
 
             run_pipeline_background(url, db)
-            st.info("Pipeline started in background. Monitor progress in the **📊 Pipeline Center**.")
-            st.toast("Harvest started!", icon="🚀")
+            st.info("Pipeline started in background. Monitor progress in the Pipeline Center.")
+            st.toast("Harvest started!")
             time.sleep(1)
             st.rerun()
 
@@ -100,25 +100,25 @@ def _render_start_scan_tab(db, run_pipeline_background):
 def _render_pending_review_tab(db):
     """Tab 2: Manual triage of uncertain videos (Ambiguity Queue)."""
     
-    st.markdown("### 📋 Ambiguity Queue - Videos Pending Manual Review")
+    st.markdown("### Ambiguity Queue - Videos Pending Manual Review")
     
     pending = db.get_videos_by_status("PENDING_REVIEW", limit=50)
 
     if not pending:
-        st.success("🎉 Queue is empty! All videos have been classified.")
+        st.success("Queue is empty! All videos have been classified.")
     else:
         st.info(f"**{len(pending)}** videos awaiting review")
 
         # Batch actions
         col1, col2, col3 = st.columns(3)
         with col1:
-            if st.button("✅ Accept All", type="primary"):
+            if st.button("Accept All", type="primary"):
                 for v in pending:
                     db.update_triage_status(v.video_id, "ACCEPTED", "manual_batch_accept")
                 st.success(f"Accepted {len(pending)} videos")
                 st.rerun()
         with col2:
-            if st.button("❌ Reject All"):
+            if st.button("Reject All"):
                 for v in pending:
                     db.update_triage_status(v.video_id, "REJECTED", "manual_batch_reject")
                 st.success(f"Rejected {len(pending)} videos")
@@ -133,7 +133,7 @@ def _render_pending_review_tab(db):
 
                 with col1:
                     # Language badge
-                    lang_badge = f"🌐 {_get_language_name(video.language_iso)}"
+                    lang_badge = f"Language: {_get_language_name(video.language_iso)}"
                     if video.needs_translation:
                         lang_badge += " (needs translation)"
                     
@@ -154,7 +154,7 @@ def _render_pending_review_tab(db):
                         st.caption(f"Reason: {video.triage_reason}")
 
                 with col2:
-                    if st.button("✅", key=f"acc_{video.video_id}",
+                    if st.button("Accept", key=f"acc_{video.video_id}",
                                  help="Accept as knowledge-dense"):
                         db.update_triage_status(
                             video.video_id, "ACCEPTED", "manual_accept", 1.0
@@ -162,7 +162,7 @@ def _render_pending_review_tab(db):
                         st.rerun()
 
                 with col3:
-                    if st.button("❌", key=f"rej_{video.video_id}",
+                    if st.button("Reject", key=f"rej_{video.video_id}",
                                  help="Reject as noise"):
                         db.update_triage_status(
                             video.video_id, "REJECTED", "manual_reject", 1.0
@@ -170,7 +170,7 @@ def _render_pending_review_tab(db):
                         st.rerun()
 
                 with col4:
-                    st.link_button("▶️", video.url, help="Watch on YouTube")
+                    st.link_button("Watch", video.url, help="Watch on YouTube")
                 
                 with col5:
                     st.caption("")  # Placeholder
@@ -179,14 +179,14 @@ def _render_pending_review_tab(db):
 def _render_rejected_videos_tab(db, run_pipeline_background):
     """Tab 3: Review and force-accept rejected videos."""
     
-    st.markdown("### 🚫 Rejected Videos Review - Override Rejections")
+    st.markdown("### Rejected Videos Review - Override Rejections")
     
     rejected = db.get_videos_by_status_sorted(
         "REJECTED", order_by="updated_at DESC", limit=100
     )
 
     if not rejected:
-        st.success("🎉 No rejected videos! Your triage is perfect.")
+        st.success("No rejected videos! Your triage is perfect.")
     else:
         st.info(f"**{len(rejected)}** videos have been rejected by triage")
 
@@ -221,7 +221,7 @@ def _render_rejected_videos_tab(db, run_pipeline_background):
         # Batch actions
         col1, col2, col3 = st.columns(3)
         with col1:
-            if st.button("✅ Force Accept All", type="primary"):
+            if st.button("Force Accept All", type="primary"):
                 for v in rejected:
                     db.update_triage_status(
                         v.video_id, "ACCEPTED", "force_accept_all", 1.0
@@ -229,7 +229,7 @@ def _render_rejected_videos_tab(db, run_pipeline_background):
                 st.success(f"Force-accepted {len(rejected)} videos")
                 st.rerun()
         with col2:
-            if st.button("🔄 Reprocess All"):
+            if st.button("Reprocess All"):
                 from src.pipeline.orchestrator import PipelineOrchestrator
                 orchestrator = PipelineOrchestrator()
                 try:
@@ -255,26 +255,26 @@ def _render_rejected_videos_tab(db, run_pipeline_background):
                 col1, col2, col3 = st.columns([4, 1, 1])
 
                 with col1:
-                    lang_badge = f"🌐 {_get_language_name(video.language_iso)}"
+                    lang_badge = f"Language: {_get_language_name(video.language_iso)}"
                     st.markdown(f"**{video.title}**")
                     st.caption(lang_badge)
                     st.caption(f"Reason: {video.triage_reason}")
 
                 with col2:
-                    if st.button("✅ Accept", key=f"force_acc_{i}_{video.video_id}"):
+                    if st.button("Accept", key=f"force_acc_{i}_{video.video_id}"):
                         db.update_triage_status(
                             video.video_id, "ACCEPTED", "force_accept", 1.0
                         )
                         st.rerun()
 
                 with col3:
-                    st.link_button("▶️", video.url, help="Watch")
+                    st.link_button("Watch", video.url, help="Watch")
 
 
 def _render_forcibly_accepted_tab(db, run_pipeline_background):
     """Tab 4: Manage force-accepted videos waiting for reprocessing."""
     
-    st.markdown("### ⚡ Force-Accepted Videos (Manual Overrides)")
+    st.markdown("### Force-Accepted Videos (Manual Overrides)")
 
     manually_overridden = db.get_manually_overridden_videos(limit=20)
     if manually_overridden:
@@ -282,13 +282,13 @@ def _render_forcibly_accepted_tab(db, run_pipeline_background):
         with col1:
             st.info(f"**{len(manually_overridden)}** videos waiting to be re-ingested after manual override")
         with col2:
-            if st.button("🔄 Process All Force-Accepted Videos", key="process_overridden"):
+            if st.button("Process All Force-Accepted Videos", key="process_overridden"):
                 from src.pipeline.orchestrator import PipelineOrchestrator
                 orchestrator = PipelineOrchestrator()
                 try:
                     count = orchestrator.process_manually_overridden_videos()
                     st.success(f"Processing {count} manually-overridden videos in background")
-                    st.toast(f"Processing {count} videos!", icon="⚡")
+                    st.toast(f"Processing {count} videos!")
                     time.sleep(1)
                     st.rerun()
                 except Exception as e:
@@ -304,8 +304,8 @@ def _render_forcibly_accepted_tab(db, run_pipeline_background):
                 col1, col2, col3 = st.columns([3, 1, 1])
                 
                 with col1:
-                    lang_badge = f"🌐 {_get_language_name(v.language_iso)}"
-                    st.markdown(f"🔄 **{v.title[:60]}...** (Manual Override)")
+                    lang_badge = f"Language: {_get_language_name(v.language_iso)}"
+                    st.markdown(f"**{v.title[:60]}...** (Manual Override)")
                     st.caption(lang_badge)
                 
                 with col2:
@@ -322,7 +322,7 @@ def _render_forcibly_accepted_tab(db, run_pipeline_background):
                             orchestrator.close()
                 
                 with col3:
-                    st.link_button("▶️", v.url, help="Watch")
+                    st.link_button("Watch", v.url, help="Watch")
     else:
         st.info("No manually-overridden videos waiting for processing.")
 

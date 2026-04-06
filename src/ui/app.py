@@ -27,7 +27,7 @@ from src.ui.views import (
     explorer, guest_intel, export_center,
     logs_monitor, data_management, reject_review,
     transcript_viewer, performance_metrics, comparative_lab,
-    topic_explorer, blueprint_center
+    topic_explorer, blueprint_center, research_agent_view
 )
 
 # ---------------------------------------------------------------------------
@@ -35,8 +35,7 @@ from src.ui.views import (
 # ---------------------------------------------------------------------------
 
 st.set_page_config(
-    page_title="knowledgeVault-YT",
-    page_icon="🧠",
+    page_title="KnowledgeVault Intelligence",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -47,20 +46,19 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
     /* =====================================================================
-       DESIGN SYSTEM TOKENS
+       MODERN DESIGN SYSTEM - INDIGO & SLATE
        ===================================================================== */
     
     :root {
-        /* Primary Palette */
-        --primary-50: #f0f9ff;
-        --primary-100: #e0f2fe;
-        --primary-500: #0ea5e9;
-        --primary-600: #0284c7;
-        --primary-700: #0369a1;
-        --primary-800: #075985;
+        /* Primary - Indigo */
+        --primary-50: #eef2ff;
+        --primary-100: #e0e7ff;
+        --primary-500: #6366f1;
+        --primary-600: #4f46e1;
+        --primary-700: #4338ca;
         
         /* Semantic Colors */
         --success-500: #10b981;
@@ -68,361 +66,168 @@ st.markdown("""
         --error-500: #ef4444;
         --info-500: #3b82f6;
         
-        /* Neutral Palette (Dark Mode) */
-        --neutral-50: #f9fafb;
-        --neutral-100: #f3f4f6;
-        --neutral-200: #e5e7eb;
-        --neutral-300: #d1d5db;
-        --neutral-400: #9ca3af;
-        --neutral-500: #6b7280;
-        --neutral-600: #4b5563;
-        --neutral-700: #2d3748;
-        --neutral-800: #1f2937;
-        --neutral-900: #111827;
+        /* Neutrals - Slate (Dark Mode) */
+        --neutral-50: #f8fafc;
+        --neutral-100: #f1f5f9;
+        --neutral-200: #e2e8f0;
+        --neutral-300: #cbd5e1;
+        --neutral-400: #94a3b8;
+        --neutral-500: #64748b;
+        --neutral-600: #475569;
+        --neutral-700: #334155;
+        --neutral-800: #1e293b;
+        --neutral-900: #0f172a;
+        --neutral-950: #020617;
     }
     
     /* =====================================================================
-       GLOBAL STYLES
+       GLOBAL STYLES & TYPOGRAPHY
        ===================================================================== */
     
     .stApp {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-family: 'Inter', -apple-system, sans-serif;
         font-size: 14px;
         color: var(--neutral-100);
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+        background: radial-gradient(circle at top left, #1e293b, #0f172a 60%, #020617);
     }
     
-    /* Typography Scale */
-    h1 { font-size: 2.125rem; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; }
-    h2 { font-size: 1.875rem; font-weight: 700; line-height: 1.25; letter-spacing: -0.01em; }
-    h3 { font-size: 1.5rem; font-weight: 600; line-height: 1.33; }
-    h4 { font-size: 1.125rem; font-weight: 600; line-height: 1.5; }
-    h5 { font-size: 0.875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    h1, h2, h3, h4 { 
+        font-family: 'Plus Jakarta Sans', sans-serif; 
+        letter-spacing: -0.02em;
+    }
     
-    p { line-height: 1.6; color: var(--neutral-300); }
+    h1 { font-size: 2.25rem; font-weight: 800; color: white; }
+    h2 { font-size: 1.75rem; font-weight: 700; color: var(--neutral-100); }
+    h3 { font-size: 1.25rem; font-weight: 650; color: var(--neutral-200); }
+    
+    p { line-height: 1.6; color: var(--neutral-400); }
     
     /* =====================================================================
-       PROGRESS BARS & ANIMATIONS
+       ENHANCED COMPONENTS
        ===================================================================== */
     
-    @keyframes shimmer {
-        0% { background-position: -200% 0; }
-        100% { background-position: 200% 0; }
-    }
-    
+    /* Progress Bars */
     .stProgress > div > div > div > div {
-        background: linear-gradient(90deg, 
-            var(--primary-500) 0%, 
-            var(--primary-100) 50%, 
-            var(--primary-500) 100%
-        );
-        background-size: 200% 100%;
-        animation: shimmer 2s infinite linear;
+        background: linear-gradient(90deg, #6366f1, #a855f7);
+        border-radius: 999px;
     }
 
-    /* Pulse for active status */
-    @keyframes pulse-green {
-        0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
-        70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-    }
-    
-    .status-pulse {
-        width: 8px;
-        height: 8px;
-        background-color: var(--success-500);
-        border-radius: 50%;
-        display: inline-block;
-        margin-right: 8px;
-        animation: pulse-green 2s infinite;
-    }
-
-    /* =====================================================================
-       GLOBAL COMMAND BAR
-       ===================================================================== */
-    
-    .command-bar-container {
-        background: rgba(30, 41, 59, 0.8);
-        backdrop-filter: blur(12px);
-        border-bottom: 1px solid rgba(14, 165, 233, 0.2);
-        padding: 0.75rem 2rem;
-        position: sticky;
-        top: 0;
-        z-index: 999;
-        margin: -4rem -4rem 2rem -4rem;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-    
-    /* =====================================================================
-       CARDS & CONTAINERS
-       ===================================================================== */
-    
+    /* Cards */
     .metric-card {
-        background: linear-gradient(135deg, rgba(15, 23, 42, 0.8), rgba(30, 41, 59, 0.6));
-        border: 1px solid rgba(14, 165, 233, 0.2);
-        border-radius: 12px;
+        background: rgba(30, 41, 59, 0.4);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 16px;
         padding: 1.5rem;
-        text-align: center;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        backdrop-filter: blur(8px);
+        transition: all 0.3s ease;
     }
     
     .metric-card:hover {
-        border-color: rgba(14, 165, 233, 0.4);
-        box-shadow: 0 10px 30px rgba(14, 165, 233, 0.1);
-        transform: translateY(-2px);
+        background: rgba(30, 41, 59, 0.6);
+        border-color: rgba(99, 102, 241, 0.3);
+        transform: translateY(-4px);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
     }
     
     .metric-card .value {
-        font-size: 2.25rem;
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-size: 2.5rem;
         font-weight: 800;
-        background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        margin-bottom: 0.5rem;
+        color: white;
+        margin-bottom: 0.25rem;
     }
     
     .metric-card .label {
-        font-size: 0.75rem;
-        color: var(--neutral-400);
-        text-transform: uppercase;
-        letter-spacing: 0.1em;
-        font-weight: 600;
-    }
-    
-    /* Status Badges */
-    .status-badge {
-        display: inline-block;
-        padding: 0.375rem 0.75rem;
-        border-radius: 9999px;
-        font-size: 0.75rem;
-        font-weight: 600;
+        font-size: 0.8rem;
+        color: var(--neutral-500);
         text-transform: uppercase;
         letter-spacing: 0.05em;
+        font-weight: 600;
     }
     
-    .status-success { background: rgba(16, 185, 129, 0.15); color: #10b981; }
-    .status-warning { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
-    .status-error { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
-    .status-info { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
-    
-    /* =====================================================================
-       SIDEBAR STYLING
-       ===================================================================== */
-    
-    .stSidebar > div:first-child {
-        background: linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(20, 28, 48, 0.95) 100%);
+    /* Sidebar Navigation */
+    .stSidebar {
+        background-color: var(--neutral-950) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
     }
     
     .stSidebar [data-testid="stSidebarNav"] {
-        padding: 0;
+        background-color: transparent !important;
     }
     
-    .stSidebar .stMarkdown {
-        border-bottom: 1px solid rgba(14, 165, 233, 0.1);
-        margin-bottom: 1rem;
-        padding-bottom: 1rem;
-    }
-    
-    .stSidebar .stMarkdown h1 {
-        font-size: 1.25rem;
-        margin-bottom: 0;
-    }
-    
-    .stSidebar .stMarkdown h2 {
-        font-size: 0.875rem;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: var(--neutral-400);
-        margin: 1.5rem 0 0.75rem 0;
-    }
-    
-    .sidebar-nav-item {
-        padding: 0.75rem 1rem;
+    /* Professional Sidebar Nav Items */
+    .nav-item {
+        padding: 0.6rem 1rem;
         margin: 0.25rem 0;
         border-radius: 10px;
-        cursor: pointer;
+        color: var(--neutral-400);
         font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
         transition: all 0.2s ease;
-        border-left: 3px solid transparent;
-        position: relative;
+        cursor: pointer;
     }
     
-    .sidebar-nav-item:hover {
-        background: rgba(14, 165, 233, 0.1);
-        border-left-color: var(--primary-500);
-        padding-left: 1.25rem;
-    }
-    
-    /* =====================================================================
-       BUTTONS & INTERACTIONS
-       ===================================================================== */
-    
-    .stButton > button {
-        border-radius: 10px;
-        padding: 0.75rem 1.5rem;
-        font-weight: 600;
-        letter-spacing: 0.02em;
-        transition: all 0.2s ease;
-        border: none;
-        background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    .nav-item:hover {
+        background: rgba(99, 102, 241, 0.1);
         color: white;
     }
     
-    .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 25px rgba(14, 165, 233, 0.3);
+    .nav-item.active {
+        background: rgba(99, 102, 241, 0.15);
+        color: var(--primary-500);
+        border-left: 3px solid var(--primary-500);
     }
     
-    .stButton > button:active {
-        transform: translateY(0);
-    }
-    
-    /* =====================================================================
-       INPUT FIELDS
-       ===================================================================== */
-    
-    .stTextInput > div > div > input,
-    .stTextArea > div > div > textarea,
-    .stSelectbox > div > div > select {
-        background: rgba(30, 41, 59, 0.6);
-        border: 1px solid rgba(14, 165, 233, 0.2);
-        border-radius: 10px;
-        color: var(--neutral-100);
-        padding: 0.75rem 1rem;
-        font-family: 'Inter', sans-serif;
+    /* Buttons */
+    .stButton > button {
+        border-radius: 12px;
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e1 100%);
+        border: none;
+        color: white;
+        font-weight: 600;
+        padding: 0.6rem 1.5rem;
         transition: all 0.2s ease;
     }
     
-    .stTextInput > div > div > input:focus,
-    .stTextArea > div > div > textarea:focus,
-    .stSelectbox > div > div > select:focus {
-        border-color: var(--primary-500);
-        box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
-        outline: none;
+    .stButton > button:hover {
+        box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
+        transform: translateY(-1px);
     }
     
-    /* =====================================================================
-       RADIO & CHECKBOXES
-       ===================================================================== */
-    
-    .stRadio > div {
-        gap: 0.75rem;
-    }
-    
-    .stRadio > div > label {
-        display: flex;
-        align-items: center;
-        padding: 0.5rem 0;
-        border-radius: 8px;
-        transition: background 0.2s ease;
-        cursor: pointer;
-    }
-    
-    .stRadio > div > label:hover {
-        background: rgba(14, 165, 233, 0.05);
-    }
-    
-    /* =====================================================================
-       EXPANDABLE SECTIONS
-       ===================================================================== */
-    
-    .stExpander {
-        border: 1px solid rgba(14, 165, 233, 0.15);
-        border-radius: 10px;
-        overflow: hidden;
-    }
-    
-    .stExpander > div:first-child {
-        background: rgba(30, 41, 59, 0.4);
-        padding: 1rem 1.25rem;
-    }
-    
-    .stExpander > div:first-child:hover {
-        background: rgba(30, 41, 59, 0.6);
-    }
-    
-    /* =====================================================================
-       TABLES
-       ===================================================================== */
-    
-    [data-testid="stDataFrame"] {
-        border-radius: 10px;
-        overflow: hidden;
-    }
-    
-    [data-testid="stDataFrame"] thead {
-        background: rgba(14, 165, 233, 0.1);
-    }
-    
-    /* =====================================================================
-       ACCESSIBILITY ENHANCEMENTS
-       ===================================================================== */
-    
-    /* Focus states for keyboard navigation */
-    *:focus-visible {
-        outline: 2px solid var(--primary-500);
-        outline-offset: 2px;
-    }
-    
-    /* Improved contrast for text */
-    .stMarkdown a {
-        color: #06b6d4;
-        text-decoration: none;
-        font-weight: 500;
-    }
-    
-    .stMarkdown a:hover {
-        text-decoration: underline;
-    }
-    
-    /* =====================================================================
-       RESPONSIVE DESIGN
-       ===================================================================== */
-    
-    @media (max-width: 768px) {
-        .main-header {
-            padding: 1.5rem 1.5rem;
-        }
-        
-        .main-header h1 {
-            font-size: 1.5rem;
-        }
-        
-        .metric-card {
-            padding: 1rem;
-        }
-        
-        .metric-card .value {
-            font-size: 1.75rem;
-        }
-    }
-    
-    /* =====================================================================
-       DARK MODE SPECIFIC TWEAKS
-       ===================================================================== */
-    
-    .stSelectbox {
-        color: var(--neutral-100);
-    }
-    
-    [role="listbox"] {
-        background: var(--neutral-800) !important;
-        border: 1px solid rgba(14, 165, 233, 0.2) !important;
+    /* Inputs */
+    .stTextInput input, .stTextArea textarea {
+        background-color: rgba(15, 23, 42, 0.6) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
         border-radius: 10px !important;
+        color: white !important;
     }
     
-    [role="option"] {
-        color: var(--neutral-100) !important;
+    .stTextInput input:focus, .stTextArea textarea:focus {
+        border-color: var(--primary-500) !important;
+        box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
+    }
+
+    /* Accessibility */
+    *:focus {
+        outline: none !important;
     }
     
-    [role="option"]:hover {
-        background: rgba(14, 165, 233, 0.2) !important;
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+        width: 8px;
     }
-    
+    ::-webkit-scrollbar-track {
+        background: var(--neutral-950);
+    }
+    ::-webkit-scrollbar-thumb {
+        background: var(--neutral-800);
+        border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: var(--neutral-700);
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -672,14 +477,14 @@ health = check_service_health()
 st.sidebar.markdown("""
 <div style="
     padding: 1.5rem;
-    background: linear-gradient(135deg, rgba(14, 165, 233, 0.1), rgba(3, 105, 161, 0.05));
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(79, 70, 225, 0.05));
     border-radius: 12px;
-    border: 1px solid rgba(14, 165, 233, 0.2);
-    margin-bottom: 1.5rem;
-    text-align: center;
+    border: 1px solid rgba(99, 102, 241, 0.1);
+    margin-bottom: 2rem;
+    text-align: left;
 ">
-    <h1 style="margin: 0; font-size: 1.5rem; font-weight: 700;">🧠 knowledgeVault</h1>
-    <p style="margin: 0.5rem 0 0; font-size: 0.85rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em;">YouTube Intelligence</p>
+    <h1 style="margin: 0; font-size: 1.25rem; font-weight: 800; color: white;">KnowledgeVault</h1>
+    <p style="margin: 0.25rem 0 0; font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600;">Research Intelligence</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -688,40 +493,41 @@ with st.sidebar:
     cols = st.columns(2)
     with cols[0]:
         if health["database"]:
-            st.success("✅ Database")
+            st.success("Database")
         else:
-            st.error("❌ Database")
+            st.error("Database")
     
     with cols[1]:
         if health["ollama"]:
-            st.success("✅ Ollama")
+            st.success("Ollama")
         else:
-            st.warning("⚠️ Ollama")
+            st.warning("Ollama")
     
     if health["errors"]:
-        with st.expander("🔍 Service Details"):
+        with st.expander("Service Details"):
             for error in health["errors"]:
-                st.caption(f"⚠️ {error}")
+                st.caption(error)
 
 # Categorized Navigation Structure
 NAV_STRUCTURE = {
     "Research": [
-        "🏠 Dashboard", 
-        "🔬 Intelligence Lab",
-        "🧬 Topic Explorer",
-        "📋 Blueprint Center",
-        "⚖️ Comparative Lab",
-        "📜 Transcripts", 
+        "Dashboard", 
+        "Intelligence Lab",
+        "Research Agent",
+        "Topic Explorer",
+        "Blueprint Center",
+        "Comparative Lab",
+        "Transcripts", 
     ],
     "Operations": [
-        "🌾 Ingestion Hub", 
-        "📊 Pipeline Center",
-        "⚖️ Review Center", # New View planned
+        "Ingestion Hub", 
+        "Pipeline Center",
+        "Review Center",
     ],
-    "System": [
-        "⚡ Performance",
-        "📤 Export & Integration",
-        "⚙️ Admin & Settings"
+    "Systems": [
+        "Performance",
+        "Export & Integration",
+        "Settings"
     ]
 }
 
@@ -739,7 +545,7 @@ if "navigate" in st.session_state:
 
 # Set default page
 if "current_page" not in st.session_state:
-    st.session_state.current_page = "🏠 Dashboard"
+    st.session_state.current_page = "Dashboard"
 
 # Render Sidebar with Categorized Navigation
 with st.sidebar:
@@ -792,8 +598,8 @@ st.sidebar.markdown("""
     text-align: center;
 ">
     <p style="margin: 0; line-height: 1.5;">
-        📖 <a href='#' style='color: #0ea5e9; text-decoration: none;'>Documentation</a> • 
-        💡 <a href='#' style='color: #0ea5e9; text-decoration: none;'>Support</a>
+        <a href='#' style='color: #0ea5e9; text-decoration: none;'>Documentation</a> • 
+        <a href='#' style='color: #0ea5e9; text-decoration: none;'>Support</a>
     </p>
     <p style="margin: 0.5rem 0 0; opacity: 0.7;">v1.1 • Architecture Overhaul</p>
 </div>
@@ -812,7 +618,6 @@ st.sidebar.markdown("""
 st.markdown("""
 <div class="command-bar-container">
     <div style="display: flex; align-items: center; gap: 1rem;">
-        <span style="font-size: 1.2rem;">🔍</span>
         <span style="font-weight: 600; color: var(--neutral-400);">COMMAND BAR</span>
     </div>
 </div>
@@ -829,27 +634,28 @@ with st.container():
             key="global_harvest_input"
         )
     with col_btn:
-        if st.button("🚀 Harvest", type="primary", use_container_width=True, key="global_harvest_btn"):
+        if st.button("Harvest", type="primary", use_container_width=True, key="global_harvest_btn"):
             if harvest_url:
                 run_pipeline_background(harvest_url, db)
-                st.toast(f"Harvest started for {harvest_url[:30]}...", icon="🚀")
+                st.toast(f"Harvest started for {harvest_url[:30]}...")
                 st.rerun()
 
 st.markdown("<br>", unsafe_allow_html=True)
 
 PAGE_MAP = {
-    "🏠 Dashboard": lambda: dashboard.render(db),
-    "🌾 Ingestion Hub": lambda: ingestion_hub.render(db, run_pipeline_background, run_bulk_pipeline_background),
-    "📊 Pipeline Center": lambda: pipeline_center.render(db, run_pipeline_background),
-    "⚖️ Review Center": lambda: reject_review.render(db), # Using existing reject_review for now
-    "⚡ Performance": lambda: performance_metrics.render(),
-    "🔬 Intelligence Lab": lambda: intelligence_lab.render(db, vs),
-    "🧬 Topic Explorer": lambda: topic_explorer.render(db),
-    "⚖️ Comparative Lab": lambda: comparative_lab.render(db, vs),
-    "📋 Blueprint Center": lambda: blueprint_center.render(db),
-    "📜 Transcripts": lambda: transcript_viewer.render(db),
-    "📤 Export & Integration": lambda: export_center.render(db),
-    "⚙️ Admin & Settings": lambda: data_management.render(db, run_repair_background, get_vault_diagnostics),
+    "Dashboard": lambda: dashboard.render(db),
+    "Ingestion Hub": lambda: ingestion_hub.render(db, run_pipeline_background, run_bulk_pipeline_background),
+    "Pipeline Center": lambda: pipeline_center.render(db, run_pipeline_background),
+    "Review Center": lambda: reject_review.render(db),
+    "Performance": lambda: performance_metrics.render(),
+    "Intelligence Lab": lambda: intelligence_lab.render_intelligence_lab(db),
+    "Research Agent": lambda: research_agent_view.render_research_agent(db),
+    "Topic Explorer": lambda: topic_explorer.render(db),
+    "Comparative Lab": lambda: comparative_lab.render(db, vs),
+    "Blueprint Center": lambda: blueprint_center.render(db),
+    "Transcripts": lambda: transcript_viewer.render(db),
+    "Export & Integration": lambda: export_center.render(db),
+    "Settings": lambda: data_management.render(db, run_repair_background, get_vault_diagnostics),
 }
 
 PAGE_MAP[page]()

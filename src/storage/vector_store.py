@@ -38,6 +38,7 @@ class OllamaEmbeddingFunction:
         """Generate embeddings for a list of texts.
 
         Attempts batch embedding first, falls back to sequential.
+        Respects the global LLM concurrency semaphore.
         """
         if not input:
             return []
@@ -47,38 +48,42 @@ class OllamaEmbeddingFunction:
             logger.error(f"Invalid input type to __call__: expected list, got {type(input)}")
             raise TypeError(f"Expected list of strings, got {type(input)}")
 
-        # Try batch embedding (Ollama library 0.1.7+ supports .embed)
-        try:
-            if hasattr(ollama_client, "embed"):
-                response = ollama_client.embed(
-                    model=self.model_name,
-                    input=input,
-                )
-                embeddings = response.get("embeddings", [])
-                logger.debug(f"Batch embed succeeded: {len(embeddings)} embeddings")
-                return embeddings
-        except Exception as e:
-            logger.debug(f"Ollama batch embed failed, falling back to sequential: {e}")
+        from src.utils.llm_pool import get_llm_semaphore
+        semaphore = get_llm_semaphore()
 
-        # Sequential fallback for older Ollama versions (.embeddings)
-        embeddings = []
-        try:
-            for text in input:
-                if hasattr(ollama_client, "embeddings"):
-                    response = ollama_client.embeddings(
+        with semaphore:
+            # Try batch embedding (Ollama library 0.1.7+ supports .embed)
+            try:
+                if hasattr(ollama_client, "embed"):
+                    response = ollama_client.embed(
                         model=self.model_name,
-                        prompt=text,
+                        input=input,
                     )
-                    embeddings.append(response["embedding"])
-                else:
-                    # Last resort fallback if library structure is unexpected
-                    raise AttributeError("Ollama client has neither 'embed' nor 'embeddings' methods")
-        except Exception as e:
-            logger.error(f"Ollama embedding failed: {e}")
-            raise
+                    embeddings = response.get("embeddings", [])
+                    logger.debug(f"Batch embed succeeded: {len(embeddings)} embeddings")
+                    return embeddings
+            except Exception as e:
+                logger.debug(f"Ollama batch embed failed, falling back to sequential: {e}")
 
-        logger.debug(f"Sequential embed succeeded: {len(embeddings)} embeddings")
-        return embeddings
+            # Sequential fallback for older Ollama versions (.embeddings)
+            embeddings = []
+            try:
+                for text in input:
+                    if hasattr(ollama_client, "embeddings"):
+                        response = ollama_client.embeddings(
+                            model=self.model_name,
+                            prompt=text,
+                        )
+                        embeddings.append(response["embedding"])
+                    else:
+                        # Last resort fallback if library structure is unexpected
+                        raise AttributeError("Ollama client has neither 'embed' nor 'embeddings' methods")
+            except Exception as e:
+                logger.error(f"Ollama embedding failed: {e}")
+                raise
+
+            logger.debug(f"Sequential embed succeeded: {len(embeddings)} embeddings")
+            return embeddings
 
 
 

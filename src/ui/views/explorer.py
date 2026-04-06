@@ -11,7 +11,7 @@ def render(db):
     """Render the Knowledge Explorer page."""
     st.markdown("""
     <div class="main-header">
-        <h1>🧠 Knowledge Explorer</h1>
+        <h1>Knowledge Explorer</h1>
         <p>Visualize connections and discover cross-entity relationships</p>
     </div>
     """, unsafe_allow_html=True)
@@ -24,7 +24,7 @@ def render(db):
         graph_db = GraphStore()
         explorer_obj = KnowledgeExplorer(db, graph_db)
 
-        tab1, tab2 = st.tabs(["🌐 Connection Graph", "🔍 Topic Spotlight"])
+        tab1, tab2 = st.tabs(["Connection Graph", "Topic Spotlight"])
 
         with tab1:
             _render_connection_graph(explorer_obj, agraph, Node, Edge, Config)
@@ -44,14 +44,14 @@ def _render_connection_graph(explorer_obj, agraph, Node, Edge, Config):
     col1, col2 = st.columns([1, 4])
 
     with col1:
-        st.markdown("### 🔭 Exploration Mode")
-        explore_mode = st.radio("View Type", ["🎯 Target Search", "🌐 Entire Vault"], horizontal=True)
+        st.markdown("### Exploration Mode")
+        explore_mode = st.radio("View Type", ["Target Search", "Entire Vault"], horizontal=True)
 
-        if explore_mode == "🎯 Target Search":
+        if explore_mode == "Target Search":
             search_q = st.text_input("Entity Name", placeholder="Elon Musk, Mars, etc.")
             search_type = st.selectbox("Type", ["Guest", "Topic", "Video"])
 
-            if st.button("🚀 Visualize Connections", use_container_width=True):
+            if st.button("Visualize Connections", use_container_width=True):
                 if search_q:
                     with st.spinner("Traversing graph..."):
                         data = explorer_obj.get_entity_connections(search_q, search_type)
@@ -60,7 +60,7 @@ def _render_connection_graph(explorer_obj, agraph, Node, Edge, Config):
                 else:
                     st.warning("Please enter an entity name.")
         else:
-            if st.button("🔭 Load Global Map", type="primary", use_container_width=True):
+            if st.button("Load Global Map", type="primary", use_container_width=True):
                 with st.spinner("Mapping entire vault..."):
                     data = explorer_obj.get_global_graph()
                     st.session_state.explorer_graph = data
@@ -68,10 +68,10 @@ def _render_connection_graph(explorer_obj, agraph, Node, Edge, Config):
 
         # Discovery Sidebar (Stats)
         st.markdown("---")
-        st.markdown("### 📊 Vault Discovery")
+        st.markdown("### Vault Discovery")
         try:
             stats = explorer_obj.get_vault_stats()
-            with st.expander("🔥 Trending Topics", expanded=True):
+            with st.expander("Trending Topics", expanded=True):
                 for t in stats["top_topics"]:
                     if st.button(f"#{t['name']} ({t['weight']})", key=f"top_t_{t['name']}", use_container_width=True):
                         with st.spinner(f"Mapping {t['name']}..."):
@@ -80,9 +80,9 @@ def _render_connection_graph(explorer_obj, agraph, Node, Edge, Config):
                             st.session_state.explorer_mode = "Target"
                             st.rerun()
 
-            with st.expander("👤 Top Experts", expanded=False):
+            with st.expander("Top Experts", expanded=False):
                 for g in stats["top_guests"]:
-                    if st.button(f"👤 {g['name']} ({g['weight']})", key=f"top_g_{g['name']}", use_container_width=True):
+                    if st.button(f"{g['name']} ({g['weight']})", key=f"top_g_{g['name']}", use_container_width=True):
                         with st.spinner(f"Mapping {g['name']}..."):
                             data = explorer_obj.get_entity_connections(g['name'], "Guest")
                             st.session_state.explorer_graph = data
@@ -136,7 +136,7 @@ def _render_connection_graph(explorer_obj, agraph, Node, Edge, Config):
                 )
 
                 st.markdown(f"**Viewing:** {st.session_state.get('explorer_mode', 'Vault')} Network")
-                st.caption("🔴 Video | 🟣 Guest | 🔵 Topic | 🟡 Channel")
+                st.caption("Color Key: Video (Red) | Guest (Purple) | Topic (Blue) | Channel (Yellow)")
                 
                 # agraph returns the id of the clicked node
                 # Note: streamlit-agraph returns None if no node is clicked
@@ -147,7 +147,7 @@ def _render_connection_graph(explorer_obj, agraph, Node, Edge, Config):
                     node = next((n for n in graph_data["nodes"] if n["id"] == selected_node_id), None)
                     if node:
                         st.markdown("---")
-                        st.markdown(f"### 📋 Node Details: {node['label']}")
+                        st.markdown(f"### Node Details: {node['label']}")
                         
                         d_col1, d_col2 = st.columns(2)
                         with d_col1:
@@ -155,18 +155,18 @@ def _render_connection_graph(explorer_obj, agraph, Node, Edge, Config):
                             if node["type"] == "Video":
                                 st.write(f"**Video ID:** `{node['internal_id']}`")
                                 vid_url = f"https://www.youtube.com/watch?v={node['internal_id']}"
-                                st.link_button("📺 Watch on YouTube", vid_url)
+                                st.link_button("Watch on YouTube", vid_url)
                                 
                                 # Show Thematic Bridges
                                 st.markdown("---")
-                                st.markdown("🌉 **Thematic Bridges**")
+                                st.markdown("Thematic Bridges")
                                 bridges = explorer_obj.get_thematic_bridges(node["internal_id"])
                                 if bridges:
                                     for b in bridges:
                                         with st.expander(f"{b['title'][:40]}...", expanded=False):
                                             st.write(f"Connects via: **{', '.join(b['bridge_types'])}**")
                                             st.write(f"Strength: {b['shared_count']} shared entities")
-                                            if st.button(f"🔍 Explore {b['video_id'][:8]}", key=f"bridge_{b['video_id']}"):
+                                            if st.button(f"Explore {b['video_id'][:8]}", key=f"bridge_{b['video_id']}"):
                                                 st.session_state.explorer_mode = "Video"
                                                 st.session_state.explorer_entity = b["video_id"]
                                                 st.rerun()
@@ -176,13 +176,13 @@ def _render_connection_graph(explorer_obj, agraph, Node, Edge, Config):
                         with d_col2:
                             if node["type"] == "Guest":
                                 st.write(f"**Canonical Name:** {node['internal_id']}")
-                                if st.button(f"👤 View Guest Intel: {node['label']}"):
-                                    st.session_state.navigate = "👤 Guest Intelligence"
+                                if st.button(f"View Guest Intel: {node['label']}"):
+                                    st.session_state.navigate = "Guest Intelligence"
                                     st.session_state.selected_guest = node["internal_id"]
                                     st.rerun()
                             
                             if node["type"] == "Topic":
-                                if st.button(f"🔍 Spotlight Topic: {node['label']}"):
+                                if st.button(f"Spotlight Topic: {node['label']}"):
                                     # Switch to tab2 and select topic
                                     # Note: Streamlit tabs don't easily switch via code without index state
                                     st.info(f"Go to **Topic Spotlight** tab to explore '{node['label']}' in depth.")
@@ -196,7 +196,7 @@ def _render_topic_spotlight(graph_db, explorer_obj):
     """Render the Topic Spotlight tab."""
     import pandas as pd
 
-    st.markdown("### 🔍 Topic Deep-Dive")
+    st.markdown("### Topic Deep-Dive")
     with graph_db.driver.session() as session:
         topics_res = session.run("MATCH (t:Topic) RETURN t.name AS name ORDER BY name")
         all_topics = [r["name"] for r in topics_res]
@@ -209,16 +209,16 @@ def _render_topic_spotlight(graph_db, explorer_obj):
 
             l_col1, l_col2 = st.columns(2)
             with l_col1:
-                st.markdown(f"#### 📺 Related Videos ({len(landscape['videos'])})")
+                st.markdown(f"#### Related Videos ({len(landscape['videos'])})")
                 for v in landscape["videos"]:
                     st.markdown(f"- **{v['title']}** (`{v['video_id']}`)")
 
             with l_col2:
-                st.markdown(f"#### 👤 Expert Guests ({len(landscape['guests'])})")
+                st.markdown(f"#### Expert Guests ({len(landscape['guests'])})")
                 for g in landscape["guests"]:
                     st.markdown(f"- **{g['canonical_name']}**")
 
-            st.markdown("#### 🔗 Related Topics")
+            st.markdown("#### Related Topics")
             if landscape["related"]:
                 rel_df = pd.DataFrame(landscape["related"]).sort_values(
                     "co_occurrence", ascending=False

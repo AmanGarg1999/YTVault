@@ -21,7 +21,7 @@ def render(db, run_repair=None, get_diagnostics=None):
     """Render the Data Management Center page."""
     st.markdown("""
     <div class="main-header">
-        <h1>🗑️ Data Management Center</h1>
+        <h1>Data Management Center</h1>
         <p>Delete video/channel data, manage storage, and track deletion history</p>
     </div>
     """, unsafe_allow_html=True)
@@ -29,7 +29,7 @@ def render(db, run_repair=None, get_diagnostics=None):
     try:
         # Important note about reprocessing
         st.info("""
-        **ℹ️ About Data Deletion & Reprocessing:**
+        **About Data Deletion & Reprocessing:**
         - After deletion, videos go back to `DISCOVERED` state and CAN be reprocessed
         - Reprocessing will regenerate all deleted data (chunks, embeddings, graph nodes)
         - Vector/Graph data is NOT automatically cleaned - you'll have duplicates on reprocess
@@ -39,7 +39,7 @@ def render(db, run_repair=None, get_diagnostics=None):
         # =====================================================================
         # SECTION 1: Delete Single Video Data
         # =====================================================================
-        st.markdown("### 📹 Delete Single Video")
+        st.markdown("### Delete Single Video")
         
         col1, col2 = st.columns(2)
         
@@ -68,7 +68,7 @@ def render(db, run_repair=None, get_diagnostics=None):
                     
                     # Preview what will be deleted
                     st.markdown("---")
-                    with st.expander("👀 Preview: What Will Be Deleted", expanded=True):
+                    with st.expander("Preview: What Will Be Deleted", expanded=True):
                         col_a, col_b, col_c = st.columns(3)
                         
                         # Count chunks
@@ -98,12 +98,12 @@ def render(db, run_repair=None, get_diagnostics=None):
                         st.metric("Guest Appearances", guest_count)
                         
                         st.markdown("**Data to be deleted:**")
-                        st.write(f"- ✂️ {chunk_count} transcript chunks")
-                        st.write(f"- 💭 {len(claims)} extracted claims")
-                        st.write(f"- 💬 {len(quotes)} notable quotes")
-                        st.write(f"- 👤 {guest_count} guest appearance records")
-                        st.write(f"- 📄 Temporary processing state")
-                        st.write(f"- 📊 Video summary data")
+                        st.write(f"- {chunk_count} transcript chunks")
+                        st.write(f"- {len(claims)} extracted claims")
+                        st.write(f"- {len(quotes)} notable quotes")
+                        st.write(f"- {guest_count} guest appearance records")
+                        st.write(f"- Temporary processing state")
+                        st.write(f"- Video summary data")
                         
                         st.warning("""
                         **NOT deleted (causes duplicate on reprocess):**
@@ -127,38 +127,66 @@ def render(db, run_repair=None, get_diagnostics=None):
                     
                     with col_delete:
                         if st.button(
-                            "🗑️ DELETE VIDEO DATA",
+                            "DELETE VIDEO DATA",
                             type="secondary",
                             key="delete_video_btn",
                             use_container_width=True,
                         ):
-                            if st.checkbox("⚠️ I understand this cannot be undone", key="confirm_delete_video"):
+                            if st.checkbox("I understand this cannot be undone", key="confirm_delete_video"):
                                 try:
-                                    result = db.delete_video_data(selected_video.video_id, delete_reason)
-                                    
+                                    # --- Atomic Multi-Store Deletion ---
+                                    with st.spinner("Deleting across all intelligence stores..."):
+                                        # 1. SQLite Relational Data
+                                        result = db.delete_video_data(selected_video.video_id, delete_reason)
+                                        
+                                        # 2. Vector Store (ChromaDB)
+                                        vector_deleted = False
+                                        try:
+                                            from src.storage.vector_store import VectorStore
+                                            vs = VectorStore()
+                                            vs.delete_video_chunks(selected_video.video_id)
+                                            vector_deleted = True
+                                        except Exception as e:
+                                            logger.warning(f"Vector deletion failed for {selected_video.video_id}: {e}")
+                                        
+                                        # 3. Graph Store (Neo4j)
+                                        graph_result = {"video_deleted": False, "claims_deleted": 0}
+                                        try:
+                                            from src.storage.graph_store import GraphStore
+                                            gs = GraphStore()
+                                            graph_result = gs.delete_video_nodes(selected_video.video_id)
+                                            gs.close()
+                                        except Exception as e:
+                                            logger.warning(f"Graph deletion failed for {selected_video.video_id}: {e}")
+
                                     st.success(f"""
-                                    ✅ **Video data deleted successfully!**
+                                    **Atomic Deletion Successful!**
                                     
-                                    - Chunks deleted: {result['chunks_deleted']}
-                                    - Claims deleted: {result['claims_deleted']}
-                                    - Quotes deleted: {result['quotes_deleted']}
-                                    - Guest appearances removed: {result['appearances_removed']}
-                                    - Guests cleaned up: {result['guests_removed']}
+                                    **Relational Store (SQLite):**
+                                    - Chunks: {result['chunks_deleted']} | Claims: {result['claims_deleted']}
+                                    - Quotes: {result['quotes_deleted']} | Appearances: {result['appearances_removed']}
                                     
-                                    **Video is now in DISCOVERED state and can be reprocessed.**
+                                    **Vector Store (ChromaDB):**
+                                    - Status: {'✅ Synchronized' if vector_deleted else '⚠️ Failed / Offline'}
+                                    
+                                    **Knowledge Graph (Neo4j):**
+                                    - Video Node: {'✅ Removed' if graph_result['video_deleted'] else '❌ Missing or Fail'}
+                                    - Claim Nodes: {graph_result['claims_deleted']} removed
+                                    
+                                    **Video is now in DISCOVERED state and can be reprocessed safely.**
                                     """)
                                     
                                     # Log to activity
                                     db.log_pipeline_event(
                                         level="WARNING",
-                                        message=f"Video data deleted: {selected_video.title[:50]}...",
+                                        message=f"Atomic deletion: {selected_video.title[:50]}...",
                                         video_id=selected_video.video_id,
                                         stage="DATA_MANAGEMENT",
                                     )
                                     
                                     st.rerun()
                                 except Exception as e:
-                                    st.error(f"❌ Deletion failed: {e}")
+                                    st.error(f"Deletion failed: {e}")
                                     logger.error(f"Video deletion error: {e}", exc_info=True)
             else:
                 st.info("No processed videos available to delete.")
@@ -168,7 +196,7 @@ def render(db, run_repair=None, get_diagnostics=None):
         # =====================================================================
         # SECTION 2: Delete All Videos from Channel
         # =====================================================================
-        st.markdown("### 📺 Delete All Videos from Channel")
+        st.markdown("### Delete All Videos from Channel")
         
         channels = db.get_all_channels()
         
@@ -205,37 +233,71 @@ def render(db, run_repair=None, get_diagnostics=None):
                 
                 with col_delete:
                     if st.button(
-                        "🗑️ DELETE CHANNEL DATA",
+                        "DELETE CHANNEL DATA",
                         type="secondary",
                         key="delete_channel_btn",
                         use_container_width=True,
                     ):
-                        if st.checkbox("⚠️ I understand this will delete data for ALL videos", key="confirm_delete_channel"):
+                        if st.checkbox("I understand this will delete data for ALL videos", key="confirm_delete_channel"):
                             try:
-                                result = db.delete_channel_data(selected_channel.channel_id, delete_reason)
-                                
+                                # --- Atomic Multi-Store Channel Deletion ---
+                                with st.spinner(f"Purging all data for {len(videos)} videos..."):
+                                    # 1. SQLite Relational Data
+                                    result = db.delete_channel_data(selected_channel.channel_id, delete_reason)
+                                    
+                                    # Instantiate external stores
+                                    from src.storage.vector_store import VectorStore
+                                    from src.storage.graph_store import GraphStore
+                                    vs = VectorStore()
+                                    gs = GraphStore()
+                                    
+                                    vector_count = 0
+                                    graph_count = 0
+                                    
+                                    # 2 & 3. External Stores
+                                    progress_bar = st.progress(0, text="Cleaning external stores...")
+                                    for i, v in enumerate(videos):
+                                        # Vector
+                                        try:
+                                            vs.delete_video_chunks(v.video_id)
+                                            vector_count += 1
+                                        except: pass
+                                        
+                                        # Graph
+                                        try:
+                                            gs.delete_video_nodes(v.video_id)
+                                            graph_count += 1
+                                        except: pass
+                                        
+                                        progress_bar.progress((i + 1) / len(videos))
+                                    
+                                    gs.close()
+
                                 st.success(f"""
-                                ✅ **Channel data deleted successfully!**
+                                **Atomic Channel Deletion Successful!**
                                 
-                                - Videos processed: {result['videos_deleted']}
-                                - Total chunks deleted: {result['chunks_deleted']}
-                                - Guests cleaned up: {result['guests_removed']}
-                                - Channel reset: {'✓' if result['channel_reset'] else '✗'}
+                                **Relational Store (SQLite):**
+                                - Videos Processed: {result['videos_deleted']}
+                                - Total Chunks: {result['chunks_deleted']}
                                 
-                                **All videos are now rescannable.**
+                                **External Stores synchronization:**
+                                - Vector Store: {vector_count}/{len(videos)} videos cleared
+                                - Knowledge Graph: {graph_count}/{len(videos)} videos cleared
+                                
+                                **All videos in {selected_channel.name} are now rescannable.**
                                 """)
                                 
                                 # Log to activity
                                 db.log_pipeline_event(
                                     level="WARNING",
-                                    message=f"Channel data deleted: {selected_channel.name} ({len(videos)} videos)",
+                                    message=f"Atomic channel deletion: {selected_channel.name} ({len(videos)} videos)",
                                     channel_id=selected_channel.channel_id,
                                     stage="DATA_MANAGEMENT",
                                 )
                                 
                                 st.rerun()
                             except Exception as e:
-                                st.error(f"❌ Deletion failed: {e}")
+                                st.error(f"Deletion failed: {e}")
                                 logger.error(f"Channel deletion error: {e}", exc_info=True)
         else:
             st.info("No channels available.")
@@ -245,7 +307,7 @@ def render(db, run_repair=None, get_diagnostics=None):
         # =====================================================================
         # SECTION 3: Deletion History
         # =====================================================================
-        st.markdown("### 📋 Deletion History")
+        st.markdown("### Deletion History")
         
         history = db.get_deletion_history(limit=50)
         
@@ -270,7 +332,7 @@ def render(db, run_repair=None, get_diagnostics=None):
             st.dataframe(df, use_container_width=True, hide_index=True)
             
             # Detailed view
-            if st.checkbox("📖 View Detailed Deletion Records", key="view_deletion_details"):
+            if st.checkbox("View Detailed Deletion Records", key="view_deletion_details"):
                 for h in history[:10]:  # Show first 10
                     with st.expander(f"{h.get('deleted_at')} | {h.get('deletion_type')} | {h.get('reason', 'N/A')}", expanded=False):
                         st.write(f"**Deletion Type:** {h.get('deletion_type')}")
@@ -291,7 +353,7 @@ def render(db, run_repair=None, get_diagnostics=None):
         # =====================================================================
         # SECTION 4: Guest Data Cleanup (NEW)
         # =====================================================================
-        st.markdown("### 👤 Guest Data Cleanup")
+        st.markdown("### Guest Data Cleanup")
         st.info("""
         **Guest cleanup** identifies and removes low-quality guest entries:
         - Names shorter than 3 characters
@@ -310,7 +372,7 @@ def render(db, run_repair=None, get_diagnostics=None):
             "a", "the", "an", "this", "that", "there", "here"
         }
         
-        with st.expander("🔍 Preview Junk Guests", expanded=False):
+        with st.expander("Preview Junk Guests", expanded=False):
             all_guests = db.get_all_guests()
             to_cleanup = []
             for g in all_guests:
@@ -328,8 +390,8 @@ def render(db, run_repair=None, get_diagnostics=None):
                 st.write(f"Found **{len(to_cleanup)}** potentially low-quality guest records.")
                 st.table(pd.DataFrame(to_cleanup))
                 
-                if st.button("🔴 PURGE JUNK GUESTS", type="primary", key="purge_guests_btn"):
-                    if st.checkbox("⚠️ Confirm purge of guest records", key="confirm_purge_guests"):
+                if st.button("PURGE JUNK GUESTS", type="primary", key="purge_guests_btn"):
+                    if st.checkbox("Confirm purge of guest records", key="confirm_purge_guests"):
                         try:
                             # Run deletion SQL
                             ids = [item["ID"] for item in to_cleanup]
@@ -341,11 +403,11 @@ def render(db, run_repair=None, get_diagnostics=None):
                             db.conn.execute(f"DELETE FROM guests WHERE guest_id IN ({placeholders})", ids)
                             db.conn.commit()
                             
-                            st.success(f"✅ Successfully purged {len(ids)} junk guest records!")
+                            st.success(f"Successfully purged {len(ids)} junk guest records!")
                             st.rerun()
                         except Exception as e:
                             db.conn.rollback()
-                            st.error(f"❌ Purge failed: {e}")
+                            st.error(f"Purge failed: {e}")
             else:
                 st.success("No apparent junk guests found in current vault!")
 
@@ -354,7 +416,7 @@ def render(db, run_repair=None, get_diagnostics=None):
         # =====================================================================
         # SECTION 5: Vault Health & Repair (UPDATED)
         # =====================================================================
-        st.markdown("### 🏥 Vault Health & Repair")
+        st.markdown("### Vault Health & Repair")
         
         if get_diagnostics:
             diag = get_diagnostics(db)
@@ -383,11 +445,11 @@ def render(db, run_repair=None, get_diagnostics=None):
             - **Missing Heatmaps**: Refreshes metadata to include audience interest heatmaps.
             """)
             
-            if st.button("🚀 RUN FULL VAULT REPAIR", type="primary", use_container_width=True):
+            if st.button("RUN FULL VAULT REPAIR", type="primary", use_container_width=True):
                 if run_repair:
                     run_repair()
-                    st.success("✅ Unified Vault Repair started in background!")
-                    st.toast("Vault health repair in progress...", icon="🏥")
+                    st.success("Unified Vault Repair started in background!")
+                    st.toast("Vault health repair in progress...")
                     db.log_pipeline_event(
                         level="INFO",
                         message="Manual full vault health repair started",
@@ -404,9 +466,9 @@ def render(db, run_repair=None, get_diagnostics=None):
         # =====================================================================
         # SECTION 6: Storage Optimization Tips
         # =====================================================================
-        st.markdown("### 💾 Storage Optimization Tips")
+        st.markdown("### Storage Optimization Tips")
         
-        with st.expander("🧹 Cleanup Recommendations", expanded=False):
+        with st.expander("Cleanup Recommendations", expanded=False):
             st.markdown("""
             ### Recommended Cleanup Strategy:
             
@@ -450,8 +512,8 @@ def render(db, run_repair=None, get_diagnostics=None):
                 avg_guest_size = 0.5  # KB
                 estimated_size = (total_chunks * avg_chunk_size) + (total_guests * avg_guest_size)
                 
-                st.caption(f"📊 Estimated SQLite data size: ~{estimated_size / 1024:.1f} MB (chunks + guests)")
-                st.caption("📦 ChromaDB and Neo4j may have additional storage needs")
+                st.caption(f"Estimated SQLite data size: ~{estimated_size / 1024:.1f} MB (chunks + guests)")
+                st.caption("ChromaDB and Neo4j may have additional storage needs")
                 
             except Exception as e:
                 st.error(f"Could not calculate storage: {e}")

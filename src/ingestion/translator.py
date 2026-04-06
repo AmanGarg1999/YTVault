@@ -162,17 +162,19 @@ Translated {target_lang} text:"""
                     text=chunk
                 )
                 
+                from src.utils.llm_pool import get_llm_semaphore
                 try:
-                    response = ollama.generate(
-                        model=self.model,
-                        prompt=prompt,
-                        stream=False,
-                        options={
-                            "temperature": 0.3,  # Low temp for consistency
-                            "top_p": 0.9,
-                            "num_predict": min(len(chunk.split()) * 1.2, 4000),
-                        }
-                    )
+                    with get_llm_semaphore():
+                        response = ollama.generate(
+                            model=self.model,
+                            prompt=prompt,
+                            stream=False,
+                            options={
+                                "temperature": 0.3,  # Low temp for consistency
+                                "top_p": 0.9,
+                                "num_predict": min(len(chunk.split()) * 1.2, 4000),
+                            }
+                        )
                     
                     translated_text = response["response"].strip()
                     translated_chunks.append(translated_text)

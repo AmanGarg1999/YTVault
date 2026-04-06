@@ -14,14 +14,14 @@ def render(db, vs):
     
     st.markdown("""
     <div class="main-header">
-        <h1>🧬 Comparative Lab</h1>
+        <h1>Comparative Lab</h1>
         <p>Synthesize and compare perspectives across multiple channels</p>
     </div>
     """, unsafe_allow_html=True)
 
     # Sidebar parameters
     with st.sidebar:
-        st.markdown("### 🔬 Analysis Parameters")
+        st.markdown("### Analysis Parameters")
         top_k = st.slider("Context chunks per channel", 5, 20, 10)
         diversity_weight = st.slider("Synthesis Focus", 0.0, 1.0, 0.5, 
                                    help="0: Detail heavy, 1: Comparison heavy")
@@ -49,8 +49,8 @@ def render(db, vs):
             help="Enter the specific topic you want to compare across these channels."
         )
 
-    if st.button("🧪 Run Comparative Analysis", type="primary", disabled=not (selected_channels and topic)):
-        with st.status("🧬 Analyzing cross-channel perspectives...", expanded=True) as status:
+    if st.button("Run Comparative Analysis", type="primary", disabled=not (selected_channels and topic)):
+        with st.status("Analyzing cross-channel perspectives...", expanded=True) as status:
             try:
                 # 1. Initialize RAG Engine
                 rag = RAGEngine(db, vs)
@@ -60,7 +60,7 @@ def render(db, vs):
                 channel_ids = [c.channel_id for c in selected_channels]
                 channel_names = {c.channel_id: c.name for c in selected_channels}
                 
-                status.write(f"🔍 Searching across {len(channel_ids)} channels...")
+                status.write(f"Searching across {len(channel_ids)} channels...")
                 
                 # 2. Perform RAG Query with channel filters
                 # We use the 'filters' argument supported by RAGEngine.query
@@ -71,15 +71,15 @@ def render(db, vs):
                     filters=where_filter
                 )
                 
-                status.update(label="✅ Analysis complete!", state="complete")
+                status.update(label="Analysis complete!", state="complete")
 
                 # 3. Display Results
                 st.markdown("---")
-                st.markdown("## 📋 Comparative Synthesis")
+                st.markdown("## Comparative Synthesis")
                 st.markdown(response.answer)
                 
                 # 4. Display Sources & Citations
-                with st.expander("🔗 Evidence & Citations"):
+                with st.expander("Evidence & Citations"):
                     if response.citations:
                         # Group citations by channel
                         by_channel = {}
@@ -109,19 +109,19 @@ def render(db, vs):
 
                 # 6. Content Gap Analysis (New Feature)
                 st.divider()
-                st.markdown("## 🔍 Content Gap Analysis")
+                st.markdown("## Content Gap Analysis")
                 st.caption("Identifying high-performing topics from one channel that are missing in others.")
                 
                 render_content_gap_analysis(db, channel_ids, channel_names)
 
             except Exception as e:
-                status.update(label="❌ Analysis failed", state="error")
+                status.update(label="Analysis failed", state="error")
                 st.error(f"Analysis error: {e}")
                 logger.error(f"Comparative Lab error: {e}", exc_info=True)
 
     # Footer - Sample Topics
     st.markdown("---")
-    st.caption("💡 **Tip**: Try comparing a technical topic like '3D rendering' or a conceptual one like 'Creative Freedom'.")
+    st.caption("Tip: Try comparing a technical topic like '3D rendering' or a conceptual one like 'Creative Freedom'.")
 
 
 def render_content_gap_analysis(db, channel_ids, channel_names):
@@ -168,7 +168,7 @@ def render_content_gap_analysis(db, channel_ids, channel_names):
                 unique_keywords -= channel_data[other_cid]["keywords"]
             
             if unique_keywords:
-                with st.expander(f"✨ Unique Strengths of **{channel_data[cid_a]['name']}**", expanded=(i==0)):
+                with st.expander(f"Unique Strengths of **{channel_data[cid_a]['name']}**", expanded=(i==0)):
                     st.write(f"Topics that are high-performing for {channel_data[cid_a]['name']} but missing from others:")
                     
                     # Sort keywords by how often they appear in top video titles

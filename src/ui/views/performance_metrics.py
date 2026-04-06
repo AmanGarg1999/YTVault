@@ -19,7 +19,7 @@ from src.pipeline.metrics import PerformanceMetricsCollector
 
 def render():
     """Render the performance metrics dashboard."""
-    st.header("⚡ Performance Metrics", anchor="performance-metrics")
+    st.header("Performance Metrics", anchor="performance-metrics")
     
     # Get settings and metrics collector
     settings = get_settings()
@@ -193,7 +193,7 @@ def render():
     # Performance Tips
     # =====================================================================
     
-    with st.expander("📊 Performance Analysis & Tips"):
+    with st.expander("Performance Analysis & Tips"):
         st.write("""
         **Understanding Pipeline Metrics:**
         
@@ -220,12 +220,12 @@ def render():
     # Data Export
     # =====================================================================
     
-    with st.expander("💾 Export Metrics"):
+    with st.expander("Export Metrics"):
         
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("📥 Download as CSV"):
+            if st.button("Download as CSV"):
                 # Prepare CSV data
                 csv_data = []
                 csv_data.append("Performance Metrics Export")
@@ -247,7 +247,7 @@ def render():
                 )
         
         with col2:
-            if st.button("📊 View Raw JSON"):
+            if st.button("View Raw JSON"):
                 st.json(metrics)
 
 

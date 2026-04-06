@@ -19,7 +19,7 @@ def render(db: SQLiteStore):
     
     st.markdown("""
     <div class="main-header">
-        <h1>📜 Transcript Viewer</h1>
+        <h1>Transcript Viewer</h1>
         <p>Access all stored transcripts - no re-fetching from YouTube</p>
     </div>
     """, unsafe_allow_html=True)
@@ -84,7 +84,7 @@ def render_single_transcript(db: SQLiteStore):
     st.divider()
     
     # Tabs for different views
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Full Transcript", "Search", "Timestamp Jump", "🔥 Audience Highlights", "Export"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Full Transcript", "Search", "Timestamp Jump", "Audience Highlights", "Export"])
     
     with tab1:
         st.subheader("Full Transcript")
@@ -137,7 +137,7 @@ def render_single_transcript(db: SQLiteStore):
                             # Highlight search term
                             highlighted = text.replace(
                                 search_term,
-                                f"🔍 **{search_term}**"
+                                f"**{search_term}**"
                             )
                             st.write(highlighted)
                             
@@ -161,7 +161,7 @@ def render_single_transcript(db: SQLiteStore):
             context = db.get_transcript_at_timestamp(video_id, timestamp, context_seconds=30)
             
             if context and context['chunks']:
-                st.info(f"📍 Context around {minutes}:{seconds:02d}")
+                st.info(f"Context around {minutes}:{seconds:02d}")
                 
                 for chunk in context['chunks']:
                     st.write(chunk['cleaned_text'])
@@ -174,7 +174,7 @@ def render_single_transcript(db: SQLiteStore):
                 st.warning("No transcript found at that timestamp")
     
     with tab4:
-        st.subheader("🔥 Audience Highlights")
+        st.subheader("Audience Highlights")
         st.caption("Segments with the highest re-watch interest on YouTube, correlated with transcript text.")
         
         analyzer = AnalysisEngine(db)
@@ -355,7 +355,7 @@ def render_global_search(db: SQLiteStore):
     search_term = st.text_input("Search term", key="global_search")
     
     if not search_term:
-        st.info("💡 Enter a search term to find it across all transcripts")
+        st.info("Enter a search term to find it across all transcripts")
         return
     
     # Search
@@ -370,7 +370,7 @@ def render_global_search(db: SQLiteStore):
     # Show results grouped by video
     for r in results:
         with st.expander(
-            f"📹 {r['title'][:60]} ({r['channel']}) - {r['chunk_count']} matches",
+            f"{r['title'][:60]} ({r['channel']}) - {r['chunk_count']} matches",
             expanded=False
         ):
             # Get specific matching chunks
@@ -388,7 +388,7 @@ def render_global_search(db: SQLiteStore):
                     text = chunk['cleaned_text']
                     highlighted = text.replace(
                         search_term,
-                        f"🔍 **{search_term}**"
+                        f"**{search_term}**"
                     )
                     st.write(highlighted)
                     
@@ -396,7 +396,7 @@ def render_global_search(db: SQLiteStore):
                     secs = int(chunk['start_timestamp'] % 60)
                     
                     st.caption(
-                        f"⏱️ {mins:02d}:{secs:02d} | "
+                        f"{mins:02d}:{secs:02d} | "
                         f"Chunk: {chunk['chunk_id'][:30]}..."
                     )
             

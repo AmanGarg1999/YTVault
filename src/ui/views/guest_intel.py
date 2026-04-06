@@ -12,7 +12,7 @@ def render(db):
     """Render the Guest Intelligence page."""
     st.markdown("""
     <div class="main-header">
-        <h1>👤 Guest Intelligence</h1>
+        <h1>Guest Intelligence</h1>
         <p>Explore guests across channels — appearances, topics, and cross-references</p>
     </div>
     """, unsafe_allow_html=True)
@@ -52,7 +52,7 @@ def render(db):
                 if guest.aliases:
                     st.markdown(f"**Also known as:** {', '.join(guest.aliases)}")
 
-                st.markdown("### 📺 Appearances")
+                st.markdown("### Appearances")
                 appearances = db.conn.execute(
                     """SELECT ga.context_snippet, ga.start_timestamp, ga.end_timestamp,
                               v.title, v.video_id, v.upload_date, v.channel_id
@@ -73,7 +73,7 @@ def render(db):
                         channel = db.get_channel(d.get('channel_id', ''))
                         ch_name = channel.name if channel else 'Unknown'
 
-                        with st.expander(f"📺 {d['title'][:60]}... ({ch_name})"):
+                        with st.expander(f"{d['title'][:60]}... ({ch_name})"):
                             st.markdown(f"**Channel:** {ch_name}")
                             st.markdown(f"**Date:** {d.get('upload_date', 'Unknown')}")
                             st.markdown(f"**Timestamp:** [{ts_str}]({vid_url}&t={ts}s)")
@@ -84,7 +84,7 @@ def render(db):
 
             # Top guests overview
             st.markdown("---")
-            st.markdown("### 🏆 Most Referenced Guests")
+            st.markdown("### Most Referenced Guests")
 
             guest_data = [{
                 "Name": g.canonical_name,

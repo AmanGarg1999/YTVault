@@ -116,15 +116,17 @@ class EpiphanyEngine:
             f"Analysis from RAG:\n{rag_answer[:3000]}"
         )
 
+        from src.utils.llm_pool import get_llm_semaphore
         try:
-            response = ollama.chat(
-                model=self.deep_model,
-                messages=[
-                    {"role": "system", "content": self.briefing_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                options={"num_predict": 800, "temperature": 0.1},
-            )
+            with get_llm_semaphore():
+                response = ollama.chat(
+                    model=self.deep_model,
+                    messages=[
+                        {"role": "system", "content": self.briefing_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    options={"num_predict": 800, "temperature": 0.1},
+                )
             raw = response["message"]["content"].strip()
             if raw.startswith("```"):
                 raw = raw.split("\n", 1)[1] if "\n" in raw else raw

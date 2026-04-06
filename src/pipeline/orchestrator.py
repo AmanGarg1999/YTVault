@@ -289,8 +289,11 @@ class PipelineOrchestrator:
                     
                     vid, is_new = item
                     if is_new:
-                        self._report_status(f"Queuing video {vid}")
-                        active_futures[vid] = executor.submit(self._process_single_video, vid, scan_id)
+                        if self.db.claim_video(vid, scan_id):
+                            self._report_status(f"Queuing video {vid}")
+                            active_futures[vid] = executor.submit(self._process_single_video, vid, scan_id)
+                        else:
+                            logger.info(f"Skipping video {vid}: already locked by another scan")
                     else:
                         # Already processed (likely skipped during discovery)
                         processed_count += 1
@@ -320,6 +323,7 @@ class PipelineOrchestrator:
                         )
 
             self.checkpoint.complete_scan(scan_id)
+            self.db.release_all_locks(scan_id)
             self.db.set_control_state(scan_id, "RUNNING")
             self._report_status(f"Scan {scan_id} completed: {processed_count} videos processed")
             return scan_id
@@ -345,14 +349,18 @@ class PipelineOrchestrator:
             self._report_status(f"No videos to resume for scan {scan_id}")
             return
 
-        self._report_status(f"Resuming scan {scan_id}: {len(pending)} videos remaining")
-
         for i, video in enumerate(pending):
-            self._report_status(
-                f"Resuming {i + 1}/{len(pending)}: {video.title[:50]}... "
-                f"(from stage: {video.checkpoint_stage})"
-            )
-            self._resume_video(video)
+            if self.db.claim_video(video.video_id, scan_id):
+                try:
+                    self._report_status(
+                        f"Resuming {i + 1}/{len(pending)}: {video.title[:50]}... "
+                        f"(from stage: {video.checkpoint_stage})"
+                    )
+                    self._resume_video(video, scan_id)
+                finally:
+                    self.db.release_video(video.video_id, scan_id)
+            else:
+                logger.info(f"Skipping video {video.video_id}: locked by another scan")
 
         self.checkpoint.complete_scan(scan_id)
 
@@ -372,11 +380,19 @@ class PipelineOrchestrator:
         )
         
         for i, video in enumerate(manually_overridden):
-            self._report_status(
-                f"Processing manually-accepted {i + 1}/{len(manually_overridden)}: "
-                f"{video.title[:50]}..."
-            )
-            self._resume_video(video)
+            # Use a dummy scan_id since this is manual
+            man_scan_id = f"manual_{int(time.time())}"
+            if self.db.claim_video(video.video_id, man_scan_id):
+                try:
+                    self._report_status(
+                        f"Processing manually-accepted {i + 1}/{len(manually_overridden)}: "
+                        f"{video.title[:50]}..."
+                    )
+                    self._resume_video(video, man_scan_id)
+                finally:
+                    self.db.release_video(video.video_id, man_scan_id)
+            else:
+                logger.info(f"Skipping manual override for {video.video_id}: locked")
         
         self._report_status(
             f"Completed processing {len(manually_overridden)} manually-overridden videos"
@@ -615,13 +631,16 @@ class PipelineOrchestrator:
 
     def _process_single_video(self, video_id: str, scan_id: str) -> None:
         """Process a single video through all remaining pipeline stages."""
-        video = self.db.get_video(video_id)
-        if video is None:
-            logger.warning(f"Video {video_id} not found in DB")
-            return
+        try:
+            video = self.db.get_video(video_id)
+            if video is None:
+                logger.warning(f"Video {video_id} not found in DB")
+                return
 
-        self.current_scan_id = scan_id
-        self._resume_video(video, scan_id)
+            self.current_scan_id = scan_id
+            self._resume_video(video, scan_id)
+        finally:
+            self.db.release_video(video_id, scan_id)
 
     def _resume_video(self, video, scan_id: str) -> None:
         """Resume processing a video from its current checkpoint stage."""

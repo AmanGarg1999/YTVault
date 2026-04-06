@@ -58,6 +58,7 @@ class Video:
     needs_translation: bool = False
     translated_text_stored: bool = False
     checkpoint_stage: str = "METADATA_HARVESTED"
+    locked_by_scan_id: str | None = None
     created_at: str = ""
     updated_at: str = ""
     like_count: int = 0
@@ -183,6 +184,27 @@ class ExternalCitation:
     name: str = ""
     url: str = ""
     type: str = ""
+    created_at: str = ""
+
+
+@dataclass
+class ThematicBridge:
+    bridge_id: int = 0
+    topic_a: str = ""
+    topic_b: str = ""
+    insight: str = ""
+    llm_model: str = ""
+    created_at: str = ""
+
+
+@dataclass
+class ResearchReport:
+    report_id: int = 0
+    query: str = ""
+    title: str = ""
+    file_path: str = ""
+    summary: str = ""
+    sources_json: str = "[]"
     created_at: str = ""
 
 
@@ -523,6 +545,32 @@ SCHEMA_MIGRATIONS = [
         CREATE INDEX IF NOT EXISTS idx_clashes_topic ON expert_clashes(topic);
         CREATE INDEX IF NOT EXISTS idx_sentiment_video ON video_sentiment(video_id);
         CREATE INDEX IF NOT EXISTS idx_citations_video ON external_citations(video_id);
+    """),
+    # Version 17: Phase 3 Intelligence (Bridges, Research Reports)
+    (17, """
+        CREATE TABLE IF NOT EXISTS thematic_bridges (
+            bridge_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+            topic_a     TEXT NOT NULL,
+            topic_b     TEXT NOT NULL,
+            insight     TEXT NOT NULL,
+            llm_model   TEXT,
+            created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS research_reports (
+            report_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+            query       TEXT NOT NULL,
+            title       TEXT NOT NULL,
+            file_path   TEXT NOT NULL,
+            summary     TEXT,
+            sources_json TEXT DEFAULT '[]',
+            created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_bridges_topics ON thematic_bridges(topic_a, topic_b);
+    """),
+    # Version 18: Resume locking for concurrent scans
+    (18, """
+        ALTER TABLE videos ADD COLUMN locked_by_scan_id TEXT DEFAULT NULL;
+        CREATE INDEX IF NOT EXISTS idx_videos_locked ON videos(locked_by_scan_id);
     """),
 ]
 
@@ -866,12 +914,14 @@ class SQLiteStore:
         """Get set of all known video IDs."""
         rows = self.conn.execute("SELECT video_id FROM videos").fetchall()
         return {r["video_id"] for r in rows}
+
     def get_resumable_videos(self) -> list[Video]:
         """Get accepted videos that haven't reached DONE checkpoint."""
         rows = self.conn.execute(
             """SELECT * FROM videos
-               WHERE triage_status = 'ACCEPTED'
-                 AND checkpoint_stage != 'DONE'
+               WHERE triage_status = 'ACCEPTED' 
+                 AND checkpoint_stage != 'GRAPH_SYNCED'
+                 AND locked_by_scan_id IS NULL
                ORDER BY created_at ASC""",
         ).fetchall()
         result = []
@@ -1391,6 +1441,153 @@ class SQLiteStore:
         return [ExternalCitation(**dict(r)) for r in rows]
 
     # -------------------------------------------------------------------
+    # Phase 3: Advanced Discovery & Research
+    # -------------------------------------------------------------------
+
+    def insert_thematic_bridge(self, bridge: ThematicBridge) -> int:
+        """Record a discovered connection between two topics."""
+        cursor = self.conn.execute(
+            """INSERT INTO thematic_bridges (topic_a, topic_b, insight, llm_model)
+               VALUES (?, ?, ?, ?)""",
+            (bridge.topic_a, bridge.topic_b, bridge.insight, bridge.llm_model),
+        )
+        self.conn.commit()
+        return cursor.lastrowid
+
+    # -------------------------------------------------------------------
+    # Pipeline Locking (for concurrent/resume safety)
+    # -------------------------------------------------------------------
+
+    def claim_video(self, video_id: str, scan_id: str) -> bool:
+        """Attempt to lock a video for a specific scan.
+        
+        Returns True if successfully locked, False if already locked 
+        by another scan.
+        """
+        try:
+            # Atomic update: only set if currently NULL
+            result = self.conn.execute(
+                """UPDATE videos 
+                   SET locked_by_scan_id = ?, updated_at = CURRENT_TIMESTAMP
+                   WHERE video_id = ? AND (locked_by_scan_id IS NULL OR locked_by_scan_id = ?)""",
+                (scan_id, video_id, scan_id),
+            )
+            self.conn.commit()
+            return result.rowcount > 0
+        except sqlite3.Error as e:
+            logger.error(f"Failed to claim video {video_id}: {e}")
+            return False
+
+    def release_video(self, video_id: str, scan_id: str) -> None:
+        """Unlock a video, provided it was locked by this scan."""
+        try:
+            self.conn.execute(
+                """UPDATE videos 
+                   SET locked_by_scan_id = NULL, updated_at = CURRENT_TIMESTAMP
+                   WHERE video_id = ? AND locked_by_scan_id = ?""",
+                (video_id, scan_id),
+            )
+            self.conn.commit()
+        except sqlite3.Error as e:
+            logger.error(f"Failed to release video {video_id}: {e}")
+
+    def release_all_locks(self, scan_id: str) -> int:
+        """Clear all video locks for a specific scan."""
+        try:
+            result = self.conn.execute(
+                "UPDATE videos SET locked_by_scan_id = NULL WHERE locked_by_scan_id = ?",
+                (scan_id,),
+            )
+            self.conn.commit()
+            return result.rowcount
+        except sqlite3.Error as e:
+            logger.error(f"Failed to release locks for scan {scan_id}: {e}")
+            return 0
+
+    def get_thematic_bridges(self, topic: Optional[str] = None) -> list[ThematicBridge]:
+        """Get all thematic bridges, optionally filtered by topic."""
+        if topic:
+            rows = self.conn.execute(
+                """SELECT * FROM thematic_bridges 
+                   WHERE topic_a = ? OR topic_b = ? 
+                   ORDER BY created_at DESC""",
+                (topic, topic),
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM thematic_bridges ORDER BY created_at DESC"
+            ).fetchall()
+        return [ThematicBridge(**dict(r)) for r in rows]
+
+    def insert_research_report(self, report: ResearchReport) -> int:
+        """Record a generated research report."""
+        cursor = self.conn.execute(
+            """INSERT INTO research_reports 
+               (query, title, file_path, summary, sources_json)
+               VALUES (?, ?, ?, ?, ?)""",
+            (report.query, report.title, report.file_path, 
+             report.summary, report.sources_json),
+        )
+        self.conn.commit()
+        return cursor.lastrowid
+
+    def get_research_reports(self, limit: int = 20) -> list[ResearchReport]:
+        """Get recent research reports."""
+        rows = self.conn.execute(
+            "SELECT * FROM research_reports ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [ResearchReport(**dict(r)) for r in rows]
+
+    def get_topic_trends(self, limit: int = 10) -> list[dict]:
+        """Get topic mention frequency over time (monthly)."""
+        # We join videos to get the publication date
+        rows = self.conn.execute(
+            """SELECT json_extract(t.value, '$.name') as topic, strftime('%Y-%m', v.upload_date) as month, COUNT(*) as count
+               FROM video_summaries vs
+               CROSS JOIN json_each(vs.topics_json) as t
+               JOIN videos v ON vs.video_id = v.video_id
+               WHERE v.upload_date IS NOT NULL
+               GROUP BY 1, 2
+               ORDER BY 2 ASC"""
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_guest_network(self) -> list[dict]:
+        """Get guest co-occurrence and thematic links."""
+        # ... logic as before ...
+        rows = self.conn.execute(
+            """SELECT json_extract(t1.value, '$.name') as topic, g1.canonical_name as guest_a, g2.canonical_name as guest_b
+               FROM video_summaries vs1
+               CROSS JOIN json_each(vs1.topics_json) as t1
+               JOIN guest_appearances ga1 ON vs1.video_id = ga1.video_id
+               JOIN guests g1 ON ga1.guest_id = g1.guest_id
+               
+               JOIN video_summaries vs2
+               CROSS JOIN json_each(vs2.topics_json) as t2
+               JOIN guest_appearances ga2 ON vs2.video_id = ga2.video_id
+               JOIN guests g2 ON ga2.guest_id = g2.guest_id
+               
+               WHERE json_extract(t1.value, '$.name') = json_extract(t2.value, '$.name') 
+               AND g1.guest_id < g2.guest_id
+               GROUP BY 1, 2, 3
+               ORDER BY 1"""
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+    def get_videos_for_summarization(self, limit: int = 50) -> list[str]:
+        """Find videos ready for summarization but not yet processed."""
+        rows = self.conn.execute(
+            """SELECT video_id FROM videos 
+               WHERE (checkpoint_stage IN ('TRIAGE_COMPLETE', 'DONE', 'CHUNK_ANALYZED')) 
+               AND video_id NOT IN (SELECT video_id FROM video_summaries)
+               LIMIT ?""",
+            (limit,)
+        ).fetchall()
+        return [r[0] for r in rows]
+
+    # -------------------------------------------------------------------
     # Pipeline Temp State
     # -------------------------------------------------------------------
 
@@ -1758,6 +1955,7 @@ class SQLiteStore:
     def get_pipeline_stats(self) -> dict:
         """Get aggregate pipeline statistics for the dashboard."""
         stats = {}
+        # Basic video states
         for status in ["DISCOVERED", "ACCEPTED", "REJECTED", "PENDING_REVIEW"]:
             row = self.conn.execute(
                 "SELECT COUNT(*) as cnt FROM videos WHERE triage_status = ?",
@@ -1765,8 +1963,8 @@ class SQLiteStore:
             ).fetchone()
             stats[status.lower()] = row["cnt"]
 
-        # Checkpoint stages
-        for stage in ["TRANSCRIPT_FETCHED", "REFINED", "CHUNKED", "EMBEDDED", "DONE"]:
+        # Checkpoint stages (Intelligence targets)
+        for stage in ["METADATA_HARVESTED", "TRIAGE_COMPLETE", "DONE", "SUMMARIZED"]:
             row = self.conn.execute(
                 "SELECT COUNT(*) as cnt FROM videos WHERE checkpoint_stage = ?",
                 (stage,),
@@ -1774,21 +1972,12 @@ class SQLiteStore:
             stats[stage.lower()] = row["cnt"]
 
         # Totals
-        row = self.conn.execute("SELECT COUNT(*) as cnt FROM videos").fetchone()
-        stats["total_videos"] = row["cnt"]
-
-        row = self.conn.execute("SELECT COUNT(*) as cnt FROM channels").fetchone()
-        stats["total_channels"] = row["cnt"]
-
-        row = self.conn.execute("SELECT COUNT(*) as cnt FROM guests").fetchone()
-        stats["total_guests"] = row["cnt"]
-
-        row = self.conn.execute("SELECT COUNT(*) as cnt FROM transcript_chunks").fetchone()
-        stats["total_chunks"] = row["cnt"]
-
-        # Channel totals
-        row = self.conn.execute("SELECT SUM(follower_count) as total_subs FROM channels").fetchone()
-        stats["total_subscribers"] = row["total_subs"] or 0
+        stats["total_videos"] = self.conn.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
+        stats["total_channels"] = self.conn.execute("SELECT COUNT(*) FROM channels").fetchone()[0]
+        stats["total_subscribers"] = self.conn.execute("SELECT SUM(follower_count) FROM channels").fetchone()[0] or 0
+        stats["total_summaries"] = self.conn.execute("SELECT COUNT(*) FROM video_summaries").fetchone()[0]
+        
+        return stats
 
         return stats
 

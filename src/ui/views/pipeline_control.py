@@ -21,7 +21,7 @@ def render(db, run_pipeline_background):
     """Render the Pipeline Control Center page."""
     st.markdown("""
     <div class="main-header">
-        <h1>🎮 Pipeline Control Center</h1>
+        <h1>Pipeline Control Center</h1>
         <p>Manage active scans, pause/resume processing, and control video ingestion</p>
     </div>
     """, unsafe_allow_html=True)
@@ -31,7 +31,7 @@ def render(db, run_pipeline_background):
         # =====================================================================
         # SECTION 1: Active Scans Control
         # =====================================================================
-        st.markdown("### 🔄 Active Scans")
+        st.markdown("### Active Scans")
         st.write("DEBUG: Section 1 started")
         
         active_scans = db.get_active_scans()
@@ -63,9 +63,9 @@ def render(db, run_pipeline_background):
                     
                     # Status info
                     with col3:
-                        status_color = "🟢" if control and control.status == "RUNNING" else "🟡" if control and control.status == "PAUSED" else "🔴"
+                        status_text = "RUNNING" if control and control.status == "RUNNING" else "PAUSED" if control and control.status == "PAUSED" else "STOPPED"
                         control_status = control.status if control else "RUNNING"
-                        st.write(f"{status_color} **{control_status}**")
+                        st.write(f"**{control_status}**")
                         
                         if control and control.pause_reason:
                             st.caption(f"Reason: {control.pause_reason}")
@@ -75,28 +75,28 @@ def render(db, run_pipeline_background):
                         col_a, col_b = st.columns(2)
                         with col_a:
                             if control and control.status == "PAUSED":
-                                if st.button("▶️ Resume", key=f"resume_{idx}", use_container_width=True):
+                                if st.button("Resume", key=f"resume_{idx}", use_container_width=True):
                                     db.resume_scan(scan_id)
-                                    st.success("✅ Scan resumed")
+                                    st.success("Scan resumed")
                                     st.rerun()
                             else:
-                                if st.button("⏸️ Pause", key=f"pause_{idx}", use_container_width=True):
+                                if st.button("Pause", key=f"pause_{idx}", use_container_width=True):
                                     reason = st.text_input(
                                         f"Pause reason (optional):",
                                         key=f"pause_reason_{idx}"
                                     )
                                     db.pause_scan(scan_id, reason)
-                                    st.warning(f"⏸️ Scan paused: {reason}")
+                                    st.warning(f"Scan paused: {reason}")
                                     st.rerun()
                         
                         with col_b:
-                            if st.button("⛔ Stop", key=f"stop_{idx}", use_container_width=True, type="secondary"):
+                            if st.button("Stop", key=f"stop_{idx}", use_container_width=True, type="secondary"):
                                 db.stop_scan(scan_id)
-                                st.error("❌ Scan stopped")
+                                st.error("Scan stopped")
                                 st.rerun()
                     
                     # Videos in this scan
-                    with st.expander(f"📹 Videos in Scan (click to expand)", expanded=False):
+                    with st.expander("Videos in Scan", expanded=False):
                         videos = db.conn.execute(
                             """SELECT video_id, title, triage_status, checkpoint_stage 
                                FROM videos WHERE video_id IN (
@@ -118,7 +118,7 @@ def render(db, run_pipeline_background):
         # =====================================================================
         # SECTION 2: Video-Level Queue Management
         # =====================================================================
-        st.markdown("### 📹 Video Discovery Queue Management")
+        st.markdown("### Video Discovery Queue Management")
         st.write("DEBUG: Section 2 started")
         
         # Get discovered but not yet processed videos
@@ -144,7 +144,7 @@ def render(db, run_pipeline_background):
             st.dataframe(df, use_container_width=True, hide_index=True)
             
             # Remove from queue option
-            with st.expander("🗑️ Remove from Queue", expanded=False):
+            with st.expander("Remove from Queue", expanded=False):
                 st.markdown("**Remove videos before they are processed:**")
                 
                 video_to_remove = st.selectbox(
@@ -153,10 +153,10 @@ def render(db, run_pipeline_background):
                     format_func=lambda v: f"{v.title[:40]}... ({v.video_id[:8]})"
                 )
                 
-                if video_to_remove and st.button("❌ Remove Selected Video", type="secondary"):
+                if video_to_remove and st.button("Remove Selected Video", type="secondary"):
                     success = db.remove_video_from_queue(video_to_remove.video_id)
                     if success:
-                        st.success(f"✅ Removed from queue: {video_to_remove.title[:40]}...")
+                        st.success(f"Removed from queue: {video_to_remove.title[:40]}...")
                         st.rerun()
                     else:
                         st.error("Could not remove video (may already be processing)")
@@ -168,20 +168,20 @@ def render(db, run_pipeline_background):
         # =====================================================================
         # SECTION 3: Processing Status by Stage
         # =====================================================================
-        st.markdown("### 📊 Processing Status by Pipeline Stage")
+        st.markdown("### Processing Status by Pipeline Stage")
         st.write("DEBUG: Section 3 started")
         
         stages = [
-            ("METADATA_HARVESTED", "📥 Metadata Harvested"),
-            ("TRIAGE_COMPLETE", "✅ Triage Complete"),
-            ("TRANSCRIPT_FETCHED", "📝 Transcript Fetched"),
-            ("SPONSOR_FILTERED", "🧹 Sponsor Filtered"),
-            ("TEXT_NORMALIZED", "📄 Text Normalized"),
-            ("CHUNKED", "🔍 Chunked"),
-            ("CHUNK_ANALYZED", "🧠 Analyzed"),
-            ("EMBEDDED", "📦 Embedded"),
-            ("GRAPH_SYNCED", "🌐 Graph Synced"),
-            ("DONE", "✨ Complete"),
+            ("METADATA_HARVESTED", "Metadata Harvested"),
+            ("TRIAGE_COMPLETE", "Triage Complete"),
+            ("TRANSCRIPT_FETCHED", "Transcript Fetched"),
+            ("SPONSOR_FILTERED", "Sponsor Filtered"),
+            ("TEXT_NORMALIZED", "Text Normalized"),
+            ("CHUNKED", "Chunked"),
+            ("CHUNK_ANALYZED", "Analyzed"),
+            ("EMBEDDED", "Embedded"),
+            ("GRAPH_SYNCED", "Graph Synced"),
+            ("DONE", "Complete"),
         ]
         
         stage_data = []
@@ -213,7 +213,7 @@ def render(db, run_pipeline_background):
         # =====================================================================
         # SECTION 4: Triage Status Summary
         # =====================================================================
-        st.markdown("### 🎯 Triage Decision Summary")
+        st.markdown("### Triage Decision Summary")
         st.write("DEBUG: Section 4 started")
         
         triage_statuses = ["ACCEPTED", "REJECTED", "PENDING_REVIEW", "DISCOVERED"]
@@ -226,14 +226,14 @@ def render(db, run_pipeline_background):
             ).fetchone()["cnt"]
             
             icon_map = {
-                "ACCEPTED": "✅",
-                "REJECTED": "❌",
-                "PENDING_REVIEW": "❓",
-                "DISCOVERED": "📥",
+                "ACCEPTED": "DONE",
+                "REJECTED": "FAIL",
+                "PENDING_REVIEW": "WAIT",
+                "DISCOVERED": "NEW",
             }
             
             triage_data.append({
-                "Status": f"{icon_map.get(status, '•')} {status}",
+                "Status": status,
                 "Count": count,
             })
         
@@ -249,19 +249,19 @@ def render(db, run_pipeline_background):
         # =====================================================================
         # SECTION 5: Quick Actions
         # =====================================================================
-        st.markdown("### ⚡ Quick Actions")
+        st.markdown("### Quick Actions")
         
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("🔄 Refresh Status", use_container_width=True):
+            if st.button("Refresh Status", use_container_width=True):
                 st.rerun()
         
         with col2:
-            st.info("💡 To view detailed logs, navigate to: 📋 Logs & Activity (sidebar)")
+            st.info("To view detailed logs, navigate to: Logs & Activity (sidebar)")
         
         with col3:
-            st.info("💡 To manage data, navigate to: 🗑️ Data Management (sidebar)")
+            st.info("To manage data, navigate to: Data Management (sidebar)")
 
     except Exception as e:
         st.error(f"Failed to load Pipeline Control: {e}")

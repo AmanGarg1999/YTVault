@@ -11,7 +11,7 @@ def render(db, run_pipeline_background):
     """Render the Rejected Videos Review page."""
     st.markdown("""
     <div class="main-header">
-        <h1>🚫 Rejected Videos Review</h1>
+        <h1>Rejected Videos Review</h1>
         <p>Review videos that were rejected by triage and manually force ingestion</p>
     </div>
     """, unsafe_allow_html=True)
@@ -22,7 +22,7 @@ def render(db, run_pipeline_background):
         )
 
         if not rejected:
-            st.success("🎉 No rejected videos! Your triage is perfect.")
+            st.success("No rejected videos! Your triage is perfect.")
         else:
             st.info(f"**{len(rejected)}** videos have been rejected by triage")
 
@@ -57,7 +57,7 @@ def render(db, run_pipeline_background):
             # Batch actions
             col1, col2, col3 = st.columns(3)
             with col1:
-                if st.button("✅ Force Accept All", type="primary"):
+                if st.button("Force Accept All", type="primary"):
                     count = 0
                     for v in rejected:
                         if db.manual_override_rejected_video(v.video_id, "batch_force_accept"):
@@ -65,7 +65,7 @@ def render(db, run_pipeline_background):
                     st.success(f"Force-accepted {count}/{len(rejected)} videos")
                     st.rerun()
             with col2:
-                if st.button("📊 Export Rejection Report"):
+                if st.button("Export Rejection Report"):
                     csv_data = "Video ID,Title,Channel ID,Rejection Reason,Confidence,Upload Date\n"
                     for v in rejected:
                         csv_data += f'"{v.video_id}","{v.title}","{v.channel_id}","{v.triage_reason}",{v.triage_confidence},"{v.upload_date}"\n'
@@ -76,7 +76,7 @@ def render(db, run_pipeline_background):
                         mime="text/csv"
                     )
             with col3:
-                if st.button("🔄 Clear All Oldest"):
+                if st.button("Clear All Oldest"):
                     # Clear oldest 10 rejected videos
                     count = 0
                     for v in rejected[-10:]:
@@ -86,7 +86,7 @@ def render(db, run_pipeline_background):
                     st.rerun()
 
             st.markdown("---")
-            st.markdown("### 📋 Individual Video Review")
+            st.markdown("### Individual Video Review")
 
             # Filter and sorting options
             col1, col2, col3 = st.columns(3)
@@ -141,13 +141,13 @@ def render(db, run_pipeline_background):
                         dur_min = video.duration_seconds // 60
                         dur_sec = video.duration_seconds % 60
                         st.caption(
-                            f"⏱️ Duration: {dur_min}m {dur_sec}s │ "
-                            f"👁️ Views: {video.view_count:,} │ "
-                            f"📅 Uploaded: {video.upload_date}"
+                            f"Duration: {dur_min}m {dur_sec}s │ "
+                            f"Views: {video.view_count:,} │ "
+                            f"Uploaded: {video.upload_date}"
                         )
                         
                         if video.triage_reason:
-                            st.warning(f"❌ Reason: **{video.triage_reason}**", icon="🔴")
+                            st.warning(f"Reason: **{video.triage_reason}**")
                         
                         st.caption(f"Confidence: {video.triage_confidence:.0%}")
                         
@@ -168,7 +168,7 @@ def render(db, run_pipeline_background):
                         with col_btn:
                             st.write("")  # Spacer
                             if st.button(
-                                "✅ Accept",
+                                "Accept",
                                 key=f"accept_{video.video_id}_{idx}",
                                 help="Force accept and ingest",
                                 use_container_width=True
@@ -177,14 +177,14 @@ def render(db, run_pipeline_background):
                                     video.video_id, 
                                     override_reason or "manual_override"
                                 ):
-                                    st.success("✅ Video force-accepted")
+                                    st.success("Video force-accepted")
                                     st.rerun()
                                 else:
                                     st.error("Failed to override")
 
                     with col3:
                         if st.button(
-                            "🔍 Details",
+                            "Details",
                             key=f"details_{video.video_id}_{idx}",
                             use_container_width=True
                         ):
@@ -206,7 +206,7 @@ def render(db, run_pipeline_background):
 
                     with col4:
                         st.link_button(
-                            "▶️ Watch",
+                            "Watch",
                             video.url,
                             help="Watch on YouTube",
                             use_container_width=True
@@ -216,7 +216,7 @@ def render(db, run_pipeline_background):
                     col_a, col_b = st.columns(2)
                     with col_a:
                         if st.button(
-                            "❌ Skip & Delete",
+                            "Skip & Delete",
                             key=f"skip_{video.video_id}_{idx}",
                             help="Permanently remove from review queue",
                             use_container_width=True
@@ -227,7 +227,7 @@ def render(db, run_pipeline_background):
                     
                     with col_b:
                         if st.button(
-                            "🔄 Retry Triage",
+                            "Retry Triage",
                             key=f"retry_{video.video_id}_{idx}",
                             help="Reset to DISCOVERED for re-evaluation",
                             use_container_width=True

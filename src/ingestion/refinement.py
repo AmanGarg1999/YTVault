@@ -170,17 +170,19 @@ class TextNormalizer:
     @with_retry("ollama_inference")
     def _call_ollama_normalize(self, text: str) -> dict:
         """Call Ollama for text normalization with retry."""
-        return ollama.chat(
-            model=self.ollama_cfg["normalizer_model"],
-            messages=[
-                {"role": "system", "content": self.system_prompt},
-                {"role": "user", "content": text},
-            ],
-            options={
-                "num_predict": self.ollama_cfg.get("normalizer_max_tokens", 2048),
-                "temperature": 0.05,
-            },
-        )
+        from src.utils.llm_pool import get_llm_semaphore
+        with get_llm_semaphore():
+            return ollama.chat(
+                model=self.ollama_cfg["normalizer_model"],
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": text},
+                ],
+                options={
+                    "num_predict": self.ollama_cfg.get("normalizer_max_tokens", 2048),
+                    "temperature": 0.05,
+                },
+            )
 
     def _merge_overlapping_chunks(self, chunks: list[str], overlap_words: int) -> str:
         """Merge overlapping normalized chunks.

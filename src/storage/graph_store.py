@@ -212,6 +212,28 @@ class GraphStore:
                     text=claim_text[:500], topic=topic.lower().strip(),
                 )
 
+    @with_retry("neo4j_query")
+    def delete_video_nodes(self, video_id: str) -> dict:
+        """Delete a Video node and its private relationships (Claims).
+        
+        Preserves shared Guest and Topic nodes unless they become 
+        completely orphaned (handled by separate cleanup if needed).
+        """
+        with self.driver.session() as session:
+            # Delete claims sourced from this video AND the video itself
+            result = session.run(
+                """MATCH (v:Video {video_id: $video_id})
+                   OPTIONAL MATCH (cl:Claim)-[:SOURCED_FROM]->(v)
+                   DETACH DELETE cl, v
+                   RETURN count(v) as video_deleted, count(cl) as claims_deleted""",
+                video_id=video_id
+            )
+            summary = result.single()
+            return {
+                "video_deleted": summary["video_deleted"] > 0,
+                "claims_deleted": summary["claims_deleted"]
+            }
+
     # -------------------------------------------------------------------
     # Query Operations
     # -------------------------------------------------------------------

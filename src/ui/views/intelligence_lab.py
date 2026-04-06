@@ -1,406 +1,188 @@
-"""Intelligence Lab - Unified research, exploration, and analysis interface."""
-
-import logging
 import streamlit as st
 import pandas as pd
+from streamlit_agraph import agraph, Node, Edge, Config
+from src.ui.components import page_header, section_header, info_card, metric_grid
+from src.storage.sqlite_store import SQLiteStore
+from src.intelligence.summarizer import SummarizerEngine
+from src.intelligence.bridge_discovery import BridgeDiscoveryEngine
 
-logger = logging.getLogger(__name__)
+def render_intelligence_lab(db: SQLiteStore):
+    st.title("Intelligence Lab")
+    st.markdown("---")
 
-
-def render(db, vs):
-    """Render the unified Intelligence Lab with research, exploration, and guest intelligence."""
+    # 0. Vault Readiness Metrics
+    stats = db.get_pipeline_stats()
+    total_vids = stats.get("total_videos", 0)
+    summarized = stats.get("summarized", 0)
     
-    st.markdown("""
-    <div class="main-header">
-        <h1>🔬 Intelligence Lab</h1>
-        <p>Research, explore relationships, browse guests, and analyze your knowledge vault</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    try:
-        # =====================================================================
-        # TABS: Research, Explorer, Guest Browser, Entity Browser
-        # =====================================================================
-        tab_research, tab_explorer, tab_guests, tab_entities = st.tabs([
-            "🔍 Research Console",
-            "🧠 Graph Explorer",
-            "👥 Guest Browser",
-            "📊 Entity Analysis"
-        ])
-
-        # =====================================================================
-        # TAB 1: RESEARCH CONSOLE - RAG queries
-        # =====================================================================
-        with tab_research:
-            render_research_tab(db, vs)
-
-        # =====================================================================
-        # TAB 2: GRAPH EXPLORER - Visualizations
-        # =====================================================================
-        with tab_explorer:
-            render_explorer_tab(db)
-
-        # =====================================================================
-        # TAB 3: GUEST BROWSER - Guest-centric analytics
-        # =====================================================================
-        with tab_guests:
-            render_guests_tab(db)
-
-        # =====================================================================
-        # TAB 4: ENTITY BROWSER - Topics, claims, quotes
-        # =====================================================================
-        with tab_entities:
-            render_entities_tab(db)
-
-    except Exception as e:
-        st.error(f"Intelligence Lab error: {e}")
-        logger.error(f"Intelligence Lab error: {e}", exc_info=True)
-
-
-def render_research_tab(db, vs):
-    """Tab 1: Research Console - RAG-based question answering."""
-    
-    st.markdown("### 🔍 Research Console")
-    st.write("Ask natural language questions across your entire knowledge vault")
-    
-    # Query help
-    with st.expander("🔧 Advanced Query Syntax & Filters"):
-        st.markdown("""
-        **Advanced Filters** (optional):
-        
-        | Filter | Example | Description |
-        |--------|---------|-------------|
-        | `channel:` | `channel:lexfridman` | Search within a channel |
-        | `topic:` | `topic:"machine learning"` | Topic-aware search |
-        | `guest:` | `guest:"Elon Musk"` | Guest-focused queries |
-        | `after:` | `after:2024-01` | Filter by date (after) |
-        | `before:` | `before:2025-06` | Filter by date (before) |
-        | `lang:` | `lang:en` | Language filter |
-        
-        **Example Combined Query**:
-        ```
-        channel:lexfridman topic:AI after:2024 lang:en
-        What is artificial general intelligence?
-        ```
-        """)
-
-    if "conversation" not in st.session_state:
-        st.session_state.conversation = []
-
-    # Display previous conversation
-    for entry in st.session_state.conversation:
-        with st.chat_message("user"):
-            st.markdown(entry["question"])
-        with st.chat_message("assistant"):
-            st.markdown(entry["answer"])
-            if entry.get("citations"):
-                with st.expander(f"📎 {len(entry['citations'])} sources"):
-                    for c in entry["citations"]:
-                        st.markdown(
-                            f"- [{c['source_id']}] **{c['video_title']}** "
-                            f"([{c['timestamp']}]({c['link']}))"
-                        )
-            st.caption(entry.get("meta", ""))
-
-    # New question input
-    question = st.chat_input(
-        "Ask a research question... (supports channel:, topic:, guest:, after:, before:, lang:)",
-    )
-
-    if question:
-        st.session_state.conversation.append({"question": question, "answer": "...", "citations": []})
-        with st.chat_message("user"):
-            st.markdown(question)
-        with st.chat_message("assistant"):
-            with st.spinner("Searching vault and synthesizing answer..."):
-                try:
-                    from src.intelligence.query_parser import parse_query
-                    from src.intelligence.rag_engine import RAGEngine
-                    
-                    # Parse query
-                    query_plan = parse_query(question)
-                    
-                    # Run RAG
-                    rag_engine = RAGEngine(db, vs)
-                    result = rag_engine.query(query_plan)
-                    
-                    # Display answer
-                    st.markdown(result.answer)
-                    
-                    # Update conversation
-                    if result.citations:
-                        with st.expander(f"📎 {len(result.citations)} sources"):
-                            for c in result.citations:
-                                st.markdown(f"- {c}")
-                    
-                    # Store in session
-                    st.session_state.conversation[-1].update({
-                        "answer": result.answer,
-                        "citations": result.citations or [],
-                    })
-                    
-                except Exception as e:
-                    st.error(f"Query failed: {e}")
-                    logger.error(f"RAG query error: {e}", exc_info=True)
-
-
-def render_explorer_tab(db):
-    """Tab 2: Graph Explorer - Visualize relationships."""
-    
-    st.markdown("### 🧠 Knowledge Graph Explorer")
-    
-    try:
-        from streamlit_agraph import agraph, Node, Edge, Config
-        from src.storage.graph_store import GraphStore
-        from src.intelligence.explorer import KnowledgeExplorer
-
-        graph_db = GraphStore()
-        explorer_obj = KnowledgeExplorer(db, graph_db)
-
-        col1, col2 = st.columns([1, 4])
-
+    with st.expander("Vault Intelligence Readiness", expanded=summarized < 100):
+        col1, col2 = st.columns([1, 2])
         with col1:
-            st.markdown("### 🔭 Exploration Mode")
-            explore_mode = st.radio("View Type", ["🎯 Target Search", "🌐 Entire Vault"], horizontal=False)
-
-            if explore_mode == "🎯 Target Search":
-                search_q = st.text_input("Entity Name", placeholder="Elon Musk, Mars, AGI...")
-                search_type = st.selectbox("Type", ["Guest", "Topic", "Video"])
-
-                if st.button("🚀 Visualize Connections"):
-                    if search_q:
-                        with st.spinner("Traversing graph..."):
-                            data = explorer_obj.get_entity_connections(search_q, search_type)
-                            st.session_state.explorer_graph = data
-                            st.session_state.explorer_mode = "Target"
-                    else:
-                        st.warning("Please enter an entity name.")
-            else:
-                if st.button("🔭 Load Global Map", type="primary"):
-                    with st.spinner("Mapping entire vault..."):
-                        data = explorer_obj.get_global_graph()
-                        st.session_state.explorer_graph = data
-                        st.session_state.explorer_mode = "Global"
-
-            # Discovery Sidebar
-            st.markdown("---")
-            st.markdown("### 📊 Trending Topics")
-            try:
-                stats = explorer_obj.get_vault_stats()
-                for t in stats.get("top_topics", []):
-                    if st.button(f"#{t['name']} ({t['weight']})", key=f"topic_{t['name']}", use_container_width=True):
-                        with st.spinner(f"Mapping {t['name']}..."):
-                            data = explorer_obj.get_entity_connections(t['name'], "Topic")
-                            st.session_state.explorer_graph = data
-                            st.session_state.explorer_mode = "Target"
-                            st.rerun()
-            except Exception as e:
-                st.warning(f"Could not load trending topics: {e}")
-
+            st.metric("Summarized Videos", f"{summarized}/{total_vids}")
         with col2:
-            # Display graph if available
-            if "explorer_graph" in st.session_state:
-                try:
-                    st.markdown("### Graph Visualization")
-                    # TODO: Render graph with agraph component
-                    st.info("Graph visualization (requires streamlit-agraph integration)")
-                except Exception as e:
-                    st.warning(f"Could not render graph: {e}")
+            st.progress(summarized / total_vids if total_vids > 0 else 0)
+            st.caption(f"Intelligence features (Mind-Maps, Trends) require the 'Summarization' stage. {total_vids - summarized} videos pending.")
+            
+        if st.button("Prioritize Summarization Backfill"):
+            to_process = db.get_videos_for_summarization(limit=20)
+            if not to_process:
+                st.success("All available videos are already summarized!")
             else:
-                st.info("👈 Select an entity or view to visualize")
+                st.info(f"Processing {len(to_process)} videos. Please wait...")
+                summarizer = SummarizerEngine(db)
+                progress_bar = st.progress(0)
+                for i, vid_id in enumerate(to_process):
+                    summarizer.generate_summary(vid_id)
+                    progress_bar.progress((i + 1) / len(to_process))
+                st.success(f"Successfully summarized {len(to_process)} videos! Refreshing Lab...")
+                st.rerun()
 
-    except ImportError:
-        st.error("Missing library: streamlit-agraph. Please install: pip install streamlit-agraph")
-    except Exception as e:
-        st.error(f"Knowledge Explorer error: {e}")
-        logger.error(f"Knowledge Explorer error: {e}", exc_info=True)
+    # 1. Visualization Tabs
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "Knowledge Mind-Map", 
+        "Market Trends", 
+        "Guest Network", 
+        "Thematic Bridges"
+    ])
 
+    with tab1:
+        st.subheader("Knowledge Mind-Map")
+        st.info("Visualizing thematic connections across your vault.")
+        
+        # Threshold Slider
+        threshold = st.slider(
+            "Connection Strength (Minimum co-occurrences)", 
+            min_value=1, 
+            max_value=10, 
+            value=1,
+            help="1 = Show all links within single videos. >1 = Show only shared connections across videos."
+        )
+        
+        render_mind_map(db, threshold)
 
-def render_guests_tab(db):
-    """Tab 3: Guest Browser - Guest-centric analytics."""
+    with tab2:
+        render_market_trends(db)
+
+    with tab3:
+        render_guest_network(db)
+        
+    with tab4:
+        render_thematic_bridges(db)
+
+def render_mind_map(db: SQLiteStore, threshold: int = 1):
+    """Render a semantic mind-map of the knowledge vault."""
+    section_header("Semantic Mind-Map")
+    st.caption("A non-linear visual explorer of your vault's core themes.")
+
+    # 1. Fetch topics and their relationships
+    # We use positional indices and explicit json_extract for robustness
+    rows = db.conn.execute(f"""
+        SELECT json_extract(t1.value, '$.name') as topic_a, json_extract(t2.value, '$.name') as topic_b, COUNT(*) as weight
+        FROM video_summaries vs
+        CROSS JOIN json_each(vs.topics_json) as t1
+        CROSS JOIN json_each(vs.topics_json) as t2
+        WHERE json_extract(t1.value, '$.name') < json_extract(t2.value, '$.name')
+        GROUP BY 1, 2
+        HAVING COUNT(*) >= {threshold}
+        ORDER BY 3 DESC
+        LIMIT 50
+    """).fetchall()
+
+    nodes = []
+    edges = []
+    seen_nodes = set()
+
+    for r in rows:
+        if r["topic_a"] not in seen_nodes:
+            # Use Indigo primary-500
+            nodes.append(Node(id=r["topic_a"], label=r["topic_a"], size=25, color="#6366f1"))
+            seen_nodes.add(r["topic_a"])
+        if r["topic_b"] not in seen_nodes:
+            nodes.append(Node(id=r["topic_b"], label=r["topic_b"], size=25, color="#6366f1"))
+            seen_nodes.add(r["topic_b"])
+        
+        # Use Slate-600 for edges
+        edges.append(Edge(source=r["topic_a"], target=r["topic_b"], width=r["weight"], color="#475569"))
+
+    config = Config(width=800, height=600, directed=False, physics=True, hierarchical=False)
     
-    st.markdown("### 👥 Guest Intelligence Browser")
+    if nodes:
+        agraph(nodes=nodes, edges=edges, config=config)
+    else:
+        info_card("No Connections Found", "Process more videos to see the knowledge graph emerge.")
+
+def render_market_trends(db: SQLiteStore):
+    """Render topic mention frequency over time."""
+    section_header("Thematic Market Trends")
     
-    try:
-        guests = db.get_all_guests()
+    trends_data = db.get_topic_trends()
+    if not trends_data:
+        st.info("Insufficient data for trend analysis.")
+        return
 
-        if not guests:
-            st.info("No guests discovered yet. Run the pipeline to extract guests from transcripts.")
-        else:
-            guest_names = [g.canonical_name for g in guests]
-            
-            # Handle pre-selected guest from other pages
-            default_index = 0
-            if "selected_guest" in st.session_state:
-                pre_selected = st.session_state.pop("selected_guest")
-                if pre_selected in guest_names:
-                    default_index = guest_names.index(pre_selected)
-
-            selected_name = st.selectbox(
-                "Select Guest",
-                guest_names,
-                index=default_index,
-                help="Browse all discovered guests sorted by mention count",
-            )
-
-            if selected_name:
-                guest = next(g for g in guests if g.canonical_name == selected_name)
-
-                # Guest info
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Mentions", guest.mention_count)
-                with col2:
-                    st.metric("Aliases", len(guest.aliases))
-                with col3:
-                    st.metric("Type", guest.entity_type)
-
-                if guest.aliases:
-                    st.markdown(f"**Also known as:** {', '.join(guest.aliases)}")
-
-                if guest.bio:
-                    st.markdown(f"**Bio:** {guest.bio}")
-
-                # Guest appearances
-                st.markdown("### 📺 Appearances")
-                
-                appearances = db.conn.execute(
-                    """SELECT ga.context_snippet, ga.start_timestamp, ga.end_timestamp,
-                              v.title, v.video_id, v.upload_date, v.channel_id
-                       FROM guest_appearances ga
-                       JOIN videos v ON ga.video_id = v.video_id
-                       WHERE ga.guest_id = ?
-                       ORDER BY v.upload_date DESC
-                       LIMIT 50""",
-                    (guest.guest_id,)
-                ).fetchall()
-
-                if appearances:
-                    for app in appearances:
-                        with st.container(border=True):
-                            st.markdown(f"**{app['title']}**")
-                            st.caption(f"{app['upload_date']} on {app['channel_id']}")
-                            if app['context_snippet']:
-                                st.caption(f"💬 \"{app['context_snippet'][:100]}...\"")
-                            
-                            # Video link
-                            video_url = f"https://www.youtube.com/watch?v={app['video_id']}&t={int(app['start_timestamp'])}"
-                            st.link_button("Watch", video_url, use_container_width=True)
-                else:
-                    st.info("No appearances recorded for this guest.")
-
-                # Co-occurring guests
-                st.markdown("### 🤝 Co-occurring Guests")
-                co_guests = db.conn.execute(
-                    """SELECT DISTINCT ga2.guest_id 
-                       FROM guest_appearances ga1
-                       JOIN guest_appearances ga2 ON ga1.video_id = ga2.video_id
-                       WHERE ga1.guest_id = ? AND ga2.guest_id != ?
-                       LIMIT 10""",
-                    (guest.guest_id, guest.guest_id)
-                ).fetchall()
-
-                if co_guests:
-                    for cg in co_guests:
-                        co_guest = guest  # TODO: Fetch co-guest details
-                        if st.button(f"👤 {co_guest.canonical_name}", key=f"cogues_{cg[0]}"):
-                            st.session_state.selected_guest = co_guest.canonical_name
-                            st.rerun()
-                else:
-                    st.info("No co-occurring guests found.")
-
-    except Exception as e:
-        st.error(f"Guest browser error: {e}")
-        logger.error(f"Guest browser error: {e}", exc_info=True)
-
-
-def render_entities_tab(db):
-    """Tab 4: Entity Analysis - Topics, claims, quotes."""
+    df = pd.DataFrame(trends_data)
     
-    st.markdown("### 📊 Entity Analysis")
+    # Pivot for multi-line chart
+    pivot_df = df.pivot(index='month', columns='topic', values='count').fillna(0)
     
-    entity_type = st.radio(
-        "Entity Type",
-        ["📌 Topics", "💬 Quotes", "✅ Claims"],
-        horizontal=True
-    )
+    st.line_chart(pivot_df)
+    
+    st.write("---")
+    st.subheader("Topic Momentum (Recent)")
+    # Calculate % change or just most active topics
+    st.dataframe(pivot_df.iloc[-3:].T, use_container_width=True)
 
-    if entity_type == "📌 Topics":
-        st.markdown("#### Top Topics Discussed")
-        try:
-            # Get all topic mentions from chunks
-            rows = db.conn.execute(
-                """SELECT topics_json FROM transcript_chunks 
-                   WHERE topics_json != '[]'
-                   LIMIT 100"""
-            ).fetchall()
-            
-            topics_count = {}
-            for row in rows:
-                import json
-                try:
-                    topics = json.loads(row[0])
-                    for topic in topics:
-                        if isinstance(topic, dict):
-                            name = topic.get('name', str(topic))
-                        else:
-                            name = str(topic)
-                        topics_count[name] = topics_count.get(name, 0) + 1
-                except:
-                    pass
-            
-            if topics_count:
-                df = pd.DataFrame([
-                    {"Topic": k, "Mentions": v}
-                    for k, v in sorted(topics_count.items(), key=lambda x: -x[1])[:20]
-                ])
-                st.dataframe(df, use_container_width=True, hide_index=True)
-            else:
-                st.info("No topics extracted yet.")
-        except Exception as e:
-            st.warning(f"Could not load topics: {e}")
+def render_guest_network(db: SQLiteStore):
+    """Render the social graph of experts."""
+    section_header("Guest Co-Occurrence Network")
+    
+    network_data = db.get_guest_network()
+    
+    if not network_data:
+        st.info("No guest co-occurrences found yet.")
+        return
 
-    elif entity_type == "💬 Quotes":
-        st.markdown("#### Notable Quotations")
-        try:
-            quotes = db.conn.execute(
-                """SELECT speaker, quote_text, video_id, timestamp 
-                   FROM quotes 
-                   ORDER BY timestamp DESC 
-                   LIMIT 50"""
-            ).fetchall()
-            
-            if quotes:
-                for q in quotes:
-                    with st.container(border=True):
-                        st.markdown(f'*"{q[1]}"*')
-                        st.caption(f"— {q[0] or 'Unknown'}")
-                        st.caption(f"[{q[2][:8]}]({q[3]:.0f}s)")
-            else:
-                st.info("No quotes extracted yet.")
-        except Exception as e:
-            st.warning(f"Could not load quotes: {e}")
+    nodes = []
+    edges = []
+    seen_guests = set()
 
-    elif entity_type == "✅ Claims":
-        st.markdown("#### Extracted Claims")
-        try:
-            claims = db.conn.execute(
-                """SELECT speaker, claim_text, topic, confidence 
-                   FROM claims 
-                   ORDER BY confidence DESC 
-                   LIMIT 50"""
-            ).fetchall()
+    for r in network_data:
+        if r["guest_a"] not in seen_guests:
+            # Use Warning Amber
+            nodes.append(Node(id=r["guest_a"], label=r["guest_a"], size=20, color="#f59e0b"))
+            seen_guests.add(r["guest_a"])
+        if r["guest_b"] not in seen_guests:
+            nodes.append(Node(id=r["guest_b"], label=r["guest_b"], size=20, color="#f59e0b"))
+            seen_guests.add(r["guest_b"])
             
-            if claims:
-                for c in claims:
-                    with st.container(border=True):
-                        st.markdown(f"**{c[0] or 'Unknown'}**: {c[1]}")
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.caption(f"📌 Topic: {c[2]}")
-                        with col2:
-                            st.caption(f"🎯 Confidence: {c[3]:.0%}")
-            else:
-                st.info("No claims extracted yet.")
-        except Exception as e:
-            st.warning(f"Could not load claims: {e}")
+        edges.append(Edge(source=r["guest_a"], target=r["guest_b"], label=r["topic"], color="#475569"))
+
+    config = Config(width=800, height=600, directed=False, physics=True)
+    agraph(nodes=nodes, edges=edges, config=config)
+
+def render_thematic_bridges(db: SQLiteStore):
+    """Render LLM-discovered bridges."""
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        section_header("Thematic Bridge Discovery")
+    with col2:
+        if st.button("Explore New Bridges"):
+            with st.spinner("LLM discovering hidden connections..."):
+                engine = BridgeDiscoveryEngine(db)
+                engine.discover_bridges(sample_size=3)
+                st.rerun()
+
+    bridges = db.get_thematic_bridges()
+    
+    if not bridges:
+        st.info("Click the button above to start discovering hidden thematic connections.")
+        return
+
+    for bridge in bridges:
+        with st.container(border=True):
+            cols = st.columns([1, 1, 3])
+            cols[0].markdown(f"### {bridge.topic_a}")
+            cols[1].markdown(f"### {bridge.topic_b}")
+            with cols[2]:
+                st.markdown(bridge.insight)
+            st.caption(f"Discovered via {bridge.llm_model} • {bridge.created_at}")

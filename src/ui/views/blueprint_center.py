@@ -13,8 +13,7 @@ def render(db):
     
     page_header(
         title="Blueprint Center",
-        subtitle="Step-by-step actionable checklists extracted from your vault",
-        icon="📋"
+        subtitle="Step-by-step actionable checklists extracted from your vault"
     )
 
     # 1. Fetch all blueprints
@@ -28,10 +27,10 @@ def render(db):
         return
 
     # 2. Sidebar Filters
-    st.sidebar.markdown("### 📋 Checklist Stats")
+    st.sidebar.markdown("### Checklist Stats")
     st.sidebar.metric("Total Blueprints", len(blueprints))
     
-    search_query = st.sidebar.text_input("🔍 Search Checklists", "")
+    search_query = st.sidebar.text_input("Search Checklists", "")
     
     if search_query:
         filtered = [b for b in blueprints if search_query.lower() in b["title"].lower() or search_query.lower() in b["channel_name"].lower()]
@@ -48,11 +47,11 @@ def render(db):
             col1, col2 = st.columns([3, 1])
             with col1:
                 st.markdown(f"### {bp['title']}")
-                st.caption(f"📺 {bp['channel_name']} | 📅 {bp['created_at']}")
+                st.caption(f"{bp['channel_name']} | {bp['created_at']}")
             with col2:
                 # Add a "View Video" button or link
                 video_url = f"https://www.youtube.com/watch?v={bp['video_id']}"
-                st.link_button("📺 Watch Video", video_url)
+                st.link_button("Watch Video", video_url)
 
             spacer("0.5rem")
             

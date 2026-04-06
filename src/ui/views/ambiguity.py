@@ -11,7 +11,7 @@ def render(db):
     """Render the Ambiguity Queue page."""
     st.markdown("""
     <div class="main-header">
-        <h1>📋 Ambiguity Queue</h1>
+        <h1>Ambiguity Queue</h1>
         <p>Review and classify videos that couldn't be auto-triaged</p>
     </div>
     """, unsafe_allow_html=True)
@@ -20,20 +20,20 @@ def render(db):
         pending = db.get_videos_by_status("PENDING_REVIEW", limit=50)
 
         if not pending:
-            st.success("🎉 Queue is empty! All videos have been classified.")
+            st.success("Queue is empty! All videos have been classified.")
         else:
             st.info(f"**{len(pending)}** videos awaiting review")
 
             # Batch actions
             col1, col2, col3 = st.columns(3)
             with col1:
-                if st.button("✅ Accept All", type="primary"):
+                if st.button("Accept All", type="primary"):
                     for v in pending:
                         db.update_triage_status(v.video_id, "ACCEPTED", "manual_batch_accept")
                     st.success(f"Accepted {len(pending)} videos")
                     st.rerun()
             with col2:
-                if st.button("❌ Reject All"):
+                if st.button("Reject All"):
                     for v in pending:
                         db.update_triage_status(v.video_id, "REJECTED", "manual_batch_reject")
                     st.success(f"Rejected {len(pending)} videos")
@@ -62,7 +62,7 @@ def render(db):
                             st.caption(f"Reason: {video.triage_reason}")
 
                     with col2:
-                        if st.button("✅", key=f"acc_{video.video_id}",
+                        if st.button("Accept", key=f"acc_{video.video_id}",
                                      help="Accept as knowledge-dense"):
                             db.update_triage_status(
                                 video.video_id, "ACCEPTED", "manual_accept", 1.0
@@ -70,7 +70,7 @@ def render(db):
                             st.rerun()
 
                     with col3:
-                        if st.button("❌", key=f"rej_{video.video_id}",
+                        if st.button("Reject", key=f"rej_{video.video_id}",
                                      help="Reject as noise"):
                             db.update_triage_status(
                                 video.video_id, "REJECTED", "manual_reject", 1.0
@@ -78,7 +78,7 @@ def render(db):
                             st.rerun()
 
                     with col4:
-                        st.link_button("▶️", video.url, help="Watch on YouTube")
+                        st.link_button("Watch", video.url, help="Watch on YouTube")
 
                     st.divider()
     except Exception as e:

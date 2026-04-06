@@ -66,18 +66,20 @@ class EntityResolver:
         """
         truncated = text[:2000]
 
+        from src.utils.llm_pool import get_llm_semaphore
         try:
-            response = ollama_api.chat(
-                model=self.ollama_cfg["triage_model"],  # Reuse fast model
-                messages=[
-                    {"role": "system", "content": self.ner_prompt},
-                    {"role": "user", "content": truncated},
-                ],
-                options={
-                    "num_predict": 500,
-                    "temperature": 0.1,
-                },
-            )
+            with get_llm_semaphore():
+                response = ollama_api.chat(
+                    model=self.ollama_cfg["triage_model"],  # Reuse fast model
+                    messages=[
+                        {"role": "system", "content": self.ner_prompt},
+                        {"role": "user", "content": truncated},
+                    ],
+                    options={
+                        "num_predict": 500,
+                        "temperature": 0.1,
+                    },
+                )
 
             raw = response["message"]["content"].strip()
             entities = self._parse_entity_response(raw)
@@ -205,12 +207,14 @@ class EntityResolver:
             f'or "NEW" if you are unsure or it is a different person.'
         )
 
+        from src.utils.llm_pool import get_llm_semaphore
         try:
-            response = ollama_api.chat(
-                model=self.ollama_cfg["triage_model"],
-                messages=[{"role": "user", "content": prompt}],
-                options={"num_predict": 50, "temperature": 0.0},
-            )
+            with get_llm_semaphore():
+                response = ollama_api.chat(
+                    model=self.ollama_cfg["triage_model"],
+                    messages=[{"role": "user", "content": prompt}],
+                    options={"num_predict": 50, "temperature": 0.0},
+                )
 
             answer = response["message"]["content"].strip().strip('"').strip("'")
 

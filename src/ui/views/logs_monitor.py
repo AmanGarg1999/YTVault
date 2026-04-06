@@ -21,7 +21,7 @@ def render(db):
     """Render the Logs & Activity Monitor page."""
     st.markdown("""
     <div class="main-header">
-        <h1>📋 Pipeline Logs & Activity Monitor</h1>
+        <h1>Pipeline Logs & Activity Monitor</h1>
         <p>Real-time visibility into all pipeline events, errors, and processing stages</p>
     </div>
     """, unsafe_allow_html=True)
@@ -30,7 +30,7 @@ def render(db):
         # =====================================================================
         # SECTION 1: Real-Time Activity Feed
         # =====================================================================
-        st.markdown("### 🔴 Live Activity Feed")
+        st.markdown("### Live Activity Feed")
         
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -66,11 +66,11 @@ def render(db):
             log_data = []
             for log in logs:
                 icon_map = {
-                    "SUCCESS": "✅",
-                    "INFO": "ℹ️",
-                    "WARNING": "⚠️",
-                    "ERROR": "❌",
-                    "DEBUG": "🐛",
+                    "SUCCESS": "DONE",
+                    "INFO": "INFO",
+                    "WARNING": "WARN",
+                    "ERROR": "ERROR",
+                    "DEBUG": "DEBUG",
                 }
                 icon = icon_map.get(log.level, "•")
                 
@@ -86,7 +86,7 @@ def render(db):
             st.dataframe(df, use_container_width=True, hide_index=True)
             
             # Show detailed view on click
-            with st.expander("📖 View Full Log Details", expanded=False):
+            with st.expander("View Full Log Details", expanded=False):
                 selected_idx = st.selectbox(
                     "Select log entry",
                     range(len(logs)),
@@ -122,7 +122,7 @@ def render(db):
         # =====================================================================
         # SECTION 2: Scan-Specific Activity Timeline
         # =====================================================================
-        st.markdown("### 📹 Per-Video Activity Timeline")
+        st.markdown("### Per-Video Activity Timeline")
         
         active_scans = _get_active_scans(db)
         if active_scans:
@@ -153,18 +153,18 @@ def render(db):
                         stages_seen = set()
                         errors = [l for l in v_logs if l.level == "ERROR"]
                         
-                        with st.expander(f"📹 {video_title} ({len(v_logs)} events) {' ❌' if errors else ' ✅'}", expanded=False):
+                        with st.expander(f"{video_title} ({len(v_logs)} events)", expanded=False):
                             # Timeline visualization
                             for log in sorted(v_logs, key=lambda x: x.timestamp):
                                 if log.stage:
                                     stages_seen.add(log.stage)
                                 
                                 icon_map = {
-                                    "SUCCESS": "✅",
-                                    "INFO": "ℹ️",
-                                    "WARNING": "⚠️",
-                                    "ERROR": "❌",
-                                    "DEBUG": "🐛",
+                                    "SUCCESS": "DONE",
+                                    "INFO": "INFO",
+                                    "WARNING": "WARN",
+                                    "ERROR": "ERROR",
+                                    "DEBUG": "DEBUG",
                                 }
                                 icon = icon_map.get(log.level, "•")
                                 
@@ -183,7 +183,7 @@ def render(db):
         # =====================================================================
         # SECTION 3: Error Analysis & Troubleshooting
         # =====================================================================
-        st.markdown("### 🔴 Error Analysis & Troubleshooting")
+        st.markdown("### Error Analysis & Troubleshooting")
         
         # Get recent errors
         error_logs = []
@@ -218,7 +218,7 @@ def render(db):
             st.dataframe(df, use_container_width=True, hide_index=True)
             
             # Detailed error inspection
-            if st.checkbox("📖 Inspect Error Details", key="inspect_errors"):
+            if st.checkbox("Inspect Error Details", key="inspect_errors"):
                 selected_error = st.selectbox(
                     "Select error to inspect",
                     error_data,
@@ -241,14 +241,14 @@ def render(db):
                             if log.error_detail:
                                 st.code(log.error_detail, language="text")
         else:
-            st.success("✅ No errors logged!")
+            st.success("No errors logged!")
 
         st.markdown("---")
 
         # =====================================================================
         # SECTION 4: Log Summary & Export
         # =====================================================================
-        st.markdown("### 📊 Log Summary & Export")
+        st.markdown("### Log Summary & Export")
         
         col1, col2 = st.columns(2)
         with col1:
@@ -275,7 +275,7 @@ def render(db):
                 key="export_format",
             )
             
-            if st.button("📥 Export Logs", key="export_logs"):
+            if st.button("Export Logs", key="export_logs"):
                 try:
                     scan_id = scan_filter if scan_filter != "All" else None
                     logs = db.get_logs(scan_id=scan_id, limit=10000)
@@ -293,7 +293,7 @@ def render(db):
                         } for l in logs])
                         csv = df.to_csv(index=False)
                         st.download_button(
-                            "📥 Download CSV",
+                            "Download CSV",
                             csv,
                             "pipeline_logs.csv",
                             "text/csv"
@@ -312,7 +312,7 @@ def render(db):
                         } for l in logs]
                         json_str = json.dumps(data, indent=2)
                         st.download_button(
-                            "📥 Download JSON",
+                            "Download JSON",
                             json_str,
                             "pipeline_logs.json",
                             "application/json"
@@ -329,9 +329,9 @@ def render(db):
             max_value=365,
             value=30,
         )
-        if st.button("🗑️ Cleanup Old Logs", key="cleanup_logs"):
+        if st.button("Cleanup Old Logs", key="cleanup_logs"):
             count = db.clear_logs(cleanup_days)
-            st.success(f"✅ Deleted {count} old logs")
+            st.success(f"Deleted {count} old logs")
 
     except Exception as e:
         st.error(f"Failed to load Logs Monitor: {e}")

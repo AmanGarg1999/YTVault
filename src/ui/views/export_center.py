@@ -11,7 +11,7 @@ def render(db):
     """Render the Export Center page."""
     st.markdown("""
     <div class="main-header">
-        <h1>📤 Export Center</h1>
+        <h1>Export Center</h1>
         <p>Export research data and pipeline statistics</p>
     </div>
     """, unsafe_allow_html=True)
@@ -24,7 +24,7 @@ def render(db):
 
         with col1:
             st.markdown("### Pipeline Statistics")
-            if st.button("📊 Export Stats (Markdown)"):
+            if st.button("Export Stats (Markdown)"):
                 content = exporter.export_pipeline_stats()
                 st.download_button("Download", content, "pipeline_stats.md")
                 st.markdown(content)
@@ -32,7 +32,7 @@ def render(db):
         with col2:
             st.markdown("### Guest Registry")
             fmt = st.selectbox("Format", ["markdown", "json", "csv"], key="guest_fmt")
-            if st.button("👤 Export Guests"):
+            if st.button("Export Guests"):
                 content = exporter.export_guests(fmt=fmt)
                 ext = {"markdown": "md", "json": "json", "csv": "csv"}[fmt]
                 st.download_button("Download", content, f"guests.{ext}")

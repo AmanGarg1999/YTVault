@@ -134,15 +134,33 @@ class TextNormalizer:
         if len(words) <= chunk_size:
             return self._normalize_chunk(text)
 
-        # Process in overlapping chunks
-        chunks = []
+        # Process in overlapping chunks using LLMPool
+        from src.utils.llm_pool import LLMPool, LLMTask, LLMPriority
+        pool = LLMPool()
+        
+        tasks = []
         start = 0
         while start < len(words):
             end = min(start + chunk_size, len(words))
             chunk_text = " ".join(words[start:end])
-            normalized = self._normalize_chunk(chunk_text)
-            chunks.append(normalized)
+            
+            tasks.append(LLMTask(
+                task_id=f"normalize_{start}",
+                fn=self._normalize_chunk,
+                args=(chunk_text,),
+                priority=LLMPriority.MEDIUM
+            ))
             start += chunk_size - overlap
+
+        results = pool.submit_batch(tasks)
+        
+        # Sort results by task_id to maintain order
+        sorted_results = sorted(results, key=lambda r: int(r.task_id.split("_")[1]))
+        chunks = [r.result for r in sorted_results if r.success and r.result]
+        
+        if not chunks:
+            logger.warning("All normalization chunks failed, returning original text.")
+            return text
 
         # Merge chunks (overlap handling: use the first chunk's version)
         return self._merge_overlapping_chunks(chunks, overlap)
@@ -152,6 +170,7 @@ class TextNormalizer:
         start_time = time.perf_counter()
 
         try:
+            # Note: This is called by the LLMPool worker thread
             response = self._call_ollama_normalize(text)
 
             result = response["message"]["content"].strip()
@@ -163,7 +182,7 @@ class TextNormalizer:
             return result
 
         except Exception as e:
-            logger.error(f"Text normalization failed: {e}")
+            logger.error(f"Text normalization chunk failed: {e}")
             # Fallback: return original text (better than losing content)
             return text
 

@@ -15,8 +15,12 @@ from typing import Optional
 
 from src.storage.sqlite_store import Channel, Video
 from src.utils.retry import with_retry
+from src.utils.circuit_breaker import get_circuit_breaker
 
 logger = logging.getLogger(__name__)
+
+# yt-dlp Circuit Breaker
+YTDLP_BREAKER = get_circuit_breaker("yt-dlp", failure_threshold=3, recovery_timeout=120)
 
 # Rate limiting configuration
 YTDLP_RATE_LIMIT_DELAY = 1.0  # seconds between requests
@@ -118,11 +122,16 @@ def parse_youtube_url(url: str) -> ParsedURL:
 # ---------------------------------------------------------------------------
 
 @with_retry("yt_dlp_metadata")
-def _run_ytdlp(args: list[str], timeout: int = 60) -> str:
+def _run_ytdlp(args: list[str], timeout: int = 180) -> str:
     """Run yt-dlp with given arguments and return stdout.
 
-    Isolates subprocess environment to prevent locale-dependent failures.
+    Wrapped with a Circuit Breaker to prevent hanging on YouTube blocks.
     """
+    return YTDLP_BREAKER.call(_run_ytdlp_raw, args, timeout)
+
+
+def _run_ytdlp_raw(args: list[str], timeout: int = 180) -> str:
+    """Inner yt-dlp execution logic."""
     import os as _os
     cmd = [
         "yt-dlp", "--no-download", "--no-check-certificate", "--force-ipv4",
@@ -266,10 +275,11 @@ def extract_channel_info(url: str) -> Channel:
         # Use --flat-playlist with limit 1 to get first video's metadata
         raw = _run_ytdlp([
             "--flat-playlist",
+            "--playlist-end", "1",
             "--dump-json",
             "--print", "id",
             url
-        ], timeout=30)
+        ], timeout=180)
         
         lines = [l.strip() for l in raw.strip().split("\n") if l.strip()]
         if lines:
@@ -321,7 +331,7 @@ def discover_video_ids(url: str, parsed: ParsedURL, after_date: str = None):
     target_url = url
     if parsed.url_type == "channel":
         # Strategy A: Specifically target /videos tab
-        if not target_url.endswith("/videos"):
+        if "/videos" not in target_url:
             discovery_url = target_url.rstrip("/") + "/videos"
         else:
             discovery_url = target_url

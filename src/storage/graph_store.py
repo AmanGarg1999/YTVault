@@ -115,6 +115,34 @@ class GraphStore:
                 name=topic_name.lower().strip(),
             )
 
+    @with_retry("neo4j_query")
+    def batch_upsert_videos(self, videos: list[dict]) -> None:
+        """Batch upsert multiple Video nodes and link to their Channels."""
+        with self.driver.session() as session:
+            session.run(
+                """UNWIND $videos AS v_data
+                   MERGE (v:Video {video_id: v_data.video_id})
+                   SET v.title = v_data.title, v.upload_date = v_data.upload_date,
+                       v.duration = v_data.duration
+                   WITH v, v_data
+                   MATCH (c:Channel {channel_id: v_data.channel_id})
+                   MERGE (c)-[:PUBLISHED]->(v)""",
+                videos=videos,
+            )
+
+    @with_retry("neo4j_query")
+    def batch_link_topics(self, links: list[dict]) -> None:
+        """Batch create DISCUSSES relationships between Videos and Topics."""
+        with self.driver.session() as session:
+            session.run(
+                """UNWIND $links AS link
+                   MATCH (v:Video {video_id: link.video_id})
+                   MERGE (t:Topic {name: link.topic_name})
+                   MERGE (v)-[r:DISCUSSES]->(t)
+                   SET r.relevance = link.relevance""",
+                links=links,
+            )
+
     # -------------------------------------------------------------------
     # Relationship Operations
     # -------------------------------------------------------------------

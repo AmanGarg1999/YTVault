@@ -67,6 +67,26 @@ class Video:
     thumbnail_url: str = ""
     heatmap_json: str = "[]"
 
+    def __post_init__(self):
+        """Handle potential data migration or extra fields."""
+        pass
+
+    @classmethod
+    def from_row(cls, row: dict):
+        """Create a Video from a database row, ignoring extra fields."""
+        # Get the fields of the dataclass
+        import dataclasses
+        valid_fields = {f.name for f in dataclasses.fields(cls)}
+        
+        # Prepare data by popping tags_json and cleaning up
+        d = dict(row)
+        if "tags_json" in d:
+            d["tags"] = json.loads(d.pop("tags_json", "[]"))
+        
+        # Filter only valid fields
+        filtered_d = {k: v for k, v in d.items() if k in valid_fields}
+        return cls(**filtered_d)
+
 
 @dataclass
 class Guest:
@@ -95,6 +115,7 @@ class TranscriptChunk:
     claims_json: str = "[]"
     quotes_json: str = "[]"
     is_high_attention: bool = False
+    content_hash: str = ""  # Fixed: Added to match schema migration v20
 
 
 @dataclass
@@ -799,9 +820,7 @@ class SQLiteStore:
         ).fetchone()
         if row is None:
             return None
-        d = dict(row)
-        d["tags"] = json.loads(d.pop("tags_json", "[]"))
-        return Video(**d)
+        return Video.from_row(row)
 
     def record_stats_snapshot(
         self, video_id: str, view_count: int, like_count: int, comment_count: int
@@ -822,9 +841,7 @@ class SQLiteStore:
         ).fetchall()
         result = []
         for r in rows:
-            d = dict(r)
-            d["tags"] = json.loads(d.pop("tags_json", "[]"))
-            result.append(Video(**d))
+            result.append(Video.from_row(r))
         return result
 
     def get_videos_by_status_sorted(
@@ -837,9 +854,7 @@ class SQLiteStore:
         ).fetchall()
         result = []
         for r in rows:
-            d = dict(r)
-            d["tags"] = json.loads(d.pop("tags_json", "[]"))
-            result.append(Video(**d))
+            result.append(Video.from_row(r))
         return result
 
     def get_videos_by_channel(self, channel_id: str, limit: int = None) -> list[Video]:
@@ -852,9 +867,7 @@ class SQLiteStore:
         rows = self.conn.execute(query, params).fetchall()
         result = []
         for r in rows:
-            d = dict(r)
-            d["tags"] = json.loads(d.pop("tags_json", "[]"))
-            result.append(Video(**d))
+            result.append(Video.from_row(r))
         return result
 
     def update_triage_status(
@@ -958,9 +971,7 @@ class SQLiteStore:
         ).fetchall()
         result = []
         for r in rows:
-            d = dict(r)
-            d["tags"] = json.loads(d.pop("tags_json", "[]"))
-            result.append(Video(**d))
+            result.append(Video.from_row(r))
         return result
 
     def get_videos_missing_transcripts(self, limit: int = 200) -> list[Video]:
@@ -975,9 +986,7 @@ class SQLiteStore:
         ).fetchall()
         result = []
         for r in rows:
-            d = dict(r)
-            d["tags"] = json.loads(d.pop("tags_json", "[]"))
-            result.append(Video(**d))
+            result.append(Video.from_row(r))
         return result
 
     def get_videos_missing_summaries(self, limit: int = 200) -> list[Video]:
@@ -992,9 +1001,7 @@ class SQLiteStore:
         ).fetchall()
         result = []
         for r in rows:
-            d = dict(r)
-            d["tags"] = json.loads(d.pop("tags_json", "[]"))
-            result.append(Video(**d))
+            result.append(Video.from_row(r))
         return result
 
     def get_videos_missing_heatmaps(self, limit: int = 200) -> list[Video]:
@@ -1008,9 +1015,7 @@ class SQLiteStore:
         ).fetchall()
         result = []
         for r in rows:
-            d = dict(r)
-            d["tags"] = json.loads(d.pop("tags_json", "[]"))
-            result.append(Video(**d))
+            result.append(Video.from_row(r))
         return result
 
 
@@ -1049,9 +1054,7 @@ class SQLiteStore:
         ).fetchall()
         result = []
         for r in rows:
-            d = dict(r)
-            d["tags"] = json.loads(d.pop("tags_json", "[]"))
-            result.append(Video(**d))
+            result.append(Video.from_row(r))
         return result
 
     def get_high_momentum_videos(self, limit: int = 5) -> list[dict]:
@@ -1110,9 +1113,7 @@ class SQLiteStore:
         ).fetchall()
         result = []
         for r in rows:
-            d = dict(r)
-            d["tags"] = json.loads(d.pop("tags_json", "[]"))
-            result.append(Video(**d))
+            result.append(Video.from_row(r))
         return result
 
     # -------------------------------------------------------------------
@@ -1242,11 +1243,16 @@ class SQLiteStore:
                 self.conn.execute(
                     """INSERT OR IGNORE INTO transcript_chunks
                            (chunk_id, video_id, chunk_index, raw_text, cleaned_text,
-                            word_count, start_timestamp, end_timestamp, is_high_attention)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            word_count, start_timestamp, end_timestamp, topics_json,
+                            entities_json, claims_json, quotes_json, is_high_attention,
+                            content_hash)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (chunk.chunk_id, chunk.video_id, chunk.chunk_index,
                      chunk.raw_text, chunk.cleaned_text, chunk.word_count,
-                     chunk.start_timestamp, chunk.end_timestamp, int(chunk.is_high_attention)),
+                     chunk.start_timestamp, chunk.end_timestamp,
+                     chunk.topics_json, chunk.entities_json, chunk.claims_json,
+                     chunk.quotes_json, int(chunk.is_high_attention),
+                     chunk.content_hash),
                 )
                 inserted += 1
             except sqlite3.IntegrityError:

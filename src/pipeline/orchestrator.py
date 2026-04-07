@@ -617,31 +617,17 @@ class PipelineOrchestrator:
             self._report_status(
                 f"Batch LLM triage: {len(needs_llm)} videos (rule-based resolved {len(results)})"
             )
-            llm_tasks = [
-                LLMTask(
-                    task_id=v.video_id,
-                    fn=self.triage._llm_classify,
-                    args=(v,),
-                )
-                for v in needs_llm
-            ]
-            llm_results = pool.submit_batch(llm_tasks)
+            # CALL BATCH CLASSIFY (NEW OPTIMIZATION)
+            batch_results = self.triage.batch_classify(needs_llm)
 
-            for lr in llm_results:
-                if lr.success and lr.result:
-                    self.db.update_triage_status(
-                        lr.task_id,
-                        status=lr.result.decision.value,
-                        reason=lr.result.reason,
-                        confidence=lr.result.confidence,
-                    )
-                    results[lr.task_id] = lr.result.decision.value
-                else:
-                    self.db.update_triage_status(
-                        lr.task_id, status="PENDING_REVIEW",
-                        reason=f"batch_llm_error: {lr.error or 'unknown'}",
-                    )
-                    results[lr.task_id] = "PENDING_REVIEW"
+            for vid, res in batch_results.items():
+                self.db.update_triage_status(
+                    vid,
+                    status=res.decision.value,
+                    reason=res.reason,
+                    confidence=res.confidence,
+                )
+                results[vid] = res.decision.value
 
         return results
 
@@ -720,38 +706,45 @@ class PipelineOrchestrator:
                     if not success:
                         return  # No transcript — already advanced to DONE
 
-                elif next_stage == "TRANSLATED":
-                    self._stage_translate(video, scan_id)
+                # Execute the stage
+                success = True
+                if next_stage == "TRANSLATED":
+                    success = self._stage_translate(video, scan_id)
 
                 elif next_stage == "SPONSOR_FILTERED":
-                    self._stage_sponsor_filter(video, scan_id)
+                    success = self._stage_sponsor_filter(video, scan_id)
 
                 elif next_stage == "TEXT_NORMALIZED":
-                    self._stage_normalize(video, scan_id)
+                    success = self._stage_normalize(video, scan_id)
 
                 elif next_stage == "CHUNKED":
-                    self._stage_chunk(video, scan_id)
+                    success = self._stage_chunk(video, scan_id)
 
                 elif next_stage == "CHUNK_ANALYZED":
-                    self._stage_chunk_analysis(video, scan_id)
+                    success = self._stage_chunk_analysis(video, scan_id)
 
                 elif next_stage == "SUMMARIZED":
-                    self._stage_summarize(video, scan_id)
+                    success = self._stage_summarize(video, scan_id)
 
                 elif next_stage == "EMBEDDED":
-                    self._stage_embed(video, scan_id)
+                    success = self._stage_embed(video, scan_id)
 
                 elif next_stage == "GRAPH_SYNCED":
-                    self._stage_graph_sync(video, scan_id)
+                    success = self._stage_graph_sync(video, scan_id)
 
                 elif next_stage == "CORROBORATED":
-                    self._stage_corroborate(video, scan_id)
+                    success = self._stage_corroborate(video, scan_id)
 
                 elif next_stage == "DONE":
                     self.checkpoint.advance(video.video_id, "DONE")
                     return  # Don't fall through to the advance below
 
-                self.checkpoint.advance(video.video_id, next_stage)
+                # STRICT VALIDATION: Only advance if the stage succeeded
+                if success is not False:  # None or True are considered "proceed"
+                    self.checkpoint.advance(video.video_id, next_stage)
+                else:
+                    logger.error(f"Stage {next_stage} returned failure for {video.video_id}. Halting.")
+                    break
 
             except Exception as e:
                 logger.error(
@@ -759,30 +752,35 @@ class PipelineOrchestrator:
                 )
                 break  # Stop processing, checkpoint is at last successful stage
 
-    def _stage_triage(self, video, scan_id: str = None) -> None:
+    def _stage_triage(self, video, scan_id: str = None) -> bool:
         """Stage 2: Run triage classification."""
         sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
-        with StageTimer(self.metrics, "TRIAGE", video.video_id, sid):
-            result = self.triage.classify(video)
-            self.db.update_triage_status(
-                video.video_id,
-                status=result.decision.value,
-                reason=result.reason,
-                confidence=result.confidence,
-            )
-            log_level = "SUCCESS" if result.decision.value == "ACCEPTED" else "INFO"
-            self.db.log_pipeline_event(
-                level=log_level,
-                message=f"Triage: {video.title[:50]}... → {result.decision.value} ({result.confidence:.0%})",
-                video_id=video.video_id,
-                channel_id=video.channel_id,
-                scan_id=sid,
-                stage="TRIAGE",
-            )
-            logger.info(
-                f"Triage: {video.title[:50]}... → {result.decision.value} "
-                f"({result.phase}, {result.latency_ms:.0f}ms)"
-            )
+        try:
+            with StageTimer(self.metrics, "TRIAGE", video.video_id, sid):
+                result = self.triage.classify(video)
+                self.db.update_triage_status(
+                    video.video_id,
+                    status=result.decision.value,
+                    reason=result.reason,
+                    confidence=result.confidence,
+                )
+                log_level = "SUCCESS" if result.decision.value == "ACCEPTED" else "INFO"
+                self.db.log_pipeline_event(
+                    level=log_level,
+                    message=f"Triage: {video.title[:50]}... → {result.decision.value} ({result.confidence:.0%})",
+                    video_id=video.video_id,
+                    channel_id=video.channel_id,
+                    scan_id=sid,
+                    stage="TRIAGE",
+                )
+                logger.debug(
+                    f"Triage: {video.title[:50]}... → {result.decision.value} "
+                    f"({result.phase}, {result.latency_ms:.0f}ms)"
+                )
+                return True
+        except Exception as e:
+            logger.error(f"Triage failed for {video.video_id}: {e}")
+            return False
 
     def _stage_transcript(self, video, scan_id: str = None) -> bool:
         """Stage 3: Fetch transcript. Returns True if transcript was found."""
@@ -813,271 +811,324 @@ class PipelineOrchestrator:
                 self.checkpoint.advance(video.video_id, "DONE")
                 return False
 
-    def _stage_translate(self, video, scan_id: str = None) -> None:
+    def _stage_translate(self, video, scan_id: str = None) -> bool:
         """Stage 4 (NEW): Translate non-English transcripts to English."""
         sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
-        with StageTimer(self.metrics, "TRANSLATED", video.video_id, sid):
-            state = self.db.get_temp_state(video.video_id)
-            if not state:
-                logger.debug(f"No temp state for {video.video_id}, skipping translation")
-                return
+        try:
+            with StageTimer(self.metrics, "TRANSLATED", video.video_id, sid):
+                state = self.db.get_temp_state(video.video_id)
+                if not state:
+                    logger.debug(f"No temp state for {video.video_id}, skipping translation")
+                    return True
 
-            # Check if translation is needed
-            if video.language_iso == "en":
-                logger.debug(f"Video {video.video_id} is English, skipping translation")
-                return
+                # Check if translation is needed
+                if video.language_iso == "en":
+                    logger.debug(f"Video {video.video_id} is English, skipping translation")
+                    return True
 
-            raw_text = state.get("raw_text", "")
-            if not raw_text:
-                logger.debug(f"No text to translate for {video.video_id}")
-                return
+                raw_text = state.get("raw_text", "")
+                if not raw_text:
+                    logger.debug(f"No text to translate for {video.video_id}")
+                    return True
 
-            logger.info(f"Translating {video.language_iso} transcript for {video.video_id}...")
-            
-            # Translate the full transcript
-            result = self.translator.translate(
-                text=raw_text,
-                source_lang=video.language_iso,
-                target_lang="en"
-            )
-            
-            if result.success:
-                logger.info(
-                    f"Translation successful: {video.video_id} "
-                    f"({len(raw_text)} → {len(result.translated_text)} chars, {result.latency_ms:.0f}ms)"
+                logger.info(f"Translating {video.language_iso} transcript for {video.video_id}...")
+                
+                # Translate the full transcript
+                result = self.translator.translate(
+                    text=raw_text,
+                    source_lang=video.language_iso,
+                    target_lang="en"
                 )
                 
-                # Store translated text
-                self.db.save_temp_state(
-                    video_id=video.video_id,
-                    raw_text=state.get("raw_text", ""),
-                    segments_json=state.get("segments_json", "[]"),
-                    translated_text=result.translated_text,
-                )
-                
-                # P0-A fix: use db method instead of bare self.db.conn.execute()
-                self.db.mark_translation_stored(video.video_id)
-                
-                self.db.log_pipeline_event(
-                    level="SUCCESS",
-                    message=f"Translated {video.language_iso}→en: {video.title[:50]}...",
-                    video_id=video.video_id,
-                    channel_id=video.channel_id,
-                    stage="TRANSLATED",
-                )
-            else:
-                logger.warning(
-                    f"Translation failed for {video.video_id}: {result.error}. "
-                    f"Proceeding with original text."
-                )
-                # Store original text as translated (graceful fallback)
-                self.db.save_temp_state(
-                    video_id=video.video_id,
-                    raw_text=state.get("raw_text", ""),
-                    segments_json=state.get("segments_json", "[]"),
-                    translated_text=raw_text,  # Fallback to original
-                )
-                
-                self.db.log_pipeline_event(
-                    level="WARNING",
-                    message=f"Translation failed, using original: {video.title[:50]}...",
-                    video_id=video.video_id,
-                    channel_id=video.channel_id,
-                    stage="TRANSLATED",
-                    error_detail=result.error,
-                )
+                if result.success:
+                    logger.info(
+                        f"Translation successful: {video.video_id} "
+                        f"({len(raw_text)} → {len(result.translated_text)} chars, {result.latency_ms:.0f}ms)"
+                    )
+                    
+                    # Store translated text
+                    self.db.save_temp_state(
+                        video_id=video.video_id,
+                        raw_text=state.get("raw_text", ""),
+                        segments_json=state.get("segments_json", "[]"),
+                        translated_text=result.translated_text,
+                    )
+                    
+                    self.db.mark_translation_stored(video.video_id)
+                    
+                    self.db.log_pipeline_event(
+                        level="SUCCESS",
+                        message=f"Translated {video.language_iso}→en: {video.title[:50]}...",
+                        video_id=video.video_id,
+                        channel_id=video.channel_id,
+                        scan_id=sid,
+                        stage="TRANSLATED",
+                    )
+                    return True
+                else:
+                    logger.error(f"Translation failed for {video.video_id}: {result.error}")
+                    self.db.log_pipeline_event(
+                        level="ERROR",
+                        message=f"Translation failed: {video.title[:50]}...",
+                        video_id=video.video_id,
+                        channel_id=video.channel_id,
+                        scan_id=sid,
+                        stage="TRANSLATED",
+                        error_detail=result.error,
+                    )
+                    return False
+        except Exception as e:
+            logger.error(f"Translation stage crashed for {video.video_id}: {e}")
+            return False
 
-    def _stage_sponsor_filter(self, video, scan_id: str = None) -> None:
+    def _stage_sponsor_filter(self, video, scan_id: str = None) -> bool:
         """Stage 5: Strip SponsorBlock segments."""
         sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
-        with StageTimer(self.metrics, "SPONSOR_FILTERED", video.video_id, sid):
-            state = self.db.get_temp_state(video.video_id)
-            if not state or not state["segments_json"]:
-                return
+        try:
+            with StageTimer(self.metrics, "SPONSOR_FILTERED", video.video_id, sid):
+                state = self.db.get_temp_state(video.video_id)
+                if not state or not state["segments_json"]:
+                    return True
 
-            # Deserialize stored segments
-            try:
-                segments_data = json.loads(state["segments_json"])
-                segments = [
-                    TimestampedSegment(text=s["text"], start=s["start"], duration=s["duration"])
-                    for s in segments_data
-                ]
-            except (json.JSONDecodeError, KeyError):
-                return
-
-            # Fetch SponsorBlock data and filter
-            sponsor_segments = fetch_sponsor_segments(video.video_id)
-            filtered = strip_sponsored_segments(segments, sponsor_segments)
-            filtered_text = " ".join(seg.text for seg in filtered)
-
-            # Store filtered segments back into temp state
-            filtered_json = json.dumps([
-                {"text": s.text, "start": s.start, "duration": s.duration}
-                for s in filtered
-            ])
-            self.db.save_temp_state(
-                video_id=video.video_id,
-                raw_text=filtered_text,
-                segments_json=filtered_json,
-                translated_text=state.get("translated_text", ""),
-            )
-
-    def _stage_normalize(self, video, scan_id: str = None) -> None:
-        """Stage 6: Normalize transcript text via LLM."""
-        sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
-        with StageTimer(self.metrics, "TEXT_NORMALIZED", video.video_id, sid):
-            state = self.db.get_temp_state(video.video_id)
-            if not state:
-                return
-            
-            # Prefer translated text if available, otherwise use raw
-            text_to_normalize = state.get("translated_text") or state.get("raw_text")
-            if not text_to_normalize:
-                return
-                
-            cleaned = self.normalizer.normalize(text_to_normalize)
-        self.db.save_temp_state(
-            video_id=video.video_id,
-            raw_text=state.get("raw_text", ""),
-            segments_json=state.get("segments_json", "[]"),
-            cleaned_text=cleaned,
-            translated_text=state.get("translated_text", ""),
-        )
-
-    def _stage_chunk(self, video, scan_id: str = None) -> None:
-        """Stage 7: Chunking with semantic or sliding-window strategy."""
-        sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
-        with StageTimer(self.metrics, "CHUNKED", video.video_id, sid):
-            state = self.db.get_temp_state(video.video_id)
-            if not state:
-                return
-
-            text = state["cleaned_text"] or state["raw_text"]
-            if not text:
-                return
-
-            # Deserialize stored segments for timestamp estimation
-            segments = []
-            if state["segments_json"]:
+                # Deserialize stored segments
                 try:
                     segments_data = json.loads(state["segments_json"])
                     segments = [
-                        TimestampedSegment(
-                            text=s["text"], start=s["start"], duration=s["duration"]
-                        )
+                        TimestampedSegment(text=s["text"], start=s["start"], duration=s["duration"])
                         for s in segments_data
                     ]
-                except (json.JSONDecodeError, KeyError):
-                    pass
+                except (json.JSONDecodeError, KeyError) as e:
+                    logger.error(f"Failed to parse segments for {video.video_id}: {e}")
+                    return False
 
-            cfg = self.settings.get("chunking", {})
-            strategy = cfg.get("strategy", "sliding_window")
-            chunks = []
+                # Fetch SponsorBlock data and filter
+                sponsor_segments = fetch_sponsor_segments(video.video_id)
+                filtered = strip_sponsored_segments(segments, sponsor_segments)
+                filtered_text = " ".join(seg.text for seg in filtered)
 
-            # Try semantic chunking first if configured
-            if strategy == "semantic":
-                try:
-                    from src.intelligence.semantic_chunker import semantic_chunk
-                    chunks = semantic_chunk(
+                # Store filtered segments back into temp state
+                filtered_json = json.dumps([
+                    {"text": s.text, "start": s.start, "duration": s.duration}
+                    for s in filtered
+                ])
+                self.db.save_temp_state(
+                    video_id=video.video_id,
+                    raw_text=filtered_text,
+                    segments_json=filtered_json,
+                    translated_text=state.get("translated_text", ""),
+                )
+                return True
+        except Exception as e:
+            logger.error(f"Sponsor filter stage failed for {video.video_id}: {e}")
+            return False
+
+    def _stage_normalize(self, video, scan_id: str = None) -> bool:
+        """Stage 6: Normalize transcript text via LLM."""
+        sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
+        try:
+            with StageTimer(self.metrics, "TEXT_NORMALIZED", video.video_id, sid):
+                state = self.db.get_temp_state(video.video_id)
+                if not state:
+                    return True
+                
+                # Prefer translated text if available, otherwise use raw
+                text_to_normalize = state.get("translated_text") or state.get("raw_text")
+                if not text_to_normalize:
+                    return True
+                    
+                cleaned = self.normalizer.normalize(text_to_normalize)
+                if not cleaned:
+                    logger.warning(f"Normalization returned empty for {video.video_id}")
+                    cleaned = text_to_normalize # Safe fallback
+                    
+                self.db.save_temp_state(
+                    video_id=video.video_id,
+                    raw_text=state.get("raw_text", ""),
+                    segments_json=state.get("segments_json", "[]"),
+                    cleaned_text=cleaned,
+                    translated_text=state.get("translated_text", ""),
+                )
+                return True
+        except Exception as e:
+            logger.error(f"Normalization stage failed for {video.video_id}: {e}")
+            return False
+
+    def _stage_chunk(self, video, scan_id: str = None) -> bool:
+        """Stage 7: Chunking with semantic or sliding-window strategy."""
+        sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
+        try:
+            with StageTimer(self.metrics, "CHUNKED", video.video_id, sid):
+                state = self.db.get_temp_state(video.video_id)
+                if not state:
+                    logger.debug(f"No temp state for {video.video_id}, skipping chunking")
+                    return True
+
+                text = state["cleaned_text"] or state["translated_text"] or state["raw_text"]
+                if not text:
+                    logger.debug(f"No text to chunk for {video.video_id}")
+                    return True
+
+                # Deserialize stored segments for timestamp estimation
+                segments = []
+                if state["segments_json"]:
+                    try:
+                        segments_data = json.loads(state["segments_json"])
+                        segments = [
+                            TimestampedSegment(
+                                text=s["text"], start=s["start"], duration=s["duration"]
+                            )
+                            for s in segments_data
+                        ]
+                    except (json.JSONDecodeError, KeyError):
+                        pass
+
+                cfg = self.settings.get("chunking", {})
+                strategy = cfg.get("strategy", "sliding_window")
+                chunks = []
+
+                # Try semantic chunking first if configured
+                if strategy == "semantic":
+                    try:
+                        from src.intelligence.semantic_chunker import semantic_chunk
+                        chunks = semantic_chunk(
+                            cleaned_text=text,
+                            video_id=video.video_id,
+                            segments=segments,
+                            max_chunk_words=cfg.get("window_size", 400) + 200,
+                            min_chunk_words=cfg.get("min_chunk_size", 50),
+                            similarity_threshold=cfg.get("semantic_similarity_threshold", 0.4),
+                        )
+                    except Exception as e:
+                        logger.warning(f"Semantic chunking failed, falling back: {e}")
+                        chunks = []
+
+                # Fallback to sliding-window
+                if not chunks:
+                    chunks = sliding_window_chunk(
                         cleaned_text=text,
                         video_id=video.video_id,
                         segments=segments,
-                        max_chunk_words=cfg.get("window_size", 400) + 200,
-                        min_chunk_words=cfg.get("min_chunk_size", 50),
-                        similarity_threshold=cfg.get("semantic_similarity_threshold", 0.4),
+                        window_size=cfg.get("window_size", 400),
+                        overlap=cfg.get("overlap", 80),
+                        min_chunk_size=cfg.get("min_chunk_size", 50),
                     )
-                except Exception as e:
-                    logger.warning(f"Semantic chunking failed, falling back: {e}")
-                    chunks = []
 
-            # Fallback to sliding-window
-            if not chunks:
-                chunks = sliding_window_chunk(
-                    cleaned_text=text,
-                    video_id=video.video_id,
-                    segments=segments,
-                    window_size=cfg.get("window_size", 400),
-                    overlap=cfg.get("overlap", 80),
-                    min_chunk_size=cfg.get("min_chunk_size", 50),
-                )
+                if chunks:
+                    self.db.insert_chunks(chunks)
+                    self.db.delete_temp_state(video.video_id)
+                    return True
+                else:
+                    logger.warning(f"No chunks generated for {video.video_id}")
+                    return False
+        except Exception as e:
+            logger.error(f"Chunking stage failed for {video.video_id}: {e}")
+            return False
 
-            self.db.insert_chunks(chunks)
-            self.db.delete_temp_state(video.video_id)
-
-    def _stage_chunk_analysis(self, video, scan_id: str = None) -> None:
+    def _stage_chunk_analysis(self, video, scan_id: str = None) -> bool:
         """Stage 6.5: Deep analysis of each chunk (topics, entities, claims, quotes)."""
         sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
-        with StageTimer(self.metrics, "CHUNK_ANALYZED", video.video_id, sid):
-            from src.intelligence.chunk_analyzer import ChunkAnalyzer
+        try:
+            with StageTimer(self.metrics, "CHUNK_ANALYZED", video.video_id, sid):
+                from src.intelligence.chunk_analyzer import ChunkAnalyzer
 
-            analyzer = ChunkAnalyzer(self.db)
-            totals = analyzer.analyze_video_chunks(video.video_id)
-            
-            # P1-B: Heatmap × Transcript Correlation
-            try:
-                heatmap_data = video.heatmap_json
-                if not heatmap_data or heatmap_data == "[]":
-                    # Re-fetch video to be sure we have the latest metadata
-                    v_latest = self.db.get_video(video.video_id)
-                    heatmap_data = v_latest.heatmap_json if v_latest else "[]"
+                analyzer = ChunkAnalyzer(self.db)
+                totals = analyzer.analyze_video_chunks(video.video_id)
                 
-                heatmap = json.loads(heatmap_data or "[]")
-                if heatmap:
-                    values = [h.get("value", 0) for h in heatmap]
-                    if values:
-                        threshold = sorted(values)[-max(1, int(len(values) * 0.2))]
-                        high_attention_intervals = [
-                            (h["start_time"], h["end_time"]) 
-                            for h in heatmap if h.get("value", 0) >= threshold
-                        ]
-                        
-                        chunks = self.db.get_chunks_for_video(video.video_id)
-                        for chunk in chunks:
-                            is_high = False
-                            for start, end in high_attention_intervals:
-                                overlap_start = max(chunk.start_timestamp, start)
-                                overlap_end = min(chunk.end_timestamp, end)
-                                overlap_dur = max(0, overlap_end - overlap_start)
-                                chunk_dur = max(1, chunk.end_timestamp - chunk.start_timestamp)
-                                
-                                if (overlap_dur / chunk_dur) >= 0.3:
-                                    is_high = True
-                                    break
+                # P1-B: Heatmap × Transcript Correlation
+                try:
+                    heatmap_data = video.heatmap_json
+                    if not heatmap_data or heatmap_data == "[]":
+                        # Re-fetch video to be sure we have the latest metadata
+                        v_latest = self.db.get_video(video.video_id)
+                        heatmap_data = v_latest.heatmap_json if v_latest else "[]"
+                    
+                    heatmap = json.loads(heatmap_data or "[]")
+                    if heatmap:
+                        values = [h.get("value", 0) for h in heatmap]
+                        if values:
+                            threshold = sorted(values)[-max(1, int(len(values) * 0.2))]
+                            high_attention_intervals = [
+                                (h["start_time"], h["end_time"]) 
+                                for h in heatmap if h.get("value", 0) >= threshold
+                            ]
                             
-                            if is_high:
-                                self.db.execute(
-                                    "UPDATE transcript_chunks SET is_high_attention = 1 WHERE chunk_id = ?",
-                                    (chunk.chunk_id,)
-                                )
-                        self.db.commit()
-                        logger.info(f"P1-B: Flagged high-attention segments for video {video.video_id}")
-            except Exception as e:
-                logger.warning(f"Heatmap correlation failed for {video.video_id}: {e}")
+                            chunks = self.db.get_chunks_for_video(video.video_id)
+                            for chunk in chunks:
+                                is_high = False
+                                for start, end in high_attention_intervals:
+                                    overlap_start = max(chunk.start_timestamp, start)
+                                    overlap_end = min(chunk.end_timestamp, end)
+                                    overlap_dur = max(0, overlap_end - overlap_start)
+                                    chunk_dur = max(1, chunk.end_timestamp - chunk.start_timestamp)
+                                    
+                                    if (overlap_dur / chunk_dur) >= 0.3:
+                                        is_high = True
+                                        break
+                                
+                                if is_high:
+                                    self.db.execute(
+                                        "UPDATE transcript_chunks SET is_high_attention = 1 WHERE chunk_id = ?",
+                                        (chunk.chunk_id,)
+                                    )
+                            self.db.commit()
+                            logger.info(f"P1-B: Flagged high-attention segments for video {video.video_id}")
+                except Exception as e:
+                    logger.warning(f"Heatmap correlation failed for {video.video_id}: {e}")
 
-            self._report_status(
-                f"Chunk analysis: {totals['topics']}T {totals['entities']}E "
-                f"{totals['claims']}C {totals['quotes']}Q"
-            )
-
-    def _stage_embed(self, video, scan_id: str = None) -> None:
-        """Stage 7: Embed chunks into ChromaDB."""
-        sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
-        with StageTimer(self.metrics, "EMBEDDED", video.video_id, sid):
-            chunks = self.db.get_chunks_for_video(video.video_id)
-            if chunks:
-                channel = self.db.get_channel(video.channel_id)
-                self.vector_store.upsert_chunks(
-                    chunks,
-                    channel_id=video.channel_id,
-                    upload_date=video.upload_date,
-                    language_iso=video.language_iso,
+                self._report_status(
+                    f"Chunk analysis: {totals['topics']}T {totals['entities']}E "
+                    f"{totals['claims']}C {totals['quotes']}Q"
                 )
+                return True
+        except Exception as e:
+            logger.error(f"Chunk analysis failed for {video.video_id}: {e}")
+            return False
 
-    def _stage_graph_sync(self, video, scan_id: str = None) -> None:
+
+    def batch_graph_sync(self, video_ids: list[str]) -> int:
+        """Synchronize a batch of videos to Neo4j for performance.
+        
+        Uses UNWIND queries to minimize transaction overhead.
+        """
+        videos_to_sync = []
+        links_to_sync = []
+        
+        for vid in video_ids:
+            video = self.db.get_video(vid)
+            if not video: continue
+            
+            videos_to_sync.append({
+                "video_id": video.video_id,
+                "title": video.title,
+                "channel_id": video.channel_id,
+                "upload_date": video.upload_date,
+                "duration": video.duration_seconds
+            })
+            
+            topics = self.db.get_video_aggregated_topics(vid)
+            for t in topics:
+                links_to_sync.append({
+                    "video_id": vid,
+                    "topic_name": t["name"],
+                    "relevance": t.get("relevance", 1.0)
+                })
+        
+        if videos_to_sync:
+            self.graph_store.batch_upsert_videos(videos_to_sync)
+        if links_to_sync:
+            self.graph_store.batch_link_topics(links_to_sync)
+            
+        for vid in video_ids:
+            self.db.mark_outbox_neo4j_done(vid)
+            self.checkpoint.advance(vid, "GRAPH_SYNCED")
+            
+        return len(video_ids)
+
+    def _stage_graph_sync(self, video, scan_id: str = None) -> bool:
         """Stage 8: Synchronize video, topics, and guests to Neo4j (with P0-A outbox)."""
         sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
-        with StageTimer(self.metrics, "GRAPH_SYNCED", video.video_id, sid):
-            try:
+        try:
+            with StageTimer(self.metrics, "GRAPH_SYNCED", video.video_id, sid):
                 graph = self.graph_store
 
                 # Upsert video node
@@ -1126,77 +1177,99 @@ class PipelineOrchestrator:
                         text=claim.claim_text,
                         topic=claim.topic,
                     )
-            except Exception as e:
-                logger.error(f"Graph sync failed for {video.video_id}: {e}")
-            else:
-                # P0-A: Mark Neo4j sync done in outbox (only on success)
-                try:
-                    self.db.mark_outbox_neo4j_done(video.video_id)
-                except Exception as ex:
-                    logger.warning(f"Could not mark neo4j done in outbox for {video.video_id}: {ex}")
+                
+                self.db.mark_outbox_neo4j_done(video.video_id)
+                return True
+        except Exception as e:
+            logger.error(f"Graph sync failed for {video.video_id}: {e}")
+            self.db.log_pipeline_event(
+                level="ERROR",
+                message=f"Graph sync failed: {str(e)}",
+                video_id=video.video_id,
+                scan_id=sid,
+                stage="GRAPH_SYNCED",
+                error_detail=str(e)
+            )
+            return False
 
-    def _stage_summarize(self, video, scan_id: str = None) -> None:
+    def _stage_summarize(self, video, scan_id: str = None) -> bool:
         """Stage 6.8: Generate hierarchical Map-Reduce summary."""
         sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
-        with StageTimer(self.metrics, "SUMMARIZED", video.video_id, sid):
-            from src.intelligence.summarizer import SummarizerEngine
-            summarizer = SummarizerEngine(self.db)
-            summarizer.generate_summary(video.video_id)
-            self._report_status("Map-Reduce summary generated")
+        try:
+            with StageTimer(self.metrics, "SUMMARIZED", video.video_id, sid):
+                from src.intelligence.summarizer import SummarizerEngine
+                summarizer = SummarizerEngine(self.db)
+                summary = summarizer.generate_summary(video.video_id)
+                if summary:
+                    self._report_status("Map-Reduce summary generated")
+                    return True
+                else:
+                    logger.error(f"Summary generation returned empty for {video.video_id}")
+                    return False
+        except Exception as e:
+            logger.error(f"Summarization stage failed for {video.video_id}: {e}")
+            return False
 
-    def _stage_embed(self, video, scan_id: str = None) -> None:
+    def _stage_embed(self, video, scan_id: str = None) -> bool:
         """Stage 7: Embed chunks into ChromaDB (with P0-A outbox + P0-B hash skip)."""
         import hashlib
         sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
-        with StageTimer(self.metrics, "EMBEDDED", video.video_id, sid):
-            chunks = self.db.get_chunks_for_video(video.video_id)
-            if not chunks:
-                return
+        try:
+            with StageTimer(self.metrics, "EMBEDDED", video.video_id, sid):
+                chunks = self.db.get_chunks_for_video(video.video_id)
+                if not chunks:
+                    logger.debug(f"No chunks to embed for {video.video_id}")
+                    return True
 
-            # P0-A: Register outbox entry before touching external stores
-            try:
-                self.db.create_sync_outbox_entry(video.video_id)
-            except Exception as e:
-                logger.warning(f"Could not create outbox entry for {video.video_id}: {e}")
+                # P0-A: Register outbox entry before touching external stores
+                try:
+                    self.db.create_sync_outbox_entry(video.video_id)
+                except Exception as e:
+                    logger.warning(f"Could not create outbox entry for {video.video_id}: {e}")
 
-            # P0-B: Compute content hashes for each chunk, store in DB
-            existing_hashes = self.db.get_chunks_with_hashes(video.video_id)
-            skip_ids: set = set()
+                # P0-B: Compute content hashes for each chunk, store in DB
+                existing_hashes = self.db.get_chunks_with_hashes(video.video_id)
+                skip_ids: set = set()
 
-            for chunk in chunks:
-                new_hash = hashlib.sha256(
-                    (chunk.cleaned_text or chunk.raw_text).encode("utf-8", errors="replace")
-                ).hexdigest()
-                # Update hash in DB regardless (cheap write)
-                self.db.conn.execute(
-                    "UPDATE transcript_chunks SET content_hash = ? WHERE chunk_id = ?",
-                    (new_hash, chunk.chunk_id),
+                for chunk in chunks:
+                    new_hash = hashlib.sha256(
+                        (chunk.cleaned_text or chunk.raw_text).encode("utf-8", errors="replace")
+                    ).hexdigest()
+                    # Update hash in DB regardless (cheap write)
+                    self.db.conn.execute(
+                        "UPDATE transcript_chunks SET content_hash = ? WHERE chunk_id = ?",
+                        (new_hash, chunk.chunk_id),
+                    )
+                    # If hash matches what was stored last run → already embedded
+                    if existing_hashes.get(chunk.chunk_id) == new_hash:
+                        skip_ids.add(chunk.chunk_id)
+
+                self.db.conn.commit()
+
+                if skip_ids:
+                    logger.info(
+                        f"P0-B: {len(skip_ids)}/{len(chunks)} chunks unchanged, skipping re-embedding"
+                    )
+
+                channel = self.db.get_channel(video.channel_id)
+                self.vector_store.upsert_chunks(
+                    chunks,
+                    channel_id=video.channel_id,
+                    upload_date=video.upload_date,
+                    language_iso=video.language_iso,
+                    skip_ids=skip_ids,
                 )
-                # If hash matches what was stored last run → already embedded
-                if existing_hashes.get(chunk.chunk_id) == new_hash:
-                    skip_ids.add(chunk.chunk_id)
 
-            self.db.conn.commit()
-
-            if skip_ids:
-                logger.info(
-                    f"P0-B: {len(skip_ids)}/{len(chunks)} chunks unchanged, skipping re-embedding"
-                )
-
-            channel = self.db.get_channel(video.channel_id)
-            self.vector_store.upsert_chunks(
-                chunks,
-                channel_id=video.channel_id,
-                upload_date=video.upload_date,
-                language_iso=video.language_iso,
-                skip_ids=skip_ids,
-            )
-
-            # P0-A: Mark ChromaDB sync done in outbox
-            try:
-                self.db.mark_outbox_chroma_done(video.video_id)
-            except Exception as e:
-                logger.warning(f"Could not mark chroma done in outbox for {video.video_id}: {e}")
+                # P0-A: Mark ChromaDB sync done in outbox
+                try:
+                    self.db.mark_outbox_chroma_done(video.video_id)
+                except Exception as e:
+                    logger.warning(f"Could not mark chroma done in outbox for {video.video_id}: {e}")
+                
+                return True
+        except Exception as e:
+            logger.error(f"Embedding stage failed for {video.video_id}: {e}")
+            return False
 
     def _extract_topics(self, text: str) -> list[dict]:
         """Extract topics from transcript text via LLM.
@@ -1235,11 +1308,13 @@ class PipelineOrchestrator:
 
         return []
 
-    def _stage_corroborate(self, video, scan_id: str = None) -> None:
+    def _stage_corroborate(self, video, scan_id: str = None) -> bool:
         """Stage: Corroborate claims against the vault."""
         sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
-        with StageTimer(self.metrics, "CORROBORATED", video.video_id, sid):
-            try:
+        try:
+            with StageTimer(self.metrics, "CORROBORATED", video.video_id, sid):
                 self.corroborator.corroborate_all()
-            except Exception as e:
-                logger.warning(f"Claim corroboration failed (non-critical): {e}")
+                return True
+        except Exception as e:
+            logger.warning(f"Claim corroboration failed (non-critical): {e}")
+            return True # Non-critical: allow pipeline to finish

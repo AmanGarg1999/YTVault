@@ -67,6 +67,9 @@ class TriageEngine:
         self.min_duration = self.triage_cfg.get("min_duration_seconds", 60)
         self.confidence_threshold = self.triage_cfg.get("llm_confidence_threshold", 0.7)
 
+        # Batch triage prompt
+        self.batch_triage_prompt = load_prompt("batch_triage_classifier")
+
     def classify(self, video: Video) -> TriageResult:
         """Run full triage pipeline on a video.
 
@@ -146,30 +149,7 @@ class TriageEngine:
             parsed = self._parse_llm_response(raw_response)
             latency = (time.perf_counter() - start) * 1000
 
-            logger.info(
-                f"LLM triage for '{video.title[:60]}': "
-                f"{parsed['category']} (conf={parsed['confidence']:.2f}) "
-                f"in {latency:.0f}ms"
-            )
-
-            # Map LLM category to decision
-            category = parsed["category"].upper()
-            confidence = parsed["confidence"]
-
-            if category == "KNOWLEDGE" and confidence >= self.confidence_threshold:
-                decision = TriageDecision.ACCEPT
-            elif category == "NOISE" and confidence >= self.confidence_threshold:
-                decision = TriageDecision.REJECT
-            else:
-                decision = TriageDecision.PENDING
-
-            return TriageResult(
-                decision=decision,
-                reason=parsed.get("reason", "llm_classification"),
-                confidence=confidence,
-                phase="llm",
-                latency_ms=latency,
-            )
+            return self._finalize_triage_result(video, parsed, latency)
 
         except Exception as e:
             latency = (time.perf_counter() - start) * 1000
@@ -181,6 +161,110 @@ class TriageEngine:
                 phase="llm",
                 latency_ms=latency,
             )
+
+    def batch_classify(self, videos: list[Video]) -> dict[str, TriageResult]:
+        """Classify a batch of videos in a single LLM call for performance."""
+        if not videos:
+            return {}
+        
+        start = time.perf_counter()
+        
+        # Build a single prompt for all videos
+        batch_content = []
+        for v in videos:
+            batch_content.append(
+                f"ID: {v.video_id}\n"
+                f"TITLE: {v.title}\n"
+                f"DESCRIPTION: {v.description[:300]}\n"
+                f"DURATION: {v.duration_seconds}s\n"
+                f"TAGS: {', '.join(v.tags[:5]) if v.tags else 'none'}\n"
+                f"---"
+            )
+        
+        user_prompt = "\n".join(batch_content)
+        
+        try:
+            # Note: We use the same _call_ollama_triage but with the batch prompt
+            response = self._call_ollama_batch_triage(user_prompt)
+            raw_response = response["message"]["content"].strip()
+            parsed_batch = self._parse_llm_response(raw_response)
+            
+            latency_total = (time.perf_counter() - start) * 1000
+            latency_per = latency_total / len(videos)
+            
+            results = {}
+            for v in videos:
+                vid = v.video_id
+                if vid in parsed_batch:
+                    results[vid] = self._finalize_triage_result(v, parsed_batch[vid], latency_per)
+                else:
+                    # Fallback if LLM missed this ID in the JSON
+                    results[vid] = TriageResult(
+                        decision=TriageDecision.PENDING,
+                        reason="llm_batch_missing_id",
+                        confidence=0.0,
+                        phase="llm",
+                        latency_ms=latency_per
+                    )
+            return results
+
+        except Exception as e:
+            logger.error(f"Batch LLM triage failed for {len(videos)} videos: {e}")
+            latency = (time.perf_counter() - start) * 1000
+            return {
+                v.video_id: TriageResult(
+                    decision=TriageDecision.PENDING,
+                    reason=f"llm_batch_error: {str(e)[:50]}",
+                    confidence=0.0,
+                    phase="llm",
+                    latency_ms=latency / len(videos)
+                )
+                for v in videos
+            }
+
+    def _finalize_triage_result(self, video: Video, parsed: dict, latency_ms: float) -> TriageResult:
+        """Helper to convert parsed LLM JSON to TriageResult."""
+        category = str(parsed.get("category", "AMBIGUOUS")).upper()
+        confidence = float(parsed.get("confidence", 0.0))
+
+        if category == "KNOWLEDGE" and confidence >= self.confidence_threshold:
+            decision = TriageDecision.ACCEPT
+        elif category == "NOISE" and confidence >= self.confidence_threshold:
+            decision = TriageDecision.REJECT
+        else:
+            decision = TriageDecision.PENDING
+
+        logger.debug(f"Triage Result for {video.video_id}: {decision.value} ({confidence:.2f})")
+        return TriageResult(
+            decision=decision,
+            reason=parsed.get("reason", "llm_classification"),
+            confidence=confidence,
+            phase="llm",
+            latency_ms=latency_ms,
+        )
+
+    def _call_ollama_batch_triage(self, user_prompt: str) -> dict:
+        """Call Ollama for batch triage classification."""
+        from src.utils.llm_pool import LLMPool, LLMTask, LLMPriority
+        pool = LLMPool()
+        task = LLMTask(
+            task_id=f"batch_triage_{int(time.time())}",
+            fn=ollama.chat,
+            kwargs={
+                "model": self.ollama_cfg["triage_model"],
+                "messages": [
+                    {"role": "system", "content": self.batch_triage_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "options": {
+                    "num_predict": 1000, # Increased for batch results
+                    "temperature": 0.05,
+                },
+            },
+            priority=LLMPriority.LOW
+        )
+        future = pool.submit(task)
+        return future.result(timeout=120)
 
     def _call_ollama_triage(self, user_prompt: str) -> dict:
         """Call Ollama for triage classification via PriorityPool."""

@@ -47,6 +47,9 @@ _INIT_LOCK = threading.Lock()
 
 def _worker():
     """Background worker that pulls and executes tasks from the priority queue."""
+    from src.utils.circuit_breaker import get_circuit_breaker
+    breaker = get_circuit_breaker("ollama", failure_threshold=5, recovery_timeout=60)
+    
     while True:
         prioritized_item = _QUEUE.get()
         if prioritized_item is None:
@@ -56,8 +59,9 @@ def _worker():
         try:
             if not task.future.set_running_or_notify_cancel():
                 continue
-                
-            result = task.fn(*task.args, **task.kwargs)
+            
+            # Execute through the circuit breaker
+            result = breaker.call(task.fn, *task.args, **task.kwargs)
             task.future.set_result(result)
         except Exception as e:
             logger.error(f"Priority Task {task.task_id} failed: {e}")

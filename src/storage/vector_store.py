@@ -272,8 +272,8 @@ class VectorStore:
         if skipped > 0:
             logger.debug(f"Deduplication: skipped {skipped} duplicate chunks")
 
-        # Batch upsert for performance
-        batch_size = 50
+        # Batch upsert for performance (Optimized: increased from 50 to 100)
+        batch_size = 100
         total = 0
 
         try:

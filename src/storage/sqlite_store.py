@@ -9,6 +9,7 @@ import json
 import logging
 import sqlite3
 import uuid
+import dataclasses
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -75,13 +76,12 @@ class Video:
     def from_row(cls, row: dict):
         """Create a Video from a database row, ignoring extra fields."""
         # Get the fields of the dataclass
-        import dataclasses
         valid_fields = {f.name for f in dataclasses.fields(cls)}
         
         # Prepare data by popping tags_json and cleaning up
         d = dict(row)
         if "tags_json" in d:
-            d["tags"] = json.loads(d.pop("tags_json", "[]"))
+            d["tags"] = json.loads(d.pop("tags_json", "[]") or "[]")
         
         # Filter only valid fields
         filtered_d = {k: v for k, v in d.items() if k in valid_fields}
@@ -130,6 +130,7 @@ class ScanCheckpoint:
     started_at: str = ""
     updated_at: str = ""
     id: int = 0  # Auto-increment PK from SQL — must be present for **dict(row)
+    channel_name: str = "" # Populated via JOIN in get_active_scans
     
 @dataclass
 class VideoSummary:
@@ -2069,10 +2070,19 @@ class SQLiteStore:
         return ScanCheckpoint(**dict(row))
 
     def get_active_scans(self) -> list[ScanCheckpoint]:
-        """Get all in-progress scans."""
-        rows = self.conn.execute(
-            "SELECT * FROM scan_checkpoints WHERE status = 'IN_PROGRESS' ORDER BY started_at DESC"
-        ).fetchall()
+        """Get all in-progress scans with human-readable channel names."""
+        sql = """
+            SELECT 
+                s.*, 
+                COALESCE(c.name, v_ch.name, 'Unknown Source') as channel_name
+            FROM scan_checkpoints s
+            LEFT JOIN channels c ON s.source_url = c.url
+            LEFT JOIN videos v ON s.source_url = v.url
+            LEFT JOIN channels v_ch ON v.channel_id = v_ch.channel_id
+            WHERE s.status = 'IN_PROGRESS'
+            ORDER BY s.started_at DESC
+        """
+        rows = self.conn.execute(sql).fetchall()
         return [ScanCheckpoint(**dict(r)) for r in rows]
 
     # -------------------------------------------------------------------

@@ -32,7 +32,8 @@ def render(db, run_pipeline_background):
                     
                     col1, col2, col3, col4 = st.columns([3, 1.5, 1.5, 1])
                     with col1:
-                        st.markdown(f"**Scan ID:** `{getattr(scan, 'scan_id', 'unknown')}`")
+                        display_name = getattr(scan, 'channel_name', None) or f"Scan {getattr(scan, 'scan_id', 'unknown')[-8:]}"
+                        st.markdown(f"**Target:** `{display_name}`")
                         st.caption(f"Source: {getattr(scan, 'source_url', 'N/A')[:60]}...")
                     with col2:
                         st.metric("Progress", f"{processed}/{discovered}")

@@ -457,8 +457,8 @@ def tts_button(text: str, label: str = "Listen", key: Optional[str] = None) -> N
     """
     import json
     
-    # Clean text to avoid JS injection/errors
-    safe_text = json.dumps(text.replace('"', '\\"').replace("\n", " "))
+    # Clean text: remove newlines and use json.dumps for robust JS string escaping
+    safe_text = json.dumps(text.replace("\n", " "))
     
     button_uuid = key or f"tts_{hash(text) % 10**8}"
     

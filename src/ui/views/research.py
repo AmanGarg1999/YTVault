@@ -276,7 +276,7 @@ def render(db, vs):
                         import traceback
                         error_msg = f"Query failed: {e}. Make sure Ollama is running."
                         error_card("Query Processing Error", error_msg)
-        with st.expander("Error Details"):
+                        with st.expander("Error Details"):
                             st.code(traceback.format_exc())
                         st.session_state.conversation[-1]["answer"] = error_msg
 
@@ -301,7 +301,7 @@ def _render_inline_summary(db, citation):
         with st.info(f"Active Insights: {citation.video_title}"):
             col_sum, col_tts = st.columns([4, 1])
             with col_sum:
-                st.markdown(f"**Executive Summary:** {summary.summary_text}")
+                st.write(f"**Executive Summary:** {summary.summary_text}")
             with col_tts:
                 tts_button(summary.summary_text, key=f"tts_inline_{citation.source_id}")
 

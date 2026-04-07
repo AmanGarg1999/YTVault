@@ -581,7 +581,8 @@ with st.sidebar:
             for scan in active_scans[:3]:
                 progress = (scan.total_processed / max(scan.total_discovered, 1))
                 safe_progress = max(0.0, min(1.0, progress))
-                st.caption(f"Scan {scan.scan_id[-4:]}: {safe_progress:.0%}")
+                display_name = scan.channel_name if scan.channel_name else f"Scan {scan.scan_id[-4:]}"
+                st.caption(f"{display_name}: {safe_progress:.0%}")
                 st.progress(safe_progress)
             if len(active_scans) > 3:
                 st.caption(f"+ {len(active_scans) - 3} more...")

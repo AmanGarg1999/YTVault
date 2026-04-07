@@ -76,8 +76,9 @@ def render_monitor_tab(db, run_pipeline_background):
                 col1, col2, col3, col4 = st.columns([3, 1.5, 1.5, 1])
                 
                 with col1:
-                    st.markdown(f"**Scan ID:** `{getattr(scan, 'scan_id', 'unknown')}`")
-                    st.caption(f"{getattr(scan, 'source_url', 'N/A')[:60]}...")
+                    display_name = getattr(scan, 'channel_name', None) or f"Scan {getattr(scan, 'scan_id', 'unknown')[-8:]}"
+                    st.markdown(f"**Channel:** `{display_name}`")
+                    st.caption(f"Source: {getattr(scan, 'source_url', 'N/A')[:60]}...")
                     
                     # Calculate progress bar
                     if discovered > 0:
@@ -264,7 +265,8 @@ def render_control_tab(db, run_pipeline_background):
             
             # Scan info
             with col1:
-                st.markdown(f"**Scan:** `{scan_id}`")
+                display_name = getattr(scan, 'channel_name', None) or f"Scan {scan_id[-8:]}"
+                st.markdown(f"**Target:** `{display_name}`")
                 st.caption(f"URL: {scan.source_url[:60]}...")
                 st.caption(f"Type: {scan.scan_type}")
             

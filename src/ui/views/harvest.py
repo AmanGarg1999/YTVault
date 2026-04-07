@@ -95,6 +95,25 @@ def _render_start_scan_tab(db, run_pipeline_background):
             st.error(f"Invalid URL: {e}")
         except Exception as e:
             st.error(f"Failed to start harvest: {e}")
+    
+    # NEW: Active Operations display for immediate feedback
+    st.markdown("---")
+    st.markdown("### System Processing Queue")
+    scans = db.get_active_scans()
+    if scans:
+        for s in scans:
+            progress_pct = (s.total_processed / max(s.total_discovered, 1))
+            display_name = s.channel_name if s.channel_name else f"Scan {s.scan_id[-8:]}"
+            st.caption(f"**{display_name}** — {s.scan_type} ({progress_pct:.0%})")
+            
+            col_prog, col_stats = st.columns([3, 1])
+            with col_prog:
+                safe_pct = max(0.0, min(1.0, progress_pct))
+                st.progress(safe_pct)
+            with col_stats:
+                st.caption(f"{s.total_processed}/{s.total_discovered} items")
+    else:
+        st.info("No active operations. Add a URL above to start harvesting.")
 
 
 def _render_pending_review_tab(db):

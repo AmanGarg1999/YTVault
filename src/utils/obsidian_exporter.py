@@ -25,13 +25,27 @@ class ObsidianExporter:
     def __init__(self, db: SQLiteStore, output_dir: str):
         self.db = db
         self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Ensure root output dir is world-writable
+        os.makedirs(self.output_dir, mode=0o777, exist_ok=True)
+        try:
+            os.chmod(self.output_dir, 0o777)
+        except Exception as e:
+            logger.warning(f"Could not set absolute root permissions: {e}")
         
         # Subdirectories for organized vault
-        (self.output_dir / "Videos").mkdir(exist_ok=True)
-        (self.output_dir / "Channels").mkdir(exist_ok=True)
-        (self.output_dir / "Claims").mkdir(exist_ok=True)
-        (self.output_dir / "Intelligence").mkdir(exist_ok=True)
+        for sub in ["Videos", "Channels", "Claims", "Intelligence"]:
+            sub_path = self.output_dir / sub
+            os.makedirs(sub_path, mode=0o777, exist_ok=True)
+            os.chmod(sub_path, 0o777)
+
+    def _write_file(self, path: Path, content: str):
+        """Write text to file and ensure it is world-writable for Docker host compatibility."""
+        path.write_text(content)
+        try:
+            os.chmod(path, 0o666)
+        except Exception as e:
+            logger.warning(f"Failed to set permissions on {path}: {e}")
 
     def _sanitize(self, text: str) -> str:
         """Sanitize text for use in filenames."""
@@ -74,7 +88,7 @@ class ObsidianExporter:
                 f"list from \"Videos\" where channel_id = \"{channel.channel_id}\"",
                 f"```"
             ]
-            path.write_text("\n".join(content))
+            self._write_file(path, "\n".join(content))
 
     def export_videos(self):
         """Export all accepted videos as individual notes."""
@@ -84,7 +98,7 @@ class ObsidianExporter:
         ).fetchall()
         
         for row in rows:
-            video = Video(**dict(row))
+            video = Video.from_row(row)
             channel = self.db.get_channel(video.channel_id)
             channel_link = f"[[{self._sanitize(channel.name)}]]" if channel else "Unknown"
             
@@ -130,7 +144,7 @@ class ObsidianExporter:
             content.append(f"table claim_text as \"Claim\", speaker as \"Speaker\" from \"Claims\" where video_id = \"{video.video_id}\"")
             content.append(f"```\n")
             
-            path.write_text("\n".join(content))
+            self._write_file(path, "\n".join(content))
 
     def export_claims(self):
         """Export all claims as individual notes or a single directory."""
@@ -167,12 +181,10 @@ class ObsidianExporter:
                 f"list from \"Intelligence\" where contains(related_claims, \"{claim.claim_id}\")",
                 f"```"
             ]
-            path.write_text("\n".join(content))
+            self._write_file(path, "\n".join(content))
 
     def export_bridges(self):
         """Export all thematic bridges."""
-        bridges = self.db.get_the_matic_bridges() # Wait, view_file showed I should check the method name
-        # Looking at view_file output: line 1525: get_thematic_bridges
         bridges = self.db.get_thematic_bridges()
         
         filename = "Thematic_Bridges.md"

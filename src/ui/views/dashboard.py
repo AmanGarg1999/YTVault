@@ -187,7 +187,8 @@ def render(db):
             if scans:
                 for s in scans:
                     progress_pct = (s.total_processed / max(s.total_discovered, 1))
-                    st.caption(f"Scan {s.scan_id[-8:]} — {s.scan_type} ({progress_pct:.0%})")
+                    display_name = s.channel_name if s.channel_name else f"Scan {s.scan_id[-8:]}"
+                    st.caption(f"{display_name} — {s.scan_type} ({progress_pct:.0%})")
                     safe_pct = max(0.0, min(1.0, progress_pct))
                     st.progress(safe_pct)
             else:

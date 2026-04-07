@@ -192,8 +192,9 @@ def render(db):
             if scans:
                 for s in scans:
                     progress_pct = (s.total_processed / max(s.total_discovered, 1)) * 100
+                    display_name = s.channel_name if s.channel_name else f"Scan {s.scan_id[-8:]}"
                     st.markdown(f"""
-                    **Scan {s.scan_id[-8:]}** — {s.scan_type}
+                    **{display_name}** — {s.scan_type}
                     - Progress: {s.total_processed}/{s.total_discovered} ({progress_pct:.0f}%)
                     """)
             else:

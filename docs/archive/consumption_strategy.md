@@ -13,7 +13,7 @@ Currently, KnowledgeVault-YT is excellent at **ingesting** and **structuring** d
 - **Why it’s better:** You can consume your research while driving, walking, or at the gym. No screen needed.
 - **KV-YT Edge:** We already have the structured summaries; we just need to "Voice" them.
 
-### ⚡ Enhancement 2: "The Daily Spark" (Passive Discovery)
+### Enhancement 2: "The Daily Spark" (Passive Discovery)
 **The Concept:** A high-impact dashboard widget or notification that shows you **one single, high-density insight** from your vault every day.
 - **How it works:** The system picks a random high-confidence **Claim** or **Thematic Bridge** and presents it as a "Knowledge Card."
 - **Why it’s better:** It prevents "Archive Fever" (collecting without consuming) by forcing one piece of knowledge into your awareness daily.

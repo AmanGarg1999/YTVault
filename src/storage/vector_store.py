@@ -206,13 +206,24 @@ class VectorStore:
         self.embedding_fn = OllamaEmbeddingFunction(
             model_name=ollama_cfg.get("embedding_model", "nomic-embed-text")
         )
+        
+        # Transcript Chunks Collection
         self.collection = self.client.get_or_create_collection(
             name=cfg.get("collection_name", "transcript_chunks"),
             metadata={"hnsw:space": cfg.get("similarity_space", "cosine")},
             embedding_function=self.embedding_fn,
         )
+        
+        # Research Claims Collection (New for P1-E)
+        self.claims_collection = self.client.get_or_create_collection(
+            name="research_claims",
+            metadata={"hnsw:space": "cosine"},
+            embedding_function=self.embedding_fn,
+        )
+        
         logger.info(
-            f"VectorStore initialized: {self.collection.count()} existing documents"
+            f"VectorStore initialized: {self.collection.count()} chunks, "
+            f"{self.claims_collection.count()} claims"
         )
 
     def upsert_chunks(self, chunks: list[TranscriptChunk], channel_id: str = "",

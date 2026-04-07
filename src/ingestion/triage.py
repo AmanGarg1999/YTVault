@@ -182,28 +182,33 @@ class TriageEngine:
                 latency_ms=latency,
             )
 
-    @with_retry("ollama_inference")
     def _call_ollama_triage(self, user_prompt: str) -> dict:
-        """Call Ollama for triage classification with retry and timeout."""
-        timeout = self.ollama_cfg.get("timeout_seconds", 30)
-        from src.utils.llm_pool import get_llm_semaphore
+        """Call Ollama for triage classification via PriorityPool."""
+        from src.utils.llm_pool import LLMPool, LLMTask, LLMPriority
+        pool = LLMPool()
+        task = LLMTask(
+            task_id=f"triage_{int(time.time())}",
+            fn=ollama.chat,
+            kwargs={
+                "model": self.ollama_cfg["triage_model"],
+                "messages": [
+                    {"role": "system", "content": self.triage_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "options": {
+                    "num_predict": self.ollama_cfg.get("triage_max_tokens", 100),
+                    "temperature": self.ollama_cfg.get("temperature", 0.1),
+                },
+            },
+            priority=LLMPriority.LOW
+        )
+        
         try:
-            with get_llm_semaphore():
-                response = ollama.chat(
-                    model=self.ollama_cfg["triage_model"],
-                    messages=[
-                        {"role": "system", "content": self.triage_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    options={
-                        "num_predict": self.ollama_cfg.get("triage_max_tokens", 100),
-                        "temperature": self.ollama_cfg.get("temperature", 0.1),
-                    },
-                )
-            return response
+            future = pool.submit(task)
+            return future.result(timeout=60)
         except Exception as e:
             if "timeout" in str(e).lower():
-                logger.error(f"Ollama triage timeout after {timeout}s: {e}")
+                logger.error(f"Ollama triage timeout: {e}")
                 raise TimeoutError(f"Ollama inference timeout: {e}")
             raise
 

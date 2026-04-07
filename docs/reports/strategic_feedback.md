@@ -3,17 +3,17 @@
 ## Your Goal (Clarified)
 ```
 Workflow:
-  1. Ingest transcripts from multiple channels (✅ Have this)
-  2. Talk with LLM about topics across channels (⚠️ Partial — RAG works, but limited)
-  3. Understand how topics evolve/differ by channel (❌ Missing — needs framework extraction)
-  4. Never re-fetch from YT; all data stored locally (✅ Have this, with one gap)
+  1. Ingest transcripts from multiple channels ( Have this)
+  2. Talk with LLM about topics across channels (️ Partial — RAG works, but limited)
+  3. Understand how topics evolve/differ by channel ( Missing — needs framework extraction)
+  4. Never re-fetch from YT; all data stored locally ( Have this, with one gap)
 ```
 
 ---
 
 ## Assessment: What You Have vs Need
 
-### ✅ STRENGTHS (You're Already Good Here)
+### STRENGTHS (You're Already Good Here)
 
 **Data Persistence:**
 - Transcripts stored in `transcript_chunks` table
@@ -34,7 +34,7 @@ Workflow:
 
 ---
 
-### ⚠️ PARTIAL (works, but suboptimal)
+### ️ PARTIAL (works, but suboptimal)
 
 **Topic Understanding:**
 - Current: Topics extracted as flat list
@@ -53,7 +53,7 @@ Workflow:
 
 ---
 
-### ❌ GAPS (Critical for Your Workflow)
+### GAPS (Critical for Your Workflow)
 
 **Gap #1: No Transcript Retrieval Interface**
 ```
@@ -70,9 +70,9 @@ Impact: If LLM synthesis misses nuance, can't easily backtrack
 ```
 Problem:
   When Channel A and Channel B discuss topic X:
-  - Can retrieve both positions ✅
-  - Can't identify what assumptions differ ❌
-  - Can't explain *why* they disagree ❌
+  - Can retrieve both positions 
+  - Can't identify what assumptions differ 
+  - Can't explain *why* they disagree 
 
 Impact: "Understanding" is shallow; can't reach insights
 ```
@@ -427,10 +427,10 @@ Result: Deep understanding through guided exploration
 ## Why This Path Is Right For You
 
 Your stated goals:
-1. ✅ "Go through information" → Transcript browser (Week 1)
-2. ✅ "Talk with LLM" → Already have RAG, enhance with context (Week 1)
-3. ⚠️ "Understand topics across channels" → Needs framework extraction (Week 2-3)
-4. ✅ "All data at every step" → Already have, just need UI (Week 1)
+1.  "Go through information" → Transcript browser (Week 1)
+2.  "Talk with LLM" → Already have RAG, enhance with context (Week 1)
+3. ️ "Understand topics across channels" → Needs framework extraction (Week 2-3)
+4.  "All data at every step" → Already have, just need UI (Week 1)
 
 **By end of Week 1:** You have what you need.
 **By end of Week 3:** You understand *why* channels differ.
@@ -509,10 +509,10 @@ Most knowledge systems:
 - No transcript access (locked to synthesis)
 
 Your advantage (if implemented):
-- ✅ Local storage (verify anytime)
-- ✅ Synthesis + raw (best of both)
-- ✅ Full transcript access (never re-fetch)
-- ✅ Multi-channel cross-linking (frameworks)
+-  Local storage (verify anytime)
+-  Synthesis + raw (best of both)
+-  Full transcript access (never re-fetch)
+-  Multi-channel cross-linking (frameworks)
 
 **You're building a PERSONAL RESEARCH ASSISTANT, not just a search engine.**
 

@@ -52,12 +52,14 @@ class ChunkAnalyzer:
 
         logger.info(f"Analyzing {len(chunks)} chunks for video {video_id}")
 
+        from src.utils.llm_pool import LLMPool, LLMTask, LLMPriority
         pool = LLMPool()
         tasks = [
             LLMTask(
                 task_id=chunk.chunk_id,
                 fn=self._analyze_single_chunk,
                 args=(chunk,),
+                priority=LLMPriority.LOW
             )
             for chunk in chunks
         ]

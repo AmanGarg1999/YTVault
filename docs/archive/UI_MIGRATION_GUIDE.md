@@ -56,7 +56,7 @@ st.markdown("### 🔍 Search Parameters")
 
 **After**:
 ```python
-section_header("Search Parameters", "⚙️")
+section_header("Search Parameters", "️")
 ```
 
 ### 4. Replace Metrics
@@ -146,7 +146,7 @@ def render(db):
     confidence = st.slider("Confidence Threshold", 0.0, 1.0, 0.7)
     
     # Advanced options
-    with st.expander("⚙️ Advanced Options"):
+    with st.expander("️ Advanced Options"):
         max_workers = st.number_input("Max Workers", 1, 10, 3)
         skip_embeds = st.checkbox("Skip Embedding Generation")
     
@@ -231,13 +231,13 @@ def render(db):
 ### Replace st.success() / st.info() / st.warning() / st.error()
 
 ```python
-# ❌ Old way
+# Old way
 st.success("Operation completed")
 st.info("This is informational")
 st.warning("Use caution")
 st.error("Something went wrong")
 
-# ✅ New way
+# New way
 success_card("Operation Completed", "All 45 videos processed successfully.")
 info_card("Information", "This is informational content.")
 warning_card("Caution Required", "Use caution with the following action.")
@@ -247,7 +247,7 @@ error_card("Error Occurred", "Something went wrong: [details]")
 ### Replace Multiple st.metric() Calls
 
 ```python
-# ❌ Old way
+# Old way
 c1, c2, c3, c4 = st.columns(4)
 with c1:
     st.metric("Videos", 1425)
@@ -258,7 +258,7 @@ with c3:
 with c4:
     st.metric("Topics", 892)
 
-# ✅ New way
+# New way
 metric_grid([
     {"value": 1425, "label": "Videos", "icon": "🎬"},
     {"value": 3847, "label": "Chunks", "icon": "📦"},
@@ -270,11 +270,11 @@ metric_grid([
 ### Replace Status/Badge Indicators
 
 ```python
-# ❌ Old way
+# Old way
 st.markdown(f"Status: **COMPLETED**")
 st.markdown(f"Confidence: **87%**")
 
-# ✅ New way
+# New way
 st.markdown(f"Status: {status_badge('success', 'Completed')}", unsafe_allow_html=True)
 st.markdown(f"Confidence: {status_badge('info', '87%')}", unsafe_allow_html=True)
 ```
@@ -282,7 +282,7 @@ st.markdown(f"Confidence: {status_badge('info', '87%')}", unsafe_allow_html=True
 ### Replace Simple Columns Layout
 
 ```python
-# ❌ Old way
+# Old way
 col1, col2, col3 = st.columns(3)
 with col1:
     st.write("Content 1")
@@ -291,7 +291,7 @@ with col2:
 with col3:
     st.write("Content 3")
 
-# ✅ New way
+# New way
 cols = create_columns_equal(3, gap="medium")
 with cols[0]:
     st.write("Content 1")
@@ -308,7 +308,7 @@ with cols[2]:
 Update pages in this order for best results:
 
 1. **Priority 1 (Main Pages)** - Most visible, high impact
-   - `dashboard.py` (✅ Already done)
+   - `dashboard.py` ( Already done)
    - `research.py` (Search/RAG interface)
    - `pipeline_monitor.py` (Status tracking)
 
@@ -371,10 +371,10 @@ from src.ui.components import page_header  # Should work
 **Solution**: Always use `unsafe_allow_html=True` for markdown with HTML/CSS
 
 ```python
-# ❌ Wrong
+# Wrong
 st.markdown(response_html)
 
-# ✅ Correct
+# Correct
 st.markdown(response_html, unsafe_allow_html=True)
 ```
 
@@ -385,10 +385,10 @@ st.markdown(response_html, unsafe_allow_html=True)
 **Solution**: Use consistent column gaps and avoid nested responsive containers
 
 ```python
-# ✅ Better
+# Better
 cols = create_columns_equal(3, gap="medium")
 
-# ❌ Avoid
+# Avoid
 st.columns(3)  # Default no-gap behavior
 ```
 

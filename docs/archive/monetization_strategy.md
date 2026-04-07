@@ -53,13 +53,13 @@ KnowledgeVault-YT is uniquely positioned as a **high-density knowledge extractio
 - **Monetization:** Monthly SaaS subscription ($49/mo).
 - **KV-YT Edge:** The **Knowledge Density Leaderboard** provides the metrics creators need to improve.
 
-### ✂️ Idea 8: Automated "Knowledge-Bomb" Clipping Service
+### ️ Idea 8: Automated "Knowledge-Bomb" Clipping Service
 **The Concept:** A "Hands-off" service for podcasters where KV-YT automatically identifies the 5 best insights in a 2-hour episode and exports them as Reels/Shorts.
 - **Value Prop:** Saves 10 hours of manual editing per week.
 - **Monetization:** Pay-per-episode or monthly retainer.
 - **KV-YT Edge:** The **Clip Export** tool combined with **Claim Extraction**.
 
-### ✍️ Idea 9: Ghostwriter / Author Co-Pilot
+### ️ Idea 9: Ghostwriter / Author Co-Pilot
 **The Concept:** A specialized research interface for non-fiction authors to "Query the Experts" while writing their books.
 - **Value Prop:** Instant citations and diverse perspectives on any topic without watching 500 videos.
 - **Monetization:** High-ticket one-time access or project-based fee ($299/book).
@@ -89,7 +89,7 @@ KnowledgeVault-YT is uniquely positioned as a **high-density knowledge extractio
 - **Strategy:** Provide the "God's Eye View" of a topic that no single video can provide.
 - **Frequency:** Medium (1-2 times weekly).
 
-### ✍️ Medium-Form (Twitter Threads / LinkedIn Posts)
+### ️ Medium-Form (Twitter Threads / LinkedIn Posts)
 **Goal:** Social Growth & Thought Leadership.
 - **Format:** "The Claim Stack" (10-15 posts).
 - **Execution:** Use **Claim Extraction** and **Quote Extraction** to build a structured thread of an expert's latest thesis.

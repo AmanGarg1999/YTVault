@@ -25,17 +25,17 @@ Your pipeline creates **four layers of structured knowledge** from each video:
 
 #### Layer 1: Metadata (High Fidelity)
 ```
-✅ Video-level: Title, Channel, Upload Date, Duration, View Count
-✅ Transcript-level: Timing, Language, Strategy (manual/auto)
-✅ Triage-level: Confidence scores, Classification reasoning
+ Video-level: Title, Channel, Upload Date, Duration, View Count
+ Transcript-level: Timing, Language, Strategy (manual/auto)
+ Triage-level: Confidence scores, Classification reasoning
 ```
 **Quality Score: 9/10** — These are directly from YouTube and SponsorBlock APIs.
 
 #### Layer 2: Normalized Transcripts (High Fidelity)
 ```
-✅ Text normalization removes ~20-30% of filler words
-✅ SponsorBlock strips 15-25% of sponsored content (varies by video)
-✅ Semantic chunking preserves context (400-word windows, 80-word overlap)
+ Text normalization removes ~20-30% of filler words
+ SponsorBlock strips 15-25% of sponsored content (varies by video)
+ Semantic chunking preserves context (400-word windows, 80-word overlap)
 ```
 **Quality Score: 8/10** — Fidelity is high, but some context loss in normalization.
 
@@ -65,10 +65,10 @@ Quotes:        Notable statements (8B model)    [Example: "The future is multi-a
 
 #### Layer 4: Graph Relationships (Medium Fidelity)
 ```
-Guest → Video (APPEARED_IN)           ✅ Precise, with timestamps
-Guest → Topic (EXPERT_ON)             ⚠️  Inferred from mention count alone
-Video → Topic (DISCUSSES)             ⚠️  No relevance weights initially
-Topic → Topic (RELATED_TO)            ⚠️  Inferred from co-occurrence
+Guest → Video (APPEARED_IN)            Precise, with timestamps
+Guest → Topic (EXPERT_ON)             ️  Inferred from mention count alone
+Video → Topic (DISCUSSES)             ️  No relevance weights initially
+Topic → Topic (RELATED_TO)            ️  Inferred from co-occurrence
 ```
 **Quality Score: 6.5/10** — Relationships are inferred, not explicitly validated.
 
@@ -86,26 +86,26 @@ Your system has excellent instrumentation potential but doesn't currently calcul
 
 #### Per-Chunk Quality Metrics
 ```
-❌ Semantic coherence (chunk shouldn't split mid-concept)
-❌ Extraction confidence distribution (% high-conf vs low-conf)
-❌ Entity resolution ambiguity (how many fuzzy matches?)
-❌ Topic specificity (broad vs narrow topics extracted)
+ Semantic coherence (chunk shouldn't split mid-concept)
+ Extraction confidence distribution (% high-conf vs low-conf)
+ Entity resolution ambiguity (how many fuzzy matches?)
+ Topic specificity (broad vs narrow topics extracted)
 ```
 
 #### Per-Video Quality Metrics
 ```
-❌ Signal-to-noise ratio (% useful content vs filler)
-❌ Transcript strategy quality (auto vs manual captions are different)
-❌ Coverage metrics (% of video duration covered by extracted claims/quotes)
-❌ Guest resolution success rate (% of mentioned guests resolved)
+ Signal-to-noise ratio (% useful content vs filler)
+ Transcript strategy quality (auto vs manual captions are different)
+ Coverage metrics (% of video duration covered by extracted claims/quotes)
+ Guest resolution success rate (% of mentioned guests resolved)
 ```
 
 #### Cross-Video Quality Metrics
 ```
-❌ Redundancy score (duplicate claims across videos)
-❌ Contradiction detection (conflicting claims on same topic)
-❌ Evolution tracking (how guest's views change over time)
-❌ Authority scores (which guests are most frequently cited)
+ Redundancy score (duplicate claims across videos)
+ Contradiction detection (conflicting claims on same topic)
+ Evolution tracking (how guest's views change over time)
+ Authority scores (which guests are most frequently cited)
 ```
 
 ---
@@ -141,8 +141,8 @@ Phase 2: LLM = 0.0 when parsing fails
 
 #### Issue #4: Entity Resolution False Positives
 When you see "John Smith" mentioned across 3 videos:
-1. Exact match → same guest ✅
-2. Fuzzy match (dist ≤ 2) → same guest ⚠️
+1. Exact match → same guest 
+2. Fuzzy match (dist ≤ 2) → same guest ️
 3. LLM disambiguation → same guest?
 
 **Catch:** "John Smith" could be 5 different people. Your system creates 1 guest record with 5 aliases.
@@ -152,20 +152,20 @@ When you see "John Smith" mentioned across 3 videos:
 ### 1.4 Data Extraction Completeness
 
 #### What You Extract Well
-- ✅ Timeline of who appeared on which channels when
-- ✅ Topic clusters across videos
-- ✅ Notable quotes with timestamps
-- ✅ Authority signals (mention count)
+-  Timeline of who appeared on which channels when
+-  Topic clusters across videos
+-  Notable quotes with timestamps
+-  Authority signals (mention count)
 
 #### What You Miss Entirely
-- ❌ **Evidence chains** — Claims aren't linked to supporting statements
-- ❌ **Logical relationships** — "A implies B", "A contradicts B"
-- ❌ **Debate structure** — Disagreements between guests
-- ❌ **Reasoning steps** — Why a guest believes something
-- ❌ **Data citations** — When guests reference studies or statistics
-- ❌ **Uncertainty markers** — "I think", "probably", "it's unclear"
-- ❌ **Source attribution** — "According to X", "I read that"
-- ❌ **Action recommendations** — "If you care about X, do Y"
+-  **Evidence chains** — Claims aren't linked to supporting statements
+-  **Logical relationships** — "A implies B", "A contradicts B"
+-  **Debate structure** — Disagreements between guests
+-  **Reasoning steps** — Why a guest believes something
+-  **Data citations** — When guests reference studies or statistics
+-  **Uncertainty markers** — "I think", "probably", "it's unclear"
+-  **Source attribution** — "According to X", "I read that"
+-  **Action recommendations** — "If you care about X, do Y"
 
 ---
 
@@ -205,23 +205,23 @@ You *cannot* ask: "How do Naval's and Tyler Durden's perspectives on wealth diff
 You can get quotes, but not the *reasoning behind* them.
 
 Example:
-- ✅ Extract: "I believe AI will be transformative"
-- ❌ Extract: Why they believe this (reasoning chain)
+-  Extract: "I believe AI will be transformative"
+-  Extract: Why they believe this (reasoning chain)
 
 #### Limitation #3: No Contradiction Detection
 If Guest A says "AI safety is overblown" and Guest B says "AI safety is critical", your system:
-- ✅ Can retrieve both statements
-- ❌ Cannot flag them as contradictory
-- ❌ Cannot assess which is more credible
+-  Can retrieve both statements
+-  Cannot flag them as contradictory
+-  Cannot assess which is more credible
 
 #### Limitation #4: No Predictive Signal
 Your system is **backward-looking** — it synthesizes past content.
 
 It cannot:
-- ❌ Predict which topics are emerging (trend analysis)
-- ❌ Identify knowledge gaps (what claims lack evidence?)
-- ❌ Highlight consensus vs outlier views
-- ❌ Forecast guest appearance patterns
+-  Predict which topics are emerging (trend analysis)
+-  Identify knowledge gaps (what claims lack evidence?)
+-  Highlight consensus vs outlier views
+-  Forecast guest appearance patterns
 
 ---
 
@@ -603,16 +603,16 @@ ORDER BY growth_rate DESC
 ### 4.1 What "Understanding" Means in Your System
 
 Currently, your system can answer:
-- ✅ *Factual retrieval:* "Who said X?"
-- ✅ *Timeline reconstruction:* "When did X shift to Y?"
-- ✅ *Authority mapping:* "Who are experts on X?"
+-  *Factual retrieval:* "Who said X?"
+-  *Timeline reconstruction:* "When did X shift to Y?"
+-  *Authority mapping:* "Who are experts on X?"
 
 It cannot yet answer:
-- ❌ *Causal understanding:* "Why must A lead to B?"
-- ❌ *Counterfactual reasoning:* "What if A hadn't happened?"
-- ❌ *Assumption excavation:* "What unstated assumptions underlie this view?"
-- ❌ *Paradigm comparison:* "How are these two worldviews fundamentally different?"
-- ❌ *Synthesis:* "Trace the optimal path through conflicting viewpoints"
+-  *Causal understanding:* "Why must A lead to B?"
+-  *Counterfactual reasoning:* "What if A hadn't happened?"
+-  *Assumption excavation:* "What unstated assumptions underlie this view?"
+-  *Paradigm comparison:* "How are these two worldviews fundamentally different?"
+-  *Synthesis:* "Trace the optimal path through conflicting viewpoints"
 
 ---
 
@@ -1129,11 +1129,11 @@ Would unlock **90% of advanced use cases** without architectural changes.
 
 ### The Vision (3 months)
 A system where users can:
-- ✅ Reconstruct full arguments (not just quotes)
-- ✅ Compare guest worldviews (not just positions)
-- ✅ Identify consensus and frontiers
-- ✅ Track prediction accuracy
-- ✅ Reason through complex frameworks
+-  Reconstruct full arguments (not just quotes)
+-  Compare guest worldviews (not just positions)
+-  Identify consensus and frontiers
+-  Track prediction accuracy
+-  Reason through complex frameworks
 
 ---
 

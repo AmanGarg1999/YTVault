@@ -116,17 +116,25 @@ class EpiphanyEngine:
             f"Analysis from RAG:\n{rag_answer[:3000]}"
         )
 
-        from src.utils.llm_pool import get_llm_semaphore
+        from src.utils.llm_pool import LLMPool, LLMTask, LLMPriority
+        pool = LLMPool()
+        task = LLMTask(
+            task_id=f"epiphany_{topic[:20]}",
+            fn=ollama.chat,
+            kwargs={
+                "model": self.deep_model,
+                "messages": [
+                    {"role": "system", "content": self.briefing_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "options": {"num_predict": 800, "temperature": 0.1},
+            },
+            priority=LLMPriority.MEDIUM
+        )
+        
         try:
-            with get_llm_semaphore():
-                response = ollama.chat(
-                    model=self.deep_model,
-                    messages=[
-                        {"role": "system", "content": self.briefing_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    options={"num_predict": 800, "temperature": 0.1},
-                )
+            future = pool.submit(task)
+            response = future.result(timeout=180)
             raw = response["message"]["content"].strip()
             if raw.startswith("```"):
                 raw = raw.split("\n", 1)[1] if "\n" in raw else raw

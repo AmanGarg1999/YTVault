@@ -94,6 +94,7 @@ class TranscriptChunk:
     entities_json: str = "[]"
     claims_json: str = "[]"
     quotes_json: str = "[]"
+    is_high_attention: bool = False
 
 
 @dataclass
@@ -132,6 +133,8 @@ class Claim:
     topic: str = ""
     timestamp: float = 0.0
     confidence: float = 0.0
+    corroboration_count: int = 1
+    cluster_id: Optional[str] = None
     created_at: str = ""
 
 
@@ -589,6 +592,17 @@ SCHEMA_MIGRATIONS = [
     (20, """
         ALTER TABLE transcript_chunks ADD COLUMN content_hash TEXT DEFAULT '';
         CREATE INDEX IF NOT EXISTS idx_chunks_hash ON transcript_chunks(content_hash);
+    """),
+    # Version 21: P1-B — High-attention flag for heatmap correlation
+    (21, """
+        ALTER TABLE transcript_chunks ADD COLUMN is_high_attention BOOLEAN DEFAULT 0;
+        CREATE INDEX IF NOT EXISTS idx_chunks_attention ON transcript_chunks(is_high_attention);
+    """),
+    # Version 22: P1-E — Claim Corroboration & Clustering
+    (22, """
+        ALTER TABLE claims ADD COLUMN corroboration_count INTEGER DEFAULT 1;
+        ALTER TABLE claims ADD COLUMN cluster_id TEXT DEFAULT NULL;
+        CREATE INDEX IF NOT EXISTS idx_claims_cluster ON claims(cluster_id);
     """),
 ]
 
@@ -1228,11 +1242,11 @@ class SQLiteStore:
                 self.conn.execute(
                     """INSERT OR IGNORE INTO transcript_chunks
                            (chunk_id, video_id, chunk_index, raw_text, cleaned_text,
-                            word_count, start_timestamp, end_timestamp)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                            word_count, start_timestamp, end_timestamp, is_high_attention)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (chunk.chunk_id, chunk.video_id, chunk.chunk_index,
                      chunk.raw_text, chunk.cleaned_text, chunk.word_count,
-                     chunk.start_timestamp, chunk.end_timestamp),
+                     chunk.start_timestamp, chunk.end_timestamp, int(chunk.is_high_attention)),
                 )
                 inserted += 1
             except sqlite3.IntegrityError:
@@ -1252,15 +1266,23 @@ class SQLiteStore:
     def update_chunk_analysis(
         self, chunk_id: str, topics_json: str = "[]",
         entities_json: str = "[]", claims_json: str = "[]",
-        quotes_json: str = "[]"
+        quotes_json: str = "[]", is_high_attention: Optional[bool] = None
     ) -> None:
         """Save per-chunk analysis results (topics, entities, claims, quotes)."""
-        self.conn.execute(
-            """UPDATE transcript_chunks
-               SET topics_json = ?, entities_json = ?, claims_json = ?, quotes_json = ?
-               WHERE chunk_id = ?""",
-            (topics_json, entities_json, claims_json, quotes_json, chunk_id),
-        )
+        if is_high_attention is not None:
+            self.conn.execute(
+                """UPDATE transcript_chunks
+                   SET topics_json = ?, entities_json = ?, claims_json = ?, quotes_json = ?, is_high_attention = ?
+                   WHERE chunk_id = ?""",
+                (topics_json, entities_json, claims_json, quotes_json, int(is_high_attention), chunk_id),
+            )
+        else:
+            self.conn.execute(
+                """UPDATE transcript_chunks
+                   SET topics_json = ?, entities_json = ?, claims_json = ?, quotes_json = ?
+                   WHERE chunk_id = ?""",
+                (topics_json, entities_json, claims_json, quotes_json, chunk_id),
+            )
         self.conn.commit()
 
     def get_video_aggregated_topics(self, video_id: str) -> list[dict]:
@@ -1875,7 +1897,7 @@ class SQLiteStore:
         
         chunks = self.execute("""
             SELECT chunk_id, chunk_index, raw_text, cleaned_text,
-                   start_timestamp, end_timestamp, word_count
+                   start_timestamp, end_timestamp, word_count, is_high_attention
             FROM transcript_chunks
             WHERE video_id = ?
             ORDER BY chunk_index ASC

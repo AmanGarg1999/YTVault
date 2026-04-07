@@ -89,20 +89,47 @@ def render_single_transcript(db: SQLiteStore):
     with tab1:
         st.subheader("Full Transcript")
         
-        view_type = st.radio("View Type", ["Cleaned (normalized)", "Raw (original)"], key="view_type")
+        col_ctrl1, col_ctrl2 = st.columns([1, 1])
+        with col_ctrl1:
+            view_type = st.radio("Content Source", ["Cleaned (normalized)", "Raw (original)"], horizontal=True, key="view_type")
+        with col_ctrl2:
+            show_highlights = st.checkbox("Highlight High-Attention Segments", value=True, help="Segments with high audience retention/rewatch interest are highlighted in indigo.")
         
-        if view_type == "Cleaned (normalized)":
-            text = transcript['full_cleaned_text']
+        if view_type == "Cleaned (normalized)" and show_highlights:
+            content = ""
+            for c in transcript['chunks']:
+                text = c['cleaned_text']
+                if c.get('is_high_attention'):
+                    content += f"<span style='background: rgba(99, 102, 241, 0.25); border-bottom: 2px solid #6366f1; border-radius: 2px;' title='High Audience Retention'>{text}</span> "
+                else:
+                    content += f"{text} "
+            
+            st.markdown(f"""
+            <div style="
+                background: rgba(15, 23, 42, 0.6);
+                color: #e2e8f0;
+                padding: 1.5rem;
+                border-radius: 12px;
+                border: 1px solid rgba(255,255,255,0.05);
+                height: 600px;
+                overflow-y: auto;
+                font-family: 'Inter', sans-serif;
+                line-height: 1.8;
+                font-size: 1rem;
+                white-space: pre-wrap;
+            ">
+                {content}
+            </div>
+            """, unsafe_allow_html=True)
         else:
-            text = transcript['full_raw_text']
-        
-        st.text_area(
-            "Transcript Text",
-            value=text,
-            height=500,
-            disabled=True,
-            key="transcript_text"
-        )
+            text = transcript['full_cleaned_text'] if view_type == "Cleaned (normalized)" else transcript['full_raw_text']
+            st.text_area(
+                "Transcript Text",
+                value=text,
+                height=500,
+                disabled=True,
+                key="transcript_text"
+            )
     
     with tab2:
         st.subheader("Search Within Transcript")

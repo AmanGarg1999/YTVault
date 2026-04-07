@@ -38,6 +38,8 @@ class ExportEngine:
             return self._rag_to_json(response)
         elif fmt == "csv":
             return self._rag_to_csv(response)
+        elif fmt == "obsidian":
+            return self._rag_to_obsidian_markdown(response)
         else:
             return self._rag_to_markdown(response)
 
@@ -145,7 +147,26 @@ class ExportEngine:
         ])
         for c in r.citations:
             writer.writerow([
-                c.source_id, c.video_title, c.channel_name,
+                c.source_id, c.video_id, c.video_title, c.channel_name,
                 c.timestamp_str, c.youtube_link, c.text_excerpt,
             ])
         return output.getvalue()
+
+    def _rag_to_obsidian_markdown(self, r: RAGResponse) -> str:
+        """Format research report with Obsidian frontmatter and backlinks."""
+        frontmatter = [
+            "---",
+            f"type: research_report",
+            f"query: \"{r.query}\"",
+            f"date: {datetime.now().strftime('%Y-%m-%d')}",
+            f"latency: {r.latency_ms:.0f}ms",
+            f"sources: {r.total_chunks_used}",
+            "tags: [knowledgevault, research]",
+            "---\n"
+        ]
+        
+        body = self._rag_to_markdown(r)
+        
+        # Add Obsidian-style backlinks to channels if mentioned
+        # (This is a simple version, can be expanded)
+        return "\n".join(frontmatter) + "\n" + body

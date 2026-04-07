@@ -32,7 +32,7 @@ The application currently has **13 pages** spread across the sidebar, organized 
 
 ---
 
-#### 2. **Pipeline Monitoring & Control** ⚠️ MOST PROBLEMATIC
+#### 2. **Pipeline Monitoring & Control** ️ MOST PROBLEMATIC
 | Page | Purpose | Key Actions |
 |------|---------|-------------|
 | **📊 Pipeline Monitor** | Real-time scan progress | View active scans, channel health |
@@ -116,7 +116,7 @@ User researching a topic bounces between:
 
 ### Current State: **Detection Without Action**
 
-#### ✅ What's Implemented
+#### What's Implemented
 
 1. **Language Detection** (in `transcript.py`)
    ```python
@@ -148,7 +148,7 @@ User researching a topic bounces between:
    - Flags videos with `needs_translation=True`
    - Stores language metadata in SQLite + ChromaDB
 
-#### ❌ What's Missing
+#### What's Missing
 
 1. **No Translation Execution**
    - `needs_translation` flag is set but never acted upon
@@ -175,23 +175,23 @@ User researching a topic bounces between:
 ```
 YouTube Video (Spanish)
   ↓
-[1] Discovery: ✅ yt-dlp metadata harvest (language detected)
+[1] Discovery:  yt-dlp metadata harvest (language detected)
   ↓
-[2] Triage: ⚠️ LLM classifier runs on Spanish metadata + transcript
+[2] Triage: ️ LLM classifier runs on Spanish metadata + transcript
            (Llama-3 can handle Spanish but loses nuance)
   ↓
-[3] Transcript: ✅ Fetched as Spanish
-              ❌ Marked for translation but translation never happens
+[3] Transcript:  Fetched as Spanish
+               Marked for translation but translation never happens
   ↓
 [4-7] Refinement, Normalization, Chunking: Proceeds in Spanish
   ↓
-[8] Analysis (Topics/Entities): ❌ LLM prompts are English-centric
+[8] Analysis (Topics/Entities):  LLM prompts are English-centric
                                 Spanish text analyzed by English prompt
   ↓
-[9] Embedding: ❌ English embedding model processes Spanish
+[9] Embedding:  English embedding model processes Spanish
               (May work but suboptimal)
   ↓
-[10] Graph Sync: ✅ Spanish entities extracted but English labels
+[10] Graph Sync:  Spanish entities extracted but English labels
   ↓
 Result: Partially analyzed Spanish content, hard to search/filter
 ```
@@ -298,7 +298,7 @@ MAIN SIDEBAR:
 ├── 🔬 Intelligence Lab ................ (Research, explore, analyze)
 ├── 📜 Transcripts ..................... (View, search, compare, export)
 ├── 📤 Export & Integration ............ (Export stats, data, setup integrations)
-└── ⚙️  Admin & Settings ............... (Data management, cleanup, config)
+└── ️  Admin & Settings ............... (Data management, cleanup, config)
 ```
 
 **Reduction:** 13 pages → 7 pages
@@ -456,16 +456,16 @@ nav_options = [
     "🔬 Intelligence Lab",
     "📜 Transcripts",
     "📤 Export & Integration",
-    "⚙️ Admin & Settings"
+    "️ Admin & Settings"
 ]
 
 # Each page now uses tabs for sub-sections
 # Example:
 # pipeline_center.py:
-#   render_active_scans()
-#   render_channel_health()
-#   render_live_logs()     ← formerly dedicated page
-#   render_controls()      ← formerly dedicated page
+#  render_active_scans()
+#  render_channel_health()
+#  render_live_logs()     ← formerly dedicated page
+#  render_controls()      ← formerly dedicated page
 ```
 
 ### Multilingual Processing Addition

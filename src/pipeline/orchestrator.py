@@ -157,6 +157,14 @@ class PipelineOrchestrator:
         return self._vector_store
 
     @property
+    def corroborator(self):
+        """Lazy-init claim corroborator."""
+        if not hasattr(self, "_corroborator"):
+            from src.intelligence.claim_corroborator import ClaimCorroborator
+            self._corroborator = ClaimCorroborator(self.db, self.vector_store)
+        return self._corroborator
+
+    @property
     def graph_store(self):
         """Lazy-init the Neo4j graph store (created once, reused across videos)."""
         if self._graph_store is None:
@@ -736,6 +744,9 @@ class PipelineOrchestrator:
                 elif next_stage == "GRAPH_SYNCED":
                     self._stage_graph_sync(video, scan_id)
 
+                elif next_stage == "CORROBORATED":
+                    self._stage_corroborate(video, scan_id)
+
                 elif next_stage == "DONE":
                     self.checkpoint.advance(video.video_id, "DONE")
                     return  # Don't fall through to the advance below
@@ -1001,6 +1012,48 @@ class PipelineOrchestrator:
 
             analyzer = ChunkAnalyzer(self.db)
             totals = analyzer.analyze_video_chunks(video.video_id)
+            
+            # P1-B: Heatmap × Transcript Correlation
+            try:
+                heatmap_data = video.heatmap_json
+                if not heatmap_data or heatmap_data == "[]":
+                    # Re-fetch video to be sure we have the latest metadata
+                    v_latest = self.db.get_video(video.video_id)
+                    heatmap_data = v_latest.heatmap_json if v_latest else "[]"
+                
+                heatmap = json.loads(heatmap_data or "[]")
+                if heatmap:
+                    values = [h.get("value", 0) for h in heatmap]
+                    if values:
+                        threshold = sorted(values)[-max(1, int(len(values) * 0.2))]
+                        high_attention_intervals = [
+                            (h["start_time"], h["end_time"]) 
+                            for h in heatmap if h.get("value", 0) >= threshold
+                        ]
+                        
+                        chunks = self.db.get_chunks_for_video(video.video_id)
+                        for chunk in chunks:
+                            is_high = False
+                            for start, end in high_attention_intervals:
+                                overlap_start = max(chunk.start_timestamp, start)
+                                overlap_end = min(chunk.end_timestamp, end)
+                                overlap_dur = max(0, overlap_end - overlap_start)
+                                chunk_dur = max(1, chunk.end_timestamp - chunk.start_timestamp)
+                                
+                                if (overlap_dur / chunk_dur) >= 0.3:
+                                    is_high = True
+                                    break
+                            
+                            if is_high:
+                                self.db.execute(
+                                    "UPDATE transcript_chunks SET is_high_attention = 1 WHERE chunk_id = ?",
+                                    (chunk.chunk_id,)
+                                )
+                        self.db.commit()
+                        logger.info(f"P1-B: Flagged high-attention segments for video {video.video_id}")
+            except Exception as e:
+                logger.warning(f"Heatmap correlation failed for {video.video_id}: {e}")
+
             self._report_status(
                 f"Chunk analysis: {totals['topics']}T {totals['entities']}E "
                 f"{totals['claims']}C {totals['quotes']}Q"
@@ -1181,3 +1234,12 @@ class PipelineOrchestrator:
             logger.warning(f"Topic extraction failed: {e}")
 
         return []
+
+    def _stage_corroborate(self, video, scan_id: str = None) -> None:
+        """Stage: Corroborate claims against the vault."""
+        sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
+        with StageTimer(self.metrics, "CORROBORATED", video.video_id, sid):
+            try:
+                self.corroborator.corroborate_all()
+            except Exception as e:
+                logger.warning(f"Claim corroboration failed (non-critical): {e}")

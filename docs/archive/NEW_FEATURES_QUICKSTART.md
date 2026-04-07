@@ -3,12 +3,12 @@
 ## What's Been Added? 
 
 You now have a **comprehensive system** for:
-1. ✅ **Real-time logging** - See exactly what's happening in your pipeline
-2. ✅ **Pipeline control** - Pause, resume, or stop scans at any time
-3. ✅ **Video queue management** - Remove videos before processing starts
-4. ✅ **Data deletion** - Safely delete video/channel data with full cascade
-5. ✅ **Activity monitoring** - Track processing status and errors in real-time
-6. ✅ **Deletion history** - Audit trail of all deletions
+1.  **Real-time logging** - See exactly what's happening in your pipeline
+2.  **Pipeline control** - Pause, resume, or stop scans at any time
+3.  **Video queue management** - Remove videos before processing starts
+4.  **Data deletion** - Safely delete video/channel data with full cascade
+5.  **Activity monitoring** - Track processing status and errors in real-time
+6.  **Deletion history** - Audit trail of all deletions
 
 ---
 
@@ -53,10 +53,10 @@ Then in UI:
 ### Real-Time Logs & Activity Monitor
 
 **What you'll see:**
-- ✅ SUCCESS events (videos accepted, stages completed)
+-  SUCCESS events (videos accepted, stages completed)
 - ℹ️ INFO events (processing starts, discoveries)
-- ⚠️ WARNING events (slow processing, missing data)
-- ❌ ERROR events (failures with full details)
+- ️ WARNING events (slow processing, missing data)
+-  ERROR events (failures with full details)
 - 🐛 DEBUG events (detailed diagnostic info)
 
 **In the UI:**
@@ -160,13 +160,13 @@ Real-time visualization of Tier 2 data:
 ### Sample Log Events
 
 ```
-✅ SUCCESS | 2025-04-04 14:23:45 | TRIAGE
+ SUCCESS | 2025-04-04 14:23:45 | TRIAGE
    "Triage: Introduction to Machine Learning → ACCEPTED (98%)"
 
 ℹ️  INFO | 2025-04-04 14:23:12 | DISCOVERY
    "Discovered 42 videos from channel"
 
-❌ ERROR | 2025-04-04 14:22:58 | TRANSCRIPT
+ ERROR | 2025-04-04 14:22:58 | TRANSCRIPT
    "Transcript fetch failed: Video not available"
    Error Detail: requests.exceptions.ConnectionError: [Errno -2] Name or service not known
 ```
@@ -207,7 +207,7 @@ Timeline:
 When you delete a video's data:
 
 ```
-✂️ DELETED:
+️ DELETED:
 ├─ Transcript chunks (42 records)
 ├─ Claims (12 records)
 ├─ Quotes (8 records)
@@ -236,7 +236,7 @@ Step 2: Run harvest again
 ├─ Creates NEW chunks and embeddings
 └─ Result: Duplicates exist (old + new)
 
-⚠️ To avoid duplicates:
+️ To avoid duplicates:
 - Manually delete from ChromaDB before reprocessing
 - Manually delete from Neo4j before reprocessing
 - OR: Accept duplicates and clean later
@@ -386,7 +386,7 @@ Key sections:
 
 ---
 
-## ✅ What's Next?
+## What's Next?
 
 Future enhancements planned:
 - [ ] Batch deletion (select multiple videos at once)

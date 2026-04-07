@@ -134,7 +134,7 @@ metric_card(
     label="Videos Processed",
     delta="+12%",
     delta_color="positive",
-    icon="✅"
+    icon=""
 )
 
 # Multiple metrics in grid
@@ -169,9 +169,9 @@ inline_status("warning", "Pending Review")
 ```
 
 **Status Options**:
-- `success` — ✅ Complete, accepted, ready
-- `warning` — ⚠️ Review pending, caution needed
-- `error` — ❌ Failed, rejected
+- `success` —  Complete, accepted, ready
+- `warning` — ️ Review pending, caution needed
+- `error` —  Failed, rejected
 - `info` — ℹ️ Neutral state, informational
 
 ---
@@ -279,12 +279,12 @@ spacer("2rem")
 ### 1. Naming & Organization
 
 ```python
-# ✅ Good: Descriptive organization
+# Good: Descriptive organization
 def render(db):
     page_header("Research Console", "Hybrid RAG Search", icon="🔍")
     
     with st.container():
-        section_header("Search Configuration", "⚙️")
+        section_header("Search Configuration", "️")
         # Form controls here
     
     with st.container():
@@ -294,13 +294,13 @@ def render(db):
 
 ### 2. Accessibility
 
-✅ **DO**:
+ **DO**:
 - Always include `unsafe_allow_html=True` when using styled markdown
 - Use semantic HTML: `<strong>`, `<em>`, proper heading hierarchy
 - Ensure 4.5:1+ contrast for text on backgrounds
 - Include keyboard focus states
 
-❌ **DON'T**:
+ **DON'T**:
 - Nest focus-related styles excessively
 - Use color alone to convey information
 - Create interactive elements without keyboard support
@@ -340,9 +340,9 @@ except Exception as e:
 | 📊 | Metrics | Dashboards, analytics, numbers |
 | 📋 | Lists | Queues, pending items, forms |
 | 🔍 | Search | Query, lookup, research |
-| ✅ | Success | Completed, accepted, ready |
-| ⚠️ | Warning | Caution, pending, needs attention |
-| ❌ | Error | Failed, rejected, error |
+|  | Success | Completed, accepted, ready |
+| ️ | Warning | Caution, pending, needs attention |
+|  | Error | Failed, rejected, error |
 | 🔄 | Loading | Processing, in-progress |
 | 📈 | Progress | Growth, improvement, trending |
 | 🎯 | Actions | CTA buttons, focus areas |
@@ -485,4 +485,4 @@ When adding new UI components:
 
 **Last Updated**: April 2026  
 **Design System Version**: 1.0 (ui-ux-pro-max-skill)  
-**Status**: Production Ready ✅
+**Status**: Production Ready 

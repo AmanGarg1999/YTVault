@@ -21,12 +21,12 @@ Your pipeline extracts data in 4 layers:
 ```
 You have:                          You lack:
 ─────────────────────────────────────────────────────────
-Topics exist              ✅       Topic definitions        ❌
-Guests mentioned N times  ✅       Guest authority scores   ❌
-Claims extracted          ✅       Reasoning behind claims  ❌
-Quotes with timestamps    ✅       Evidence traceability    ❌
-Some relationships        ✅       Contradiction detection  ❌
-                                    Consensus mapping       ❌
+Topics exist                     Topic definitions        
+Guests mentioned N times         Guest authority scores   
+Claims extracted                 Reasoning behind claims  
+Quotes with timestamps           Evidence traceability    
+Some relationships               Contradiction detection  
+                                    Consensus mapping       
 ```
 
 **Consequence:** You can answer **5 question types**, but not 15+ that would be possible with deeper knowledge extraction.
@@ -35,13 +35,13 @@ Some relationships        ✅       Contradiction detection  ❌
 
 ## Current vs Potential Questions
 
-### Current (Answerable Now ✅)
+### Current (Answerable Now )
 - "What did X say about Y?"
 - "Which guests discuss Z?"
 - "Show X's appearances"
 - "What quotes exist on Z?"
 
-### Currently Impossible (Need Enhancement ❌)
+### Currently Impossible (Need Enhancement )
 - "How do A and B differ on Z?"
 - "Why does X believe Y?"
 - "Where do experts disagree?"
@@ -248,14 +248,14 @@ Track these monthly:
 ## Why This Matters
 
 Currently, your vault is:
-- ✅ **Excellent at data warehousing** (storing facts)
-- ❌ **Poor at knowledge synthesis** (connecting ideas)
+-  **Excellent at data warehousing** (storing facts)
+-  **Poor at knowledge synthesis** (connecting ideas)
 
 After enhancement, it becomes:
-- ✅ **Excellent at knowledge synthesis**
-- ✅ **Enables comparative reasoning**
-- ✅ **Surface key disagreements**
-- ✅ **Identify emerging experts**
+-  **Excellent at knowledge synthesis**
+-  **Enables comparative reasoning**
+-  **Surface key disagreements**
+-  **Identify emerging experts**
 
 ---
 

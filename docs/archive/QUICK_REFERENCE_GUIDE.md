@@ -27,20 +27,20 @@
 │  ┌────────────────────────────────────────────────────────────┐ │
 │  │ LAYER 3: EXTRACTED KNOWLEDGE                    [7.5/10]  │ │
 │  ├────────────────────────────────────────────────────────────┤ │
-│  │ ✅ Topics, Entities, Claims, Quotes                      │ │
-│  │ ❌ NO confidence tuning on claims                        │ │
-│  │ ❌ NO reasoning behind claims                            │ │
-│  │ ❌ NO evidence tracking                                  │ │
-│  │ ❌ NO temporal context (fact vs opinion vs prediction)   │ │
+│  │  Topics, Entities, Claims, Quotes                      │ │
+│  │  NO confidence tuning on claims                        │ │
+│  │  NO reasoning behind claims                            │ │
+│  │  NO evidence tracking                                  │ │
+│  │  NO temporal context (fact vs opinion vs prediction)   │ │
 │  └────────────────────────────────────────────────────────────┘ │
 │                              ▼                                    │
 │  ┌────────────────────────────────────────────────────────────┐ │
 │  │ LAYER 4: RELATIONSHIPS (Graph)                 [6.5/10]   │ │
 │  ├────────────────────────────────────────────────────────────┤ │
-│  │ • Guest → Video (timestamp + context)         ✓ Good    │ │
-│  │ • Guest → Topic (inferred from mentions)      ⚠ Weak    │ │
-│  │ • Video → Topic (no weight/relevance)         ⚠ Weak    │ │
-│  │ • Topic → Topic (co-occurrence only)          ⚠ Weak    │ │
+│  │ • Guest → Video (timestamp + context)          Good    │ │
+│  │ • Guest → Topic (inferred from mentions)       Weak    │ │
+│  │ • Video → Topic (no weight/relevance)          Weak    │ │
+│  │ • Topic → Topic (co-occurrence only)           Weak    │ │
 │  │ • Issue: No relationship confidence scores               │ │
 │  │ • Issue: No evidence chains                              │ │
 │  └────────────────────────────────────────────────────────────┘ │
@@ -87,7 +87,7 @@
 │                  CURRENT CAPABILITY MAP                          │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│ ✅ CAN ASK (Well-supported by current extraction):             │
+│  CAN ASK (Well-supported by current extraction):             │
 │                                                                  │
 │  • "What did [Guest] say about [Topic]?"                       │
 │    → ~8s, cites timestamps, accuracy ~85%                      │
@@ -103,7 +103,7 @@
 │                                                                  │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│ ❌ CANNOT ASK (Missing semantic layers):                       │
+│  CANNOT ASK (Missing semantic layers):                       │
 │                                                                  │
 │  • "Compare [Guest A] vs [Guest B] on [Topic]"                │
 │    → Would need structured position maps                       │
@@ -247,10 +247,10 @@ Timeline of Claims on "AGI Timeline":
 └─ "Predictions more cautious after misses"
 
 Current capability:
-✅ Can retrieve all quotes
-❌ Can't detect this evolution
-❌ Can't assess accuracy of 2023 claims
-❌ Can't identify confidence shift
+ Can retrieve all quotes
+ Can't detect this evolution
+ Can't assess accuracy of 2023 claims
+ Can't identify confidence shift
 ```
 
 ---
@@ -429,26 +429,26 @@ Reasoning Engine      Can't trace logic         Enable reasoning:
 ```
 ISSUE 1: Extraction Incompleteness
 ─────────────────────────────────────
-You capture: Claims ✅
-Missing:     Reasoning ❌, Evidence ❌, Certainty ❌
+You capture: Claims 
+Missing:     Reasoning , Evidence , Certainty 
 Fix:         Add reasoning + certainty extraction (2 weeks)
 
 ISSUE 2: Relationship Weakness
 ─────────────────────────────────────
-You capture: Who appeared where ✅
-Missing:     Why they disagree ❌, Authority ❌
+You capture: Who appeared where 
+Missing:     Why they disagree , Authority 
 Fix:         Add disagreement tracking + credibility (2 weeks)
 
 ISSUE 3: Utilization Gap
 ─────────────────────────────────────
-You extract: Structured data ✅
-Missing:     Semantic understanding ❌
+You extract: Structured data 
+Missing:     Semantic understanding 
 Fix:         Add contradiction detection + comparison UI (2 weeks)
 
 ISSUE 4: No Quality Metrics
 ─────────────────────────────────────
-You track:   Videos processed ✅
-Missing:     Extraction quality ❌, Knowledge depth ❌
+You track:   Videos processed 
+Missing:     Extraction quality , Knowledge depth 
 Fix:         Add quality dashboard (1 week)
 
 Total effort: ~7 weeks

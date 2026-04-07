@@ -69,8 +69,8 @@ YOUR GOAL #4: "All transcripts/data accessible; never re-fetch from YT"
 
 **Sections most relevant to you:**
 1. **Assessment: What You Have vs Need**
-   - Explains existing strengths (data persistence ✅)
-   - Identifies specific gaps (framework extraction ❌)
+   - Explains existing strengths (data persistence )
+   - Identifies specific gaps (framework extraction )
    - Tells you what's already working well
 
 2. **Tier 1: Maximize Your Current Assets**
@@ -99,7 +99,7 @@ YOUR GOAL #4: "All transcripts/data accessible; never re-fetch from YT"
 **What:** Visual maps and summaries
 **When to read:** When you want visual overview without details
 **Key takeaway:**
-- Heat maps show quality (6.5/10 on graph relationships ⚠️)
+- Heat maps show quality (6.5/10 on graph relationships ️)
 - Matrix shows issue impacts (entity resolution false +'s most critical)
 - Priority map shows enhancement order
 
@@ -202,7 +202,7 @@ YOUR GOAL #4: "All transcripts/data accessible; never re-fetch from YT"
 
 ---
 
-### ⚡ IMPLEMENTATION BLUEPRINT: **IMPLEMENTATION_BLUEPRINT.md** (Reference)
+### IMPLEMENTATION BLUEPRINT: **IMPLEMENTATION_BLUEPRINT.md** (Reference)
 **What:** More detailed phase-by-phase breakdown (Phases 0-3)
 **When to read:** During implementation as detailed reference
 **Key takeaway:**
@@ -317,19 +317,19 @@ Result: Production-ready system for your research workflow
 ## Success Metrics (from QUICK_REFERENCE_GUIDE.md)
 
 By end of Week 1:
-- ✅ Can search 100% of transcripts without YT
-- ✅ Can verify LLM answers against exact source text
-- ✅ Can compare multiple transcripts side-by-side
+-  Can search 100% of transcripts without YT
+-  Can verify LLM answers against exact source text
+-  Can compare multiple transcripts side-by-side
 
 By end of Week 3:
-- ✅ Can explain why 2 guests disagree (frameworks)
-- ✅ Can identify shared assumptions vs divergent ones
-- ✅ Can assess which framework has more validation
+-  Can explain why 2 guests disagree (frameworks)
+-  Can identify shared assumptions vs divergent ones
+-  Can assess which framework has more validation
 
 By end of Week 5:
-- ✅ Deep exploration workflow fully functional
-- ✅ Session history + export
-- ✅ Conversation connected to raw data at every step
+-  Deep exploration workflow fully functional
+-  Session history + export
+-  Conversation connected to raw data at every step
 
 ---
 

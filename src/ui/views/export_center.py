@@ -40,6 +40,31 @@ def render(db):
                     st.markdown(content)
                 else:
                     st.code(content)
+        
+        st.markdown("---")
+        with st.expander("Obsidian Sync (Research Wiki)", expanded=True):
+            st.markdown("""
+            **Generate a complete research vault for Obsidian.**
+            - Converts Claims, Bridges, and Clashes into linked notes.
+            - Includes backlinks to Channels and Videos.
+            - Uses Dataview-compatible metadata.
+            """)
+            
+            from pathlib import Path
+            default_obsidian_path = str(Path(db.db_path).parent / "obsidian_vault")
+            obsidian_path = st.text_input("Output Directory", default_obsidian_path)
+            
+            if st.button("Sync to Obsidian Vault", type="primary"):
+                try:
+                    from src.utils.obsidian_exporter import ObsidianExporter
+                    writer = ObsidianExporter(db, obsidian_path)
+                    with st.spinner("Generating vault structure..."):
+                        writer.export_all()
+                    st.success(f"Vault exported successfully to: `{obsidian_path}`")
+                except Exception as e:
+                    st.error(f"Obsidian sync failed: {e}")
+                    logger.error(f"Obsidian sync failed: {e}", exc_info=True)
+
     except Exception as e:
         st.error(f"Failed to load Export Center: {e}")
         logger.error(f"Export Center error: {e}", exc_info=True)

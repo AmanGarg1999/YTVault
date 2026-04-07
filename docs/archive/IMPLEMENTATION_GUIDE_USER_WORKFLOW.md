@@ -932,7 +932,7 @@ def render_framework_comparison():
             st.subheader("Areas of Agreement")
             
             for agreement in comparison['areas_of_agreement']:
-                st.write(f"✓ {agreement}")
+                st.write(f" {agreement}")
         
         # Quotes supporting frameworks
         st.subheader("Supporting Evidence")
@@ -978,7 +978,7 @@ def render_framework_comparison():
 ---
 
 **This gives you exactly what you asked for:**
-1. ✅ Go through information (transcript browser)
-2. ✅ Talk with LLM (enhanced RAG with context)
-3. ✅ Understand topics across channels (framework comparison)
-4. ✅ All data accessible without re-fetch (transcript viewer + full access)
+1.  Go through information (transcript browser)
+2.  Talk with LLM (enhanced RAG with context)
+3.  Understand topics across channels (framework comparison)
+4.  All data accessible without re-fetch (transcript viewer + full access)

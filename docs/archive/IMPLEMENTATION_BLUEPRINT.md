@@ -1075,13 +1075,13 @@ def render_comparative_analysis():
 ## Testing & Validation Checklist
 
 ```
-✓ = Done    ○ = In Progress    × = Not Started
+ = Done    ○ = In Progress    × = Not Started
 
 PHASE 0 (Baseline):
 ─────────────────────────────────
-✓ Task 0.1: Claim certainty markers extracted
-✓ Task 0.2: Guest conflict matrix populated
-✓ Task 0.3: Transcript quality scores calculated
+ Task 0.1: Claim certainty markers extracted
+ Task 0.2: Guest conflict matrix populated
+ Task 0.3: Transcript quality scores calculated
 ○ Task 0.4: Prediction extractor integrated
 
 PHASE 1 (Enhanced Extraction):
@@ -1123,14 +1123,14 @@ PERFORMANCE:
 
 After completing all phases, you should be able to:
 
-- ✅ Answer 15+ new question types (vs 5 currently)
-- ✅ Track consensus shifts on any topic
-- ✅ Identify emerging disagreements automatically
-- ✅ Assess guest credibility by topic
-- ✅ Reconstruct full arguments (not just quotes)
-- ✅ Detect contradictions between guests
-- ✅ Compare worldviews with dimensional analysis
-- ✅ Explain *why* guests disagree (framework differences)
+-  Answer 15+ new question types (vs 5 currently)
+-  Track consensus shifts on any topic
+-  Identify emerging disagreements automatically
+-  Assess guest credibility by topic
+-  Reconstruct full arguments (not just quotes)
+-  Detect contradictions between guests
+-  Compare worldviews with dimensional analysis
+-  Explain *why* guests disagree (framework differences)
 
 ---
 

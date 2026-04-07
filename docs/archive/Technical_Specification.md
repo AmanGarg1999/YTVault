@@ -608,7 +608,7 @@ collection.upsert(
 
 | Model | Dimensions | Speed (local) | Quality | Choice |
 |---|---|---|---|---|
-| `nomic-embed-text` | 768 | ~50ms/chunk | High | ✅ **Selected** |
+| `nomic-embed-text` | 768 | ~50ms/chunk | High |  **Selected** |
 | `all-minilm` | 384 | ~30ms/chunk | Medium | Fallback |
 | `mxbai-embed-large` | 1024 | ~80ms/chunk | Very High | Future upgrade |
 
@@ -902,7 +902,7 @@ def render_pipeline_monitor(db):
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("📥 Discovered", stats["discovered"])
-    col2.metric("✅ Triage Passed", stats["accepted"])
+    col2.metric(" Triage Passed", stats["accepted"])
     col3.metric("📝 Transcripts Cleaned", stats["refined"])
     col4.metric("🔍 Indexed", stats["indexed"])
 
@@ -914,7 +914,7 @@ def render_pipeline_monitor(db):
     # Pending review alert
     pending = stats.get("pending_review", 0)
     if pending > 0:
-        st.warning(f"⚠️ {pending} videos awaiting manual review")
+        st.warning(f"️ {pending} videos awaiting manual review")
 ```
 
 ---

@@ -70,13 +70,13 @@ Enhancing the KnowledgeVault-YT platform to transform raw transcript data into h
 
 ## 19. 🕸️ Guest Co-Occurrence Networking [COMPLETED]
 
-## 20. 🕵️‍♂️ Autonomous Research Agent [COMPLETED]
+## 20. 🕵️‍️ Autonomous Research Agent [COMPLETED]
 
 ---
 
-## ✅ Completed Intelligence Features
+## Completed Intelligence Features
 
-### ⚔️ Expert Clash Detection
+### ️ Expert Clash Detection
 Identify when different experts make conflicting claims on the same topic. Surfaced in the **Topic Explorer**.
 
 ### 📋 Actionable Blueprints
@@ -100,5 +100,5 @@ Time-series tracking of topic mention frequency to identify emerging research mo
 ### 🕸️ Guest Co-Occurrence Networking
 Social graph visualization of expert appearances and their shared thematic contexts.
 
-### 🕵️‍♂️ Autonomous Research Agent
+### 🕵️‍️ Autonomous Research Agent
 Multi-stage autonomous RAG agent that synthesizes formal Markdown white papers from vault content.

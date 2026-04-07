@@ -36,10 +36,10 @@ This document describes the new comprehensive logging, monitoring, and data mana
 ### 2. **Log Levels & Event Types**
 
 ```
-✅ SUCCESS  - Major milestones (video accepted, stage complete)
+ SUCCESS  - Major milestones (video accepted, stage complete)
 ℹ️  INFO     - General operations (discovery, triage start)
-⚠️  WARNING  - Non-critical issues (missing transcript, slow processing)
-❌ ERROR    - Pipeline failures that need attention
+️  WARNING  - Non-critical issues (missing transcript, slow processing)
+ ERROR    - Pipeline failures that need attention
 🐛 DEBUG    - Detailed diagnostic info (SQL queries, timing)
 ```
 
@@ -85,7 +85,7 @@ db.resume_scan(scan_id)
 
 ### Stop a Scan
 ```python
-# Via UI: 📊 Pipeline Monitor → ⛔ Stop
+# Via UI: 📊 Pipeline Monitor →  Stop
 db.stop_scan(scan_id)
 ```
 - Graceful shutdown at next safe point
@@ -123,13 +123,13 @@ success = db.remove_video_from_queue(video_id)
 #### What Gets Deleted
 
 ```
-✂️  Transcript Chunks    - All segmented text data
+️  Transcript Chunks    - All segmented text data
 💭 Claims             - Extracted claims/assertions  
 💬 Quotes             - Notable quotations
 👤 Guest Appearances  - Links to identified people
 📄 Temp State         - Processing scratch data
 📊 Video Summary      - Cached summaries
-✅ Video Status       - Reset to DISCOVERED
+ Video Status       - Reset to DISCOVERED
 ```
 
 #### What Does NOT Get Deleted (BUT causes issues!)
@@ -432,7 +432,7 @@ summary = db.get_log_summary(scan_id="abc12345")
 ### What Persists
 
 ```
-✅ PERSISTS:
+ PERSISTS:
 - Video ID record (reset to DISCOVERED)
 - Channel metadata
 - All file logs
@@ -440,7 +440,7 @@ summary = db.get_log_summary(scan_id="abc12345")
 - ChromaDB embeddings (DUPLICATE on reprocess)
 - Neo4j graph nodes (DUPLICATE on reprocess)
 
-❌ DELETED:
+ DELETED:
 - Transcript chunks
 - Claims and quotes
 - Guest appearances
@@ -473,7 +473,7 @@ summary = db.get_log_summary(scan_id="abc12345")
 → 📊 Pipeline Monitor → ⏸️ Pause → Later → ▶️ Resume
 
 **I want to stop a harvest permanently:**
-→ 📊 Pipeline Monitor → ⛔ Stop
+→ 📊 Pipeline Monitor →  Stop
 
 **I want to remove a video before processing:**
 → 🎮 Pipeline Control → Remove from Queue
@@ -513,7 +513,7 @@ recent_errors = [l for l in recent_errors
 
 # Send alert if too many errors
 if len(recent_errors) > 5:
-    send_slack_alert(f"⚠️ {len(recent_errors)} errors in last 10 min")
+    send_slack_alert(f"️ {len(recent_errors)} errors in last 10 min")
 ```
 
 ### Automated Cleanup

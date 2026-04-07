@@ -469,25 +469,38 @@ class RAGEngine:
     # -------------------------------------------------------------------
 
     def _synthesize(self, context_prompt: str) -> str:
-        """Send context + question to Ollama LLM for synthesis."""
+        """Send context + question to Ollama LLM for synthesis (HIGH priority)."""
+        from src.utils.llm_pool import LLMPool, LLMTask, LLMPriority
+        
+        def call_ollama(prompt):
+            return ollama_api.chat(
+                model=self.ollama_cfg.get("deep_model", self.ollama_cfg.get("rag_model", "llama3.2:3b")),
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": prompt},
+                ],
+                options={
+                    "num_predict": self.ollama_cfg.get("rag_max_tokens", 4096),
+                    "temperature": self.ollama_cfg.get("temperature", 0.1),
+                },
+            )
+
+        pool = LLMPool()
+        task = LLMTask(
+            task_id=f"rag_synth_{int(time.time())}",
+            fn=call_ollama,
+            args=(context_prompt,),
+            priority=LLMPriority.HIGH
+        )
+        
         try:
-            # Ensure ollama_api is the standard library and chat is callable
-            if hasattr(ollama_api, "chat") and callable(ollama_api.chat):
-                response = ollama_api.chat(
-                    model=self.ollama_cfg.get("deep_model", self.ollama_cfg.get("rag_model", "llama3.2:3b")),
-                    messages=[
-                        {"role": "system", "content": self.system_prompt},
-                        {"role": "user", "content": context_prompt},
-                    ],
-                    options={
-                        "num_predict": self.ollama_cfg.get("rag_max_tokens", 4096),
-                        "temperature": self.ollama_cfg.get("temperature", 0.1),
-                    },
-                )
-                return response["message"]["content"]
-            else:
-                logger.error("Ollama library in unexpected state or ollama.chat not reachable")
-                return "Error: LLM client is misconfigured."
+            future = pool.submit(task)
+            # RAG synthesis is time-sensitive (UI waiting)
+            response = future.result(timeout=120) 
+            return response["message"]["content"]
+        except Exception as e:
+            logger.error(f"RAG synthesis failed via PriorityPool: {e}")
+            return f"Error: {e}"
         except Exception as e:
             logger.error(f"RAG synthesis failed: {e}")
             return (

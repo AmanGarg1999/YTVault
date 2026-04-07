@@ -58,7 +58,7 @@ class SummarizerEngine:
                 for i in range(0, len(chunks), group_size)
             ]
 
-            from src.utils.llm_pool import LLMPool, LLMTask
+            from src.utils.llm_pool import LLMPool, LLMTask, LLMPriority
             pool = LLMPool()
 
             map_tasks = [
@@ -66,6 +66,7 @@ class SummarizerEngine:
                     task_id=f"group_{i}",
                     fn=self._map_summarize_group,
                     args=(group,),
+                    priority=LLMPriority.LOW
                 )
                 for i, group in enumerate(groups)
             ]
@@ -178,17 +179,28 @@ class SummarizerEngine:
         if len(combined_bullets) > 15000:
             combined_bullets = combined_bullets[:15000] + "\n[... truncated ...]"
 
-        from src.utils.llm_pool import get_llm_semaphore
-        with get_llm_semaphore():
-            response = ollama.chat(
-                model=self.deep_model,
-                messages=[
+        from src.utils.llm_pool import LLMPool, LLMTask, LLMPriority
+        pool = LLMPool()
+        task = LLMTask(
+            task_id=f"reduce_{int(time.time())}",
+            fn=ollama.chat,
+            kwargs={
+                "model": self.deep_model,
+                "messages": [
                     {"role": "system", "content": self.reduce_prompt},
                     {"role": "user", "content": combined_bullets},
                 ],
-                options={"num_predict": 1500, "temperature": 0.1},
-            )
-        return self._parse_json_response(response["message"]["content"].strip())
+                "options": {"num_predict": 1500, "temperature": 0.1},
+            },
+            priority=LLMPriority.LOW
+        )
+        try:
+            future = pool.submit(task)
+            response = future.result()
+            return self._parse_json_response(response["message"]["content"].strip())
+        except Exception as e:
+            logger.error(f"Reduce phase failed via pool: {e}")
+            return None
 
     def _parse_json_response(self, content: str) -> Optional[dict]:
         """Extract and parse JSON from LLM response."""

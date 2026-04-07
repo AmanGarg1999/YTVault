@@ -26,6 +26,7 @@ STAGE_ORDER = [
     "SUMMARIZED",
     "EMBEDDED",
     "GRAPH_SYNCED",
+    "CORROBORATED",
     "DONE",
 ]
 

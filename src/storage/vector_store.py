@@ -216,7 +216,8 @@ class VectorStore:
         )
 
     def upsert_chunks(self, chunks: list[TranscriptChunk], channel_id: str = "",
-                      upload_date: str = "", language_iso: str = "en") -> int:
+                      upload_date: str = "", language_iso: str = "en",
+                      skip_ids: set = None) -> int:
         """Embed and upsert transcript chunks into ChromaDB with deduplication.
 
         Args:
@@ -224,10 +225,22 @@ class VectorStore:
             channel_id: Channel ID for metadata filtering.
             upload_date: Upload date for temporal queries.
             language_iso: Language code for filtering.
+            skip_ids: Set of chunk_ids to skip embedding (content unchanged).
 
         Returns:
-            Number of chunks upserted.
+            Number of chunks upserted (excludes skipped).
         """
+        if not chunks:
+            return 0
+
+        # P0-B: Skip chunks already embedded with unchanged content
+        if skip_ids:
+            original_count = len(chunks)
+            chunks = [c for c in chunks if c.chunk_id not in skip_ids]
+            skipped_embed = original_count - len(chunks)
+            if skipped_embed:
+                logger.info(f"P0-B: Skipped {skipped_embed} unchanged chunks (embedding skip)")
+
         if not chunks:
             return 0
 
@@ -347,6 +360,40 @@ class VectorStore:
         """Delete all chunks for a specific video."""
         self.collection.delete(where={"video_id": video_id})
         logger.info(f"Deleted vector chunks for video {video_id}")
+
+    def get_existing_chunk_ids(self, video_id: str) -> set:
+        """P0-B: Return set of chunk_ids already stored in ChromaDB for a video.
+
+        Used by _stage_embed to diff against current DB chunks so only
+        new or changed chunks incur embedding cost.
+        """
+        try:
+            results = self.collection.get(
+                where={"video_id": video_id},
+                include=[],  # Only IDs, no documents/embeddings needed
+            )
+            return set(results["ids"]) if results and results.get("ids") else set()
+        except Exception as e:
+            logger.warning(f"Could not fetch existing chunk IDs for {video_id}: {e}")
+            return set()
+
+    def count_unique_videos(self) -> int:
+        """P0-D: Count distinct video_ids indexed in ChromaDB.
+
+        Used by the Graph Health dashboard to compare ChromaDB coverage
+        against SQLite and Neo4j.
+        """
+        try:
+            # ChromaDB does not have a GROUP BY—fetch all metadatas with just video_id
+            results = self.collection.get(include=["metadatas"])
+            if not results or not results.get("metadatas"):
+                return 0
+            unique_vids = {m.get("video_id", "") for m in results["metadatas"]}
+            unique_vids.discard("")  # remove blanks
+            return len(unique_vids)
+        except Exception as e:
+            logger.warning(f"count_unique_videos failed: {e}")
+            return 0
 
     def get_stats(self) -> dict:
         """Get vector store statistics."""

@@ -325,6 +325,29 @@ class PipelineOrchestrator:
             self.checkpoint.complete_scan(scan_id)
             self.db.release_all_locks(scan_id)
             self.db.set_control_state(scan_id, "RUNNING")
+
+            # P0-A: Drain any incomplete outbox entries caused by mid-scan crashes
+            try:
+                from src.pipeline.saga_worker import SagaWorker
+                saga = SagaWorker(
+                    db=self.db,
+                    vector_store=self._vector_store,
+                    graph_store=self._graph_store,
+                )
+                fixed = saga.drain()
+                if fixed:
+                    self._report_status(f"Saga worker repaired {fixed} diverged entries")
+            except Exception as e:
+                logger.warning(f"Saga drain failed (non-critical): {e}")
+
+            # P0-C: Clean up temp state rows for completed videos
+            try:
+                cleaned = self.db.cleanup_done_temp_states()
+                if cleaned:
+                    self._report_status(f"Temp state cleanup: removed {cleaned} stale rows")
+            except Exception as e:
+                logger.warning(f"Temp state cleanup failed (non-critical): {e}")
+
             self._report_status(f"Scan {scan_id} completed: {processed_count} videos processed")
             return scan_id
 
@@ -478,11 +501,35 @@ class PipelineOrchestrator:
         self, url: str, parsed: ParsedURL, scan_id: str, discovery_queue,
         force_metadata_refresh: bool = False
     ) -> None:
-        """Stage 1: Discover video IDs and harvest metadata (Streaming)."""
+        """Stage 1: Discover video IDs and harvest metadata (Streaming).
+
+        P0-E: When force_metadata_refresh=False and the channel has a prior
+        last_scanned_at date, passes --dateafter to yt-dlp so only new videos
+        are discovered, reducing re-harvest cost from O(n) to O(delta).
+        """
         self._report_status("Stage 1: Discovering videos...")
 
-        # For channel/playlist, extract channel info first
-        if parsed.url_type in ("channel", "playlist"):
+        # P0-E: Determine incremental after_date from channel last_scanned_at
+        after_date = None
+        if not force_metadata_refresh and parsed.url_type in ("channel", "playlist"):
+            try:
+                channel_info = extract_channel_info(url)
+                self.db.upsert_channel(channel_info)
+                # Read back the stored channel to get last_scanned_at
+                existing_channel = self.db.get_channel(channel_info.channel_id)
+                if existing_channel and existing_channel.last_scanned_at:
+                    # last_scanned_at is a datetime string; extract just the date part
+                    raw_date = str(existing_channel.last_scanned_at)
+                    date_part = raw_date[:10] if len(raw_date) >= 10 else None
+                    if date_part and date_part != "None":
+                        after_date = date_part
+                        self._report_status(
+                            f"P0-E Incremental harvest: fetching videos after {after_date}"
+                        )
+            except Exception as e:
+                logger.warning(f"Channel info extraction failed: {e}")
+        elif parsed.url_type in ("channel", "playlist"):
+            # force_metadata_refresh=True: full harvest, extract channel info
             try:
                 channel_info = extract_channel_info(url)
                 self.db.upsert_channel(channel_info)
@@ -495,7 +542,7 @@ class PipelineOrchestrator:
         new_ids = []
 
         from src.ingestion.discovery import discover_video_ids
-        for vid in discover_video_ids(url, parsed):
+        for vid in discover_video_ids(url, parsed, after_date=after_date):
             discovered_count += 1
             is_new = vid not in known_ids
             if is_new or force_metadata_refresh:
@@ -527,7 +574,8 @@ class PipelineOrchestrator:
             scan_id, total_discovered=discovered_count
         )
         self.db.sync_channel_video_counts() # Update counts in channels table
-        self._report_status(f"Discovery complete: {discovered_count} videos found")
+        mode_label = f"(incremental after {after_date})" if after_date else "(full)"
+        self._report_status(f"Discovery complete {mode_label}: {discovered_count} videos found")
 
     def batch_triage(self, video_ids: list[str]) -> dict[str, str]:
         """Run triage classification on a batch of videos concurrently.
@@ -796,12 +844,8 @@ class PipelineOrchestrator:
                     translated_text=result.translated_text,
                 )
                 
-                # Mark that translation was performed
-                self.db.conn.execute(
-                    "UPDATE videos SET translated_text_stored = 1 WHERE video_id = ?",
-                    (video.video_id,)
-                )
-                self.db.conn.commit()
+                # P0-A fix: use db method instead of bare self.db.conn.execute()
+                self.db.mark_translation_stored(video.video_id)
                 
                 self.db.log_pipeline_event(
                     level="SUCCESS",
@@ -977,7 +1021,7 @@ class PipelineOrchestrator:
                 )
 
     def _stage_graph_sync(self, video, scan_id: str = None) -> None:
-        """Stage 8: Synchronize video, topics, and guests to Neo4j."""
+        """Stage 8: Synchronize video, topics, and guests to Neo4j (with P0-A outbox)."""
         sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
         with StageTimer(self.metrics, "GRAPH_SYNCED", video.video_id, sid):
             try:
@@ -1031,6 +1075,12 @@ class PipelineOrchestrator:
                     )
             except Exception as e:
                 logger.error(f"Graph sync failed for {video.video_id}: {e}")
+            else:
+                # P0-A: Mark Neo4j sync done in outbox (only on success)
+                try:
+                    self.db.mark_outbox_neo4j_done(video.video_id)
+                except Exception as ex:
+                    logger.warning(f"Could not mark neo4j done in outbox for {video.video_id}: {ex}")
 
     def _stage_summarize(self, video, scan_id: str = None) -> None:
         """Stage 6.8: Generate hierarchical Map-Reduce summary."""
@@ -1042,18 +1092,58 @@ class PipelineOrchestrator:
             self._report_status("Map-Reduce summary generated")
 
     def _stage_embed(self, video, scan_id: str = None) -> None:
-        """Stage 7: Embed chunks into ChromaDB."""
+        """Stage 7: Embed chunks into ChromaDB (with P0-A outbox + P0-B hash skip)."""
+        import hashlib
         sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
         with StageTimer(self.metrics, "EMBEDDED", video.video_id, sid):
             chunks = self.db.get_chunks_for_video(video.video_id)
-            if chunks:
-                channel = self.db.get_channel(video.channel_id)
-                self.vector_store.upsert_chunks(
-                    chunks,
-                    channel_id=video.channel_id,
-                    upload_date=video.upload_date,
-                    language_iso=video.language_iso,
+            if not chunks:
+                return
+
+            # P0-A: Register outbox entry before touching external stores
+            try:
+                self.db.create_sync_outbox_entry(video.video_id)
+            except Exception as e:
+                logger.warning(f"Could not create outbox entry for {video.video_id}: {e}")
+
+            # P0-B: Compute content hashes for each chunk, store in DB
+            existing_hashes = self.db.get_chunks_with_hashes(video.video_id)
+            skip_ids: set = set()
+
+            for chunk in chunks:
+                new_hash = hashlib.sha256(
+                    (chunk.cleaned_text or chunk.raw_text).encode("utf-8", errors="replace")
+                ).hexdigest()
+                # Update hash in DB regardless (cheap write)
+                self.db.conn.execute(
+                    "UPDATE transcript_chunks SET content_hash = ? WHERE chunk_id = ?",
+                    (new_hash, chunk.chunk_id),
                 )
+                # If hash matches what was stored last run → already embedded
+                if existing_hashes.get(chunk.chunk_id) == new_hash:
+                    skip_ids.add(chunk.chunk_id)
+
+            self.db.conn.commit()
+
+            if skip_ids:
+                logger.info(
+                    f"P0-B: {len(skip_ids)}/{len(chunks)} chunks unchanged, skipping re-embedding"
+                )
+
+            channel = self.db.get_channel(video.channel_id)
+            self.vector_store.upsert_chunks(
+                chunks,
+                channel_id=video.channel_id,
+                upload_date=video.upload_date,
+                language_iso=video.language_iso,
+                skip_ids=skip_ids,
+            )
+
+            # P0-A: Mark ChromaDB sync done in outbox
+            try:
+                self.db.mark_outbox_chroma_done(video.video_id)
+            except Exception as e:
+                logger.warning(f"Could not mark chroma done in outbox for {video.video_id}: {e}")
 
     def _extract_topics(self, text: str) -> list[dict]:
         """Extract topics from transcript text via LLM.

@@ -304,8 +304,16 @@ def extract_channel_info(url: str) -> Channel:
     )
 
 
-def discover_video_ids(url: str, parsed: ParsedURL):
-    """Discover video IDs from a channel or playlist URL. yields IDs."""
+def discover_video_ids(url: str, parsed: ParsedURL, after_date: str = None):
+    """Discover video IDs from a channel or playlist URL. yields IDs.
+
+    Args:
+        url: YouTube URL (channel, playlist, or single video).
+        parsed: Pre-parsed ParsedURL object.
+        after_date: Optional ISO date (YYYY-MM-DD) for P0-E incremental harvest.
+            Only videos published on or after this date will be discovered.
+            Pass None (default) for a full harvest.
+    """
     if parsed.url_type == "video":
         yield parsed.video_id
         return
@@ -320,7 +328,7 @@ def discover_video_ids(url: str, parsed: ParsedURL):
         
         count = 0
         try:
-            for vid in _fetch_ids_stream(discovery_url):
+            for vid in _fetch_ids_stream(discovery_url, after_date=after_date):
                 yield vid
                 count += 1
             if count > 0:
@@ -332,7 +340,7 @@ def discover_video_ids(url: str, parsed: ParsedURL):
     # Strategy B: Fallback to original URL
     try:
         count = 0
-        for vid in _fetch_ids_stream(url):
+        for vid in _fetch_ids_stream(url, after_date=after_date):
             yield vid
             count += 1
         if count > 0:
@@ -347,20 +355,33 @@ def discover_video_ids(url: str, parsed: ParsedURL):
         if base_url != url:
             logger.info(f"Trying base channel URL fallback: {base_url}")
             try:
-                for vid in _fetch_ids_stream(base_url):
+                for vid in _fetch_ids_stream(base_url, after_date=after_date):
                     yield vid
             except Exception as e:
                 logger.error(f"Base channel fallback failed: {e}")
 
 
-def _fetch_ids_stream(url: str):
-    """Helper to run yt-dlp discovery and yield IDs."""
-    return _run_ytdlp_stream([
+def _fetch_ids_stream(url: str, after_date: str = None):
+    """Helper to run yt-dlp discovery and yield IDs.
+
+    Args:
+        url: YouTube channel/playlist URL.
+        after_date: Optional ISO date string (YYYY-MM-DD). When provided, only
+            videos published on or after this date are returned.  This maps to
+            yt-dlp's ``--dateafter`` flag and is the core of P0-E diff-harvest.
+    """
+    args = [
         "--flat-playlist",
         "--ignore-errors",
         "--print", "id",
-        url,
-    ])
+    ]
+    if after_date:
+        # yt-dlp expects YYYYMMDD; strip dashes if ISO format is passed
+        date_compact = after_date.replace("-", "")
+        args += ["--dateafter", date_compact]
+        logger.info(f"P0-E Diff-harvest: only fetching videos after {after_date}")
+    args.append(url)
+    return _run_ytdlp_stream(args)
 
 
 def _format_date(date_str: str) -> str:

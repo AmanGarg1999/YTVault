@@ -572,6 +572,24 @@ SCHEMA_MIGRATIONS = [
         ALTER TABLE videos ADD COLUMN locked_by_scan_id TEXT DEFAULT NULL;
         CREATE INDEX IF NOT EXISTS idx_videos_locked ON videos(locked_by_scan_id);
     """),
+    # Version 19: P0-A — Sync outbox for saga-based triple-store atomicity
+    (19, """
+        CREATE TABLE IF NOT EXISTS sync_outbox (
+            video_id      TEXT PRIMARY KEY REFERENCES videos(video_id),
+            chroma_done   BOOLEAN DEFAULT 0,
+            neo4j_done    BOOLEAN DEFAULT 0,
+            retry_count   INTEGER DEFAULT 0,
+            last_error    TEXT DEFAULT '',
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_outbox_pending ON sync_outbox(chroma_done, neo4j_done);
+    """),
+    # Version 20: P0-B — Content hash per chunk to skip re-embedding unchanged content
+    (20, """
+        ALTER TABLE transcript_chunks ADD COLUMN content_hash TEXT DEFAULT '';
+        CREATE INDEX IF NOT EXISTS idx_chunks_hash ON transcript_chunks(content_hash);
+    """),
 ]
 
 
@@ -1624,6 +1642,177 @@ class SQLiteStore:
             "DELETE FROM pipeline_temp_state WHERE video_id = ?", (video_id,)
         )
         self.conn.commit()
+
+    # -------------------------------------------------------------------
+    # P0-A: Sync Outbox (Saga Pattern for Triple-Store Atomicity)
+    # -------------------------------------------------------------------
+
+    def create_sync_outbox_entry(self, video_id: str) -> None:
+        """Create or reset an outbox entry before starting store sync stages.
+
+        Called at the start of _stage_embed so that a post-crash drain can
+        detect and retry incomplete syncs.
+        """
+        self.conn.execute(
+            """INSERT INTO sync_outbox (video_id, chroma_done, neo4j_done, retry_count)
+               VALUES (?, 0, 0, 0)
+               ON CONFLICT(video_id) DO UPDATE SET
+                   chroma_done = 0,
+                   neo4j_done  = 0,
+                   retry_count = retry_count + 1,
+                   updated_at  = CURRENT_TIMESTAMP""",
+            (video_id,),
+        )
+        self.conn.commit()
+
+    def mark_outbox_chroma_done(self, video_id: str) -> None:
+        """Mark ChromaDB sync complete in the outbox."""
+        self.conn.execute(
+            """UPDATE sync_outbox
+               SET chroma_done = 1, updated_at = CURRENT_TIMESTAMP
+               WHERE video_id = ?""",
+            (video_id,),
+        )
+        self.conn.commit()
+
+    def mark_outbox_neo4j_done(self, video_id: str) -> None:
+        """Mark Neo4j sync complete in the outbox."""
+        self.conn.execute(
+            """UPDATE sync_outbox
+               SET neo4j_done = 1, updated_at = CURRENT_TIMESTAMP
+               WHERE video_id = ?""",
+            (video_id,),
+        )
+        self.conn.commit()
+
+    def get_pending_outbox(self, limit: int = 100) -> list[dict]:
+        """Return outbox entries with incomplete chroma or neo4j sync."""
+        rows = self.conn.execute(
+            """SELECT so.video_id, so.chroma_done, so.neo4j_done, so.retry_count,
+                      v.channel_id, v.checkpoint_stage
+               FROM sync_outbox so
+               LEFT JOIN videos v ON so.video_id = v.video_id
+               WHERE so.chroma_done = 0 OR so.neo4j_done = 0
+               ORDER BY so.created_at ASC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def mark_outbox_error(self, video_id: str, error: str) -> None:
+        """Record an error on an outbox entry for diagnostics."""
+        self.conn.execute(
+            """UPDATE sync_outbox
+               SET last_error = ?, retry_count = retry_count + 1, updated_at = CURRENT_TIMESTAMP
+               WHERE video_id = ?""",
+            (error[:500], video_id),
+        )
+        self.conn.commit()
+
+    def cleanup_done_outbox(self) -> int:
+        """Delete completed outbox rows (both chroma and neo4j done)."""
+        cursor = self.conn.execute(
+            "DELETE FROM sync_outbox WHERE chroma_done = 1 AND neo4j_done = 1"
+        )
+        self.conn.commit()
+        return cursor.rowcount
+
+    def get_outbox_stats(self) -> dict:
+        """Return summary counts for the sync outbox."""
+        row = self.conn.execute(
+            """SELECT
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN chroma_done = 0 THEN 1 ELSE 0 END) AS pending_chroma,
+                   SUM(CASE WHEN neo4j_done  = 0 THEN 1 ELSE 0 END) AS pending_neo4j,
+                   SUM(CASE WHEN chroma_done = 1 AND neo4j_done = 1 THEN 1 ELSE 0 END) AS fully_done
+               FROM sync_outbox"""
+        ).fetchone()
+        return dict(row) if row else {}
+
+    def mark_translation_stored(self, video_id: str) -> None:
+        """Set translated_text_stored flag without exposing raw conn.
+
+        Replaces the bare self.db.conn.execute() call in _stage_translate.
+        """
+        self.conn.execute(
+            "UPDATE videos SET translated_text_stored = 1 WHERE video_id = ?",
+            (video_id,),
+        )
+        self.conn.commit()
+
+    # -------------------------------------------------------------------
+    # P0-B: Content Hash Helpers for Embedding Skip
+    # -------------------------------------------------------------------
+
+    def get_chunks_with_hashes(self, video_id: str) -> dict:
+        """Return {chunk_id: content_hash} for all chunks of a video.
+
+        Used by _stage_embed to identify chunks whose content has not changed
+        since the last embedding pass.
+        """
+        rows = self.conn.execute(
+            "SELECT chunk_id, content_hash FROM transcript_chunks WHERE video_id = ?",
+            (video_id,),
+        ).fetchall()
+        return {r["chunk_id"]: (r["content_hash"] or "") for r in rows}
+
+    # -------------------------------------------------------------------
+    # P0-C: Temp State Cleanup + Stats
+    # -------------------------------------------------------------------
+
+    def cleanup_done_temp_states(self) -> int:
+        """Delete pipeline_temp_state rows for fully-processed videos.
+
+        Targets videos at GRAPH_SYNCED / DONE checkpoint stage — they no
+        longer need their raw/cleaned text buffered in temp state.
+        Returns the number of rows deleted.
+        """
+        cursor = self.conn.execute(
+            """DELETE FROM pipeline_temp_state
+               WHERE video_id IN (
+                   SELECT video_id FROM videos
+                   WHERE checkpoint_stage IN ('GRAPH_SYNCED', 'DONE')
+               )"""
+        )
+        self.conn.commit()
+        deleted = cursor.rowcount
+        if deleted:
+            logger.info(f"Temp state cleanup: removed {deleted} rows for completed videos")
+        return deleted
+
+    def get_temp_state_stats(self) -> dict:
+        """Return diagnostic stats for pipeline_temp_state storage usage."""
+        row = self.conn.execute(
+            """SELECT
+                   COUNT(*) AS row_count,
+                   COALESCE(SUM(LENGTH(raw_text) + LENGTH(cleaned_text)
+                            + LENGTH(translated_text)) / 1024, 0) AS total_size_kb
+               FROM pipeline_temp_state"""
+        ).fetchone()
+        return dict(row) if row else {"row_count": 0, "total_size_kb": 0}
+
+    # -------------------------------------------------------------------
+    # P0-D: Store Divergence Stats
+    # -------------------------------------------------------------------
+
+    def get_store_sync_stats(self) -> dict:
+        """Return counts needed to detect SQLite vs ChromaDB vs Neo4j divergence.
+
+        Used by the Graph Health dashboard to surface out-of-sync stores.
+        """
+        accepted_row = self.conn.execute(
+            "SELECT COUNT(*) AS cnt FROM videos WHERE triage_status = 'ACCEPTED'"
+        ).fetchone()
+        done_row = self.conn.execute(
+            "SELECT COUNT(*) AS cnt FROM videos WHERE checkpoint_stage IN ('GRAPH_SYNCED', 'DONE')"
+        ).fetchone()
+        outbox_stats = self.get_outbox_stats()
+        return {
+            "sqlite_accepted": accepted_row["cnt"] if accepted_row else 0,
+            "sqlite_done": done_row["cnt"] if done_row else 0,
+            "pending_outbox_chroma": outbox_stats.get("pending_chroma", 0) or 0,
+            "pending_outbox_neo4j": outbox_stats.get("pending_neo4j", 0) or 0,
+        }
 
     # -------------------------------------------------------------------
     # Scan Checkpoints

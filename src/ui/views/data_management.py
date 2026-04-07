@@ -464,7 +464,107 @@ def render(db, run_repair=None, get_diagnostics=None):
         st.markdown("---")
 
         # =====================================================================
-        # SECTION 6: Storage Optimization Tips
+        # SECTION 6: P0-D — Store Health (Triple-Store Divergence Monitor)
+        # =====================================================================
+        st.markdown("### Store Health")
+        st.caption("Compare video counts across all three intelligence stores to detect silent divergence.")
+
+        with st.container():
+            col_sql, col_vec, col_neo, col_outbox = st.columns(4)
+
+            # SQLite stats
+            try:
+                sync_stats = db.get_store_sync_stats()
+                sqlite_accepted = sync_stats.get("sqlite_accepted", 0)
+                sqlite_done = sync_stats.get("sqlite_done", 0)
+                pending_chroma = sync_stats.get("pending_outbox_chroma", 0)
+                pending_neo4j = sync_stats.get("pending_outbox_neo4j", 0)
+            except Exception:
+                sqlite_accepted, sqlite_done, pending_chroma, pending_neo4j = 0, 0, 0, 0
+
+            with col_sql:
+                st.metric("SQLite (Accepted)", sqlite_accepted)
+                st.caption(f"{sqlite_done} fully done")
+
+            # ChromaDB stats
+            chroma_unique = 0
+            chroma_status = "Unknown"
+            try:
+                from src.storage.vector_store import VectorStore
+                _vs = VectorStore()
+                chroma_unique = _vs.count_unique_videos()
+                chroma_status = "Online"
+            except Exception:
+                chroma_status = "Offline"
+
+            with col_vec:
+                st.metric("ChromaDB (Videos)", chroma_unique)
+                st.caption(chroma_status)
+
+            # Neo4j stats
+            neo4j_count = 0
+            neo4j_status = "Offline / Disabled"
+            try:
+                from src.storage.graph_store import GraphStore
+                _gs = GraphStore()
+                if hasattr(_gs, "get_video_count"):
+                    neo4j_count = _gs.get_video_count()
+                else:
+                    # Fallback: count Video nodes directly
+                    result = _gs.run_query("MATCH (v:Video) RETURN count(v) AS cnt")
+                    neo4j_count = result[0]["cnt"] if result else 0
+                neo4j_status = "Online"
+                _gs.close()
+            except Exception:
+                pass
+
+            with col_neo:
+                st.metric("Neo4j (Video Nodes)", neo4j_count)
+                st.caption(neo4j_status)
+
+            # Outbox pending count
+            with col_outbox:
+                total_pending = (pending_chroma or 0) + (pending_neo4j or 0)
+                st.metric("Outbox Pending", total_pending)
+                if total_pending:
+                    st.caption(f"{pending_chroma} chroma · {pending_neo4j} neo4j")
+                else:
+                    st.caption("All synchronized")
+
+            # Divergence banner
+            if chroma_status == "Online" and sqlite_done > 0:
+                divergence = abs(sqlite_done - chroma_unique)
+                if divergence > 0:
+                    st.warning(
+                        f"Divergence detected: SQLite reports {sqlite_done} completed videos "
+                        f"but ChromaDB has {chroma_unique}. "
+                        f"Run Vault Repair or re-harvest to synchronize."
+                    )
+                else:
+                    st.success("SQLite and ChromaDB are in sync.")
+
+        # Temp state storage health
+        st.markdown("#### Temp State Storage (P0-C)")
+        try:
+            temp_stats = db.get_temp_state_stats()
+            col_ts1, col_ts2, col_ts3 = st.columns(3)
+            with col_ts1:
+                st.metric("Pending Rows", temp_stats.get("row_count", 0))
+            with col_ts2:
+                size_kb = temp_stats.get("total_size_kb", 0) or 0
+                st.metric("Approx. Size", f"{size_kb:,.0f} KB")
+            with col_ts3:
+                if st.button("Cleanup Done States", key="cleanup_temp_states_btn"):
+                    deleted = db.cleanup_done_temp_states()
+                    st.success(f"Cleaned {deleted} stale temp-state rows")
+                    st.rerun()
+        except Exception as e:
+            st.caption(f"Temp state stats unavailable: {e}")
+
+        st.markdown("---")
+
+        # =====================================================================
+        # SECTION 7: Storage Optimization Tips
         # =====================================================================
         st.markdown("### Storage Optimization Tips")
         

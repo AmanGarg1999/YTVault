@@ -1,4 +1,4 @@
-# 📋 Pipeline Logs, Monitoring & Data Management Guide
+# Pipeline Logs, Monitoring & Data Management Guide
 
 ## Overview
 
@@ -36,11 +36,11 @@ This document describes the new comprehensive logging, monitoring, and data mana
 ### 2. **Log Levels & Event Types**
 
 ```
- SUCCESS  - Major milestones (video accepted, stage complete)
-ℹ️  INFO     - General operations (discovery, triage start)
-️  WARNING  - Non-critical issues (missing transcript, slow processing)
- ERROR    - Pipeline failures that need attention
-🐛 DEBUG    - Detailed diagnostic info (SQL queries, timing)
+ [SUCCESS] - Major milestones (video accepted, stage complete)
+ [INFO]    - General operations (discovery, triage start)
+ [WARNING] - Non-critical issues (missing transcript, slow processing)
+ [ERROR]   - Pipeline failures that need attention
+ [DEBUG]   - Detailed diagnostic info (SQL queries, timing)
 ```
 
 ### 3. **Pipeline Stages**
@@ -66,7 +66,7 @@ DATA_MANAGEMENT - Deletion and data maintenance ops
 
 ### Pause a Scan
 ```python
-# Via UI: 📊 Pipeline Monitor → Select Scan → ⏸️ Pause
+# Via UI: Pipeline Monitor → Select Scan → Pause
 db.pause_scan(scan_id, reason="Need to stop for investigation")
 ```
 - Pipeline respects pause state at each video boundary
@@ -76,7 +76,7 @@ db.pause_scan(scan_id, reason="Need to stop for investigation")
 
 ### Resume a Paused Scan
 ```python
-#Via UI: 📊 Pipeline Monitor → Resume Button
+# Via UI: Pipeline Monitor → Resume Button
 db.resume_scan(scan_id)
 ```
 - Resumes from last processing batch
@@ -85,7 +85,7 @@ db.resume_scan(scan_id)
 
 ### Stop a Scan
 ```python
-# Via UI: 📊 Pipeline Monitor →  Stop
+# Via UI: Pipeline Monitor → Stop
 db.stop_scan(scan_id)
 ```
 - Graceful shutdown at next safe point
@@ -102,7 +102,7 @@ db.stop_scan(scan_id)
 **When to use:** Before video enters ACCEPTED state
 
 ```python
-# Via UI: 🎮 Pipeline Control → Video Queue → Remove
+# Via UI: Pipeline Control → Video Queue → Remove
 success = db.remove_video_from_queue(video_id)
 ```
 
@@ -123,12 +123,12 @@ success = db.remove_video_from_queue(video_id)
 #### What Gets Deleted
 
 ```
-️  Transcript Chunks    - All segmented text data
-💭 Claims             - Extracted claims/assertions  
-💬 Quotes             - Notable quotations
-👤 Guest Appearances  - Links to identified people
-📄 Temp State         - Processing scratch data
-📊 Video Summary      - Cached summaries
+ Transcript Chunks    - All segmented text data
+ Claims             - Extracted claims/assertions  
+ Quotes             - Notable quotations
+ Guest Appearances  - Links to identified people
+ Temp State         - Processing scratch data
+ Video Summary      - Cached summaries
  Video Status       - Reset to DISCOVERED
 ```
 
@@ -145,7 +145,7 @@ success = db.remove_video_from_queue(video_id)
 ### Delete Single Video Data
 
 ```python
-# Via UI: 🗑️ Data Management → Delete Single Video
+# Via UI: Data Management → Delete Single Video
 result = db.delete_video_data(
     video_id="dQw4w9WgXcQ",
     reason="Data corruption in segment 5"
@@ -171,7 +171,7 @@ result = db.delete_video_data(
 ### Delete All Videos from Channel
 
 ```python
-# Via UI: 🗑️ Data Management → Delete Channel
+# Via UI: Data Management → Delete Channel
 result = db.delete_channel_data(
     channel_id="UCxxxxx",
     reason="Channel cleanup"
@@ -207,7 +207,7 @@ history = db.get_deletion_history(limit=50)
     "data_deleted": {...stats...}  # JSON with counts
 }
 
-# Access via UI: 🗑️ Data Management → Deletion History
+# Access via UI: Data Management → Deletion History
 ```
 
 ---
@@ -485,10 +485,10 @@ summary = db.get_log_summary(scan_id="abc12345")
 → 🗑️ Data Management → Delete Channel
 
 **I want to see what went wrong:**
-→ 📋 Logs & Activity → Error Analysis
+→ Logs & Activity → Error Analysis
 
 **I want to export logs for analysis:**
-→ 📋 Logs & Activity → Export (CSV/JSON)
+→ Logs & Activity → Export (CSV/JSON)
 
 ---
 

@@ -472,7 +472,7 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 # Access at: http://localhost:8000/docs (Swagger UI)
-#           http://localhost:8000/redoc (ReDoc)
+#         http://localhost:8000/redoc (ReDoc)
 ```
 
 ### Quick Win #12: Add User Guide Video Tutorials

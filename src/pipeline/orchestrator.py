@@ -221,8 +221,14 @@ class PipelineOrchestrator:
         self._report_status(f"Parsed URL: {parsed.url_type} — {url}")
 
         # Create scan checkpoint
-        scan_id = self.checkpoint.create_scan(url, parsed.url_type)
-        self.db.set_control_state(scan_id, "RUNNING")
+        active_scan = self.db.get_active_scan_for_url(url)
+        if active_scan:
+            logger.info(f"Using existing active scan {active_scan.scan_id} for {url}")
+            scan_id = active_scan.scan_id
+        else:
+            scan_id = self.checkpoint.create_scan(url, parsed.url_type)
+            self.db.set_control_state(scan_id, "RUNNING")
+
 
         try:
             import queue
@@ -438,7 +444,7 @@ class PipelineOrchestrator:
         """
         self._report_status("Starting Comprehensive Vault Health Check...")
         
-        counts = {"transcripts": 0, "summaries": 0, "heatmaps": 0}
+        counts = {"transcripts": 0, "summaries": 0, "heatmaps": 0, "discovery": 0}
         
         # 1. Identify missing transcripts (Critical)
         missing_transcripts = self.db.get_videos_missing_transcripts()
@@ -451,11 +457,16 @@ class PipelineOrchestrator:
         # 3. Identify missing heatmaps (V14 Migration)
         missing_heatmaps = self.db.get_videos_missing_heatmaps()
         counts["heatmaps"] = len(missing_heatmaps)
+
+        # 4. Identify stuck in discovery (New)
+        stuck_discovery = self.db.get_videos_by_status("DISCOVERED")
+        counts["discovery"] = len(stuck_discovery)
         
         total_to_repair = len(set(
             [v.video_id for v in missing_transcripts] +
             [v.video_id for v in missing_summaries] +
-            [v.video_id for v in missing_heatmaps]
+            [v.video_id for v in missing_heatmaps] +
+            [v.video_id for v in stuck_discovery]
         ))
         
         if total_to_repair == 0:
@@ -466,6 +477,16 @@ class PipelineOrchestrator:
         
         processed_ids = set()
         
+        # 0. Stuck in Discovery -> Reset to METADATA_HARVESTED (forces triage)
+        for video in stuck_discovery:
+            if video.video_id in processed_ids: continue
+            self._report_status(f"Repairing Stuck Discovery: {video.title[:40]}...")
+            self.db.update_checkpoint_stage(video.video_id, "METADATA_HARVESTED")
+            # We don't change triage_status manually, _resume_video -> _stage_triage will do it
+            video = self.db.get_video(video.video_id)
+            self._resume_video(video, "health_repair")
+            processed_ids.add(video.video_id)
+
         # Process in priority order (Earliest stage gaps first)
         # 1. Missing Heatmaps -> Reset to METADATA_HARVESTED
         for video in missing_heatmaps:

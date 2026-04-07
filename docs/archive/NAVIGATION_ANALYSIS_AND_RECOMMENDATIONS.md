@@ -462,10 +462,10 @@ nav_options = [
 # Each page now uses tabs for sub-sections
 # Example:
 # pipeline_center.py:
-#  render_active_scans()
-#  render_channel_health()
-#  render_live_logs()     ← formerly dedicated page
-#  render_controls()      ← formerly dedicated page
+# render_active_scans()
+# render_channel_health()
+# render_live_logs()     ← formerly dedicated page
+# render_controls()      ← formerly dedicated page
 ```
 
 ### Multilingual Processing Addition

@@ -6,6 +6,8 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 
 from src.storage.sqlite_store import SQLiteStore, ResearchReport
+from src.storage.vector_store import VectorStore
+from src.intelligence.rag_engine import RAGEngine
 from src.config import get_settings
 import ollama
 
@@ -17,6 +19,8 @@ class ResearchAgent:
     def __init__(self, db: SQLiteStore):
         self.db = db
         self.settings = get_settings()
+        self.vs = VectorStore()
+        self.rag = RAGEngine(self.db, self.vs)
         self.output_dir = Path("/app/data/reports")
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -26,27 +30,41 @@ class ResearchAgent:
         """
         logger.info(f"Research Agent starting query: {query}")
         
-        # 1. Retrieval Phase: Find relevant content
-        # We search summaries for the query
-        search_results = self.db.conn.execute(
-            """SELECT v.video_id, v.title, vs.summary_text, vs.topics_json, vs.takeaways_json
-               FROM video_summaries vs
-               JOIN videos v ON vs.video_id = v.video_id
-               WHERE vs.summary_text LIKE ? OR vs.topics_json LIKE ?
-               LIMIT 10""",
-            (f"%{query}%", f"%{query}%")
-        ).fetchall()
+        # 1. Retrieval Phase: Semantic Search & RAG
+        # A. High-level thematic search (Summaries)
+        summary_results = self.vs.search_summaries(query, top_k=5)
         
-        if not search_results:
+        # B. Granular evidence search (RAG)
+        rag_response = self.rag.query(query)
+        
+        if not summary_results and not rag_response.citations:
             logger.warning(f"No relevant content found for query: {query}")
             return None
 
         # 2. Context Assembly
         context_blocks = []
         sources = []
-        for row in search_results:
-            context_blocks.append(f"SOURCE: {row['title']}\nSUMMARY: {row['summary_text']}\nTAKEAWAYS: {row['takeaways_json']}")
-            sources.append({"video_id": row["video_id"], "title": row["title"]})
+        
+        # Add summary context
+        if summary_results:
+            context_blocks.append("### THEMATIC CONTEXT (Summaries)")
+            for res in summary_results:
+                video = self.db.get_video(res["video_id"])
+                title = video.title if video else "Unknown"
+                context_blocks.append(f"SOURCE: {title}\nSUMMARY: {res['text']}")
+                sources.append({"video_id": res["video_id"], "title": title})
+
+        # Add RAG evidence context
+        if rag_response.citations:
+            context_blocks.append("### GRANULAR EVIDENCE (Transcript Chunks)")
+            for cit in rag_response.citations:
+                context_blocks.append(
+                    f"SOURCE: {cit.video_title} (Channel: {cit.channel_name}, "
+                    f"Timestamp: {cit.timestamp_str})\n"
+                    f"EXCERPT: {cit.text_excerpt}"
+                )
+                if not any(s["video_id"] == cit.video_id for s in sources):
+                    sources.append({"video_id": cit.video_id, "title": cit.video_title})
 
         context_str = "\n\n---\n\n".join(context_blocks)
 

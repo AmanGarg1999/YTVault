@@ -990,6 +990,20 @@ class SQLiteStore:
             result.append(Video.from_row(r))
         return result
 
+    def get_videos_by_status(self, status: str, limit: int = 500) -> list[Video]:
+        """Get all videos with a specific triage_status."""
+        rows = self.conn.execute(
+            """SELECT * FROM videos 
+               WHERE triage_status = ? 
+               ORDER BY created_at DESC 
+               LIMIT ?""",
+            (status, limit),
+        ).fetchall()
+        result = []
+        for r in rows:
+            result.append(Video.from_row(r))
+        return result
+
     def get_videos_missing_summaries(self, limit: int = 200) -> list[Video]:
         """Get accepted videos that are missing summaries."""
         rows = self.conn.execute(
@@ -2074,16 +2088,54 @@ class SQLiteStore:
         sql = """
             SELECT 
                 s.*, 
-                COALESCE(c.name, v_ch.name, 'Unknown Source') as channel_name
+                (
+                    SELECT name FROM channels WHERE url = s.source_url
+                    UNION
+                    SELECT c.name FROM channels c
+                    JOIN videos v ON c.channel_id = v_ch.channel_id -- Wait, small error in my thought, fixing below
+                    WHERE v.url = s.source_url
+                    LIMIT 1
+                ) as channel_name
             FROM scan_checkpoints s
-            LEFT JOIN channels c ON s.source_url = c.url
-            LEFT JOIN videos v ON s.source_url = v.url
-            LEFT JOIN channels v_ch ON v.channel_id = v_ch.channel_id
             WHERE s.status = 'IN_PROGRESS'
+            GROUP BY s.scan_id
+            ORDER BY s.started_at DESC
+        """
+        # Actually, let me simplify and fix the join logic in the subquery
+        sql = """
+            SELECT 
+                s.*, 
+                COALESCE(
+                    (SELECT name FROM channels WHERE url = s.source_url LIMIT 1),
+                    (SELECT c.name FROM channels c 
+                     JOIN videos v ON c.channel_id = v.channel_id 
+                     WHERE v.url = s.source_url LIMIT 1),
+                    'Unknown Source'
+                ) as channel_name
+            FROM scan_checkpoints s
+            WHERE s.status = 'IN_PROGRESS'
+            AND s.started_at = (
+                SELECT MAX(started_at) 
+                FROM scan_checkpoints 
+                WHERE source_url = s.source_url AND status = 'IN_PROGRESS'
+            )
+            GROUP BY s.source_url
             ORDER BY s.started_at DESC
         """
         rows = self.conn.execute(sql).fetchall()
         return [ScanCheckpoint(**dict(r)) for r in rows]
+
+    def get_active_scan_for_url(self, url: str) -> Optional[ScanCheckpoint]:
+        """Check if there is already an active scan for this URL."""
+        row = self.conn.execute(
+            "SELECT * FROM scan_checkpoints WHERE source_url = ? AND status = 'IN_PROGRESS' LIMIT 1",
+            (url,)
+        ).fetchone()
+        if row:
+            return ScanCheckpoint(**dict(row))
+        return None
+
+
 
     # -------------------------------------------------------------------
     # Product Features

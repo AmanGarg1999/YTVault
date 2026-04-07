@@ -30,8 +30,11 @@ class ObsidianExporter:
         os.makedirs(self.output_dir, mode=0o777, exist_ok=True)
         try:
             os.chmod(self.output_dir, 0o777)
+            # Also try to ensure parent 'data' directory is world-writable if possible
+            if self.output_dir.parent.exists():
+                os.chmod(self.output_dir.parent, 0o777)
         except Exception as e:
-            logger.warning(f"Could not set absolute root permissions: {e}")
+            logger.warning(f"Could not set vault/parent permissions: {e}")
         
         # Subdirectories for organized vault
         for sub in ["Videos", "Channels", "Claims", "Intelligence"]:
@@ -72,29 +75,35 @@ class ObsidianExporter:
                 "---",
                 f"type: channel",
                 f"channel_id: {channel.channel_id}",
-                f"handle: {channel.handle}",
+                f"handle: {channel.handle or 'N/A'}",
                 f"category: {channel.category}",
                 f"is_verified: {channel.is_verified}",
                 f"url: {channel.url}",
                 "---",
                 f"# {channel.name}\n",
+                f"![Thumbnail]({channel.thumbnail_url})\n" if channel.thumbnail_url else "",
                 f"{channel.description}\n",
-                f"## Statistics",
+                f"## Channel Statistics",
                 f"- **Subscribers:** {channel.follower_count:,}",
-                f"- **Total Videos:** {channel.total_videos}",
-                f"- **Processed:** {channel.processed_videos}\n",
-                f"## Videos in Vault",
+                f"- **Total Videos Discovered:** {channel.total_videos}",
+                f"- **Knowledge Processed:** {channel.processed_videos}\n",
+                f"## Knowledge Assets",
+                f"### Videos in Vault",
                 f"```dataview",
                 f"list from \"Videos\" where channel_id = \"{channel.channel_id}\"",
+                f"```\n",
+                f"### Extracted Claims",
+                f"```dataview",
+                f"list from \"Claims\" where channel_id = \"{channel.channel_id}\"",
                 f"```"
             ]
             self._write_file(path, "\n".join(content))
 
     def export_videos(self):
         """Export all accepted videos as individual notes."""
-        # We only export videos that are at least summarized
+        # Export all videos that are at least discovered, but flag production status
         rows = self.db.conn.execute(
-            "SELECT * FROM videos WHERE triage_status = 'ACCEPTED'"
+            "SELECT * FROM videos"
         ).fetchall()
         
         for row in rows:
@@ -107,39 +116,65 @@ class ObsidianExporter:
             
             summary = self.db.get_video_summary(video.video_id)
             
+            # Format duration
+            mins, secs = divmod(video.duration_seconds, 60)
+            duration_str = f"{mins}m {secs}s"
+            
             content = [
                 "---",
                 f"type: video",
+                f"status: {video.triage_status}",
                 f"video_id: {video.video_id}",
                 f"channel_id: {video.channel_id}",
                 f"upload_date: {video.upload_date}",
-                f"duration: {video.duration_seconds}",
+                f"duration: {duration_str}",
+                f"views: {video.view_count:,}",
                 f"url: {video.url}",
                 "---",
                 f"# {video.title}\n",
+                f"> [!INFO] Pipeline Status: **{video.triage_status}** / **{video.checkpoint_stage}**",
+                f"> This note is in **Pre-Production** and will be enriched as the pipeline processes it.\n" if video.triage_status == "DISCOVERED" else "",
                 f"**Channel:** {channel_link}",
                 f"**Published:** {video.upload_date}",
+                f"**Duration:** {duration_str} | **Views:** {video.view_count:,}",
                 f"**Source:** [YouTube]({video.url})\n"
             ]
             
             if summary:
-                content.append(f"## Summary\n{summary.summary_text}\n")
+                content.append(f"## 📝 Research Summary\n{summary.summary_text}\n")
                 
                 takeaways = json.loads(summary.takeaways_json or "[]")
                 if takeaways:
-                    content.append("## Key Takeaways")
+                    content.append("### 💡 Key Takeaways")
                     for t in takeaways:
                         content.append(f"- {t}")
                     content.append("")
                 
-                topics = json.loads(summary.topics_json or "[]")
-                if topics:
-                    content.append("## Topics")
-                    content.append(", ".join([f"#{self._sanitize(t['name'])}" for t in topics]))
+                timeline = json.loads(summary.timeline_json or "[]")
+                if timeline:
+                    content.append("### ⏳ Timeline")
+                    for entry in timeline:
+                        content.append(f"- **{entry.get('timestamp', '')}**: {entry.get('event', '')}")
                     content.append("")
 
-            # Links to claims
-            content.append(f"## Claims and Assertions")
+                topics = json.loads(summary.topics_json or "[]")
+                if topics:
+                    content.append("### 🏷️ Topics")
+                    content.append(" ".join([f"#{self._sanitize(t['name'])}" for t in topics]))
+                    content.append("")
+
+            # Direct listing of claims as a callout for immediate value
+            claims = self.db.get_claims_for_video(video.video_id)
+            if claims:
+                content.append("## 📌 Highlighted Claims")
+                for i, c in enumerate(claims[:5]):
+                    content.append(f"> [!QUOTE] {c.speaker or 'Speaker'}")
+                    content.append(f"> {c.claim_text}")
+                    content.append(f"> [Link to Claim](Claim-{c.claim_id}.md)")
+                    content.append("")
+
+            # Links to all claims via dataview
+            content.append(f"## 🔍 Deep Dive: All Claims")
             content.append(f"```dataview")
             content.append(f"table claim_text as \"Claim\", speaker as \"Speaker\" from \"Claims\" where video_id = \"{video.video_id}\"")
             content.append(f"```\n")

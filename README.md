@@ -96,6 +96,7 @@ Detailed technical specifications and design patterns are available in the [Syst
 | [User Guide](docs/guides/user_guide.md) | Comprehensive setup, workflow, and maintenance instructions. |
 | [API Reference](docs/core/api_reference.md) | Detailed documentation of modules and internal functions. |
 | [Configuration](docs/core/configuration.md) | Guide for tuning pipeline thresholds and LLM settings. |
+| [Logging & Monitoring](docs/core/logging_and_monitoring.md) | Operational guide for logs, data management, and troubleshooting. |
 
 ---
 

@@ -220,11 +220,56 @@ class VectorStore:
             metadata={"hnsw:space": "cosine"},
             embedding_function=self.embedding_fn,
         )
+
+        # Video Summaries Collection (New for Research Agent Upgrade)
+        self.summaries_collection = self.client.get_or_create_collection(
+            name="video_summaries",
+            metadata={"hnsw:space": "cosine"},
+            embedding_function=self.embedding_fn,
+        )
         
         logger.info(
             f"VectorStore initialized: {self.collection.count()} chunks, "
-            f"{self.claims_collection.count()} claims"
+            f"{self.claims_collection.count()} claims, "
+            f"{self.summaries_collection.count()} summaries"
         )
+
+    def upsert_summary(self, video_id: str, summary_text: str, channel_id: str = "",
+                       topics: list[str] = None) -> None:
+        """Embed and upsert a video summary into ChromaDB."""
+        if not summary_text:
+            return
+
+        self.summaries_collection.upsert(
+            ids=[video_id],
+            documents=[summary_text],
+            metadatas=[{
+                "video_id": video_id,
+                "channel_id": channel_id,
+                "topics_json": ",".join(topics) if topics else "",
+                "type": "summary"
+            }],
+        )
+        logger.info(f"Upserted summary for video {video_id} to vector store")
+
+    def search_summaries(self, query: str, top_k: int = 5) -> list[dict]:
+        """Search across video summaries."""
+        query_vecs = self.embedding_fn([query])
+        results = self.summaries_collection.query(
+            query_embeddings=query_vecs,
+            n_results=top_k,
+        )
+        
+        output = []
+        if results["ids"] and results["ids"][0]:
+            for i, video_id in enumerate(results["ids"][0]):
+                output.append({
+                    "video_id": video_id,
+                    "text": results["documents"][0][i],
+                    "metadata": results["metadatas"][0][i],
+                    "distance": results["distances"][0][i] if results.get("distances") else 0.0,
+                })
+        return output
 
     def upsert_chunks(self, chunks: list[TranscriptChunk], channel_id: str = "",
                       upload_date: str = "", language_iso: str = "en",

@@ -3,6 +3,7 @@
 import streamlit as st
 import pandas as pd
 import json
+import time
 from streamlit_agraph import agraph, Node, Edge, Config
 from src.ui.components import (
     page_header, 
@@ -10,7 +11,9 @@ from src.ui.components import (
     info_card, 
     metric_grid, 
     glass_card,
-    spacer
+    spacer,
+    action_confirmation_dialog,
+    failure_confirmation_dialog,
 )
 from src.storage.sqlite_store import SQLiteStore
 from src.intelligence.summarizer import SummarizerEngine
@@ -41,12 +44,26 @@ def render_intelligence_lab(db: SQLiteStore):
                 if not to_process:
                     st.success("Internal state synchronized.")
                 else:
-                    summarizer = SummarizerEngine(db)
-                    prog_bar = st.progress(0)
-                    for i, vid_id in enumerate(to_process):
-                        summarizer.generate_summary(vid_id)
-                        prog_bar.progress((i + 1) / len(to_process))
-                    st.rerun()
+                    try:
+                        st.toast("Backfill prioritization engaged...")
+                        summarizer = SummarizerEngine(db)
+                        prog_bar = st.progress(0, text="Synthesizing Knowledge...")
+                        for i, vid_id in enumerate(to_process):
+                            summarizer.generate_summary(vid_id)
+                            prog_bar.progress((i + 1) / len(to_process))
+                        
+                        action_confirmation_dialog(
+                            "Summarization Complete",
+                            f"Successfully synthesized intelligence for {len(to_process)} target videos.",
+                            icon="◈"
+                        )
+                    except Exception as e:
+                        failure_confirmation_dialog(
+                            "Summarization Batch Interrupted",
+                            str(e),
+                            retry_callback=None, # Too complex for a simple lambda here
+                            queue_callback=lambda: [db.add_to_user_queue("VIDEO_ID", vid_id, str(e)) for vid_id in to_process]
+                        )
 
     spacer("2rem")
 
@@ -169,6 +186,8 @@ def render_thematic_bridges(db: SQLiteStore):
             with st.spinner("Synthesizing bridges..."):
                 engine = BridgeDiscoveryEngine(db)
                 engine.discover_bridges(sample_size=3)
+                st.toast("Neural bridges synthesized!")
+                time.sleep(0.5)
                 st.rerun()
 
     bridges = db.get_thematic_bridges()

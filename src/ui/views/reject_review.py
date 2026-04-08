@@ -10,6 +10,7 @@ from src.ui.components import (
     info_card,
     success_card,
     glass_card,
+    action_confirmation_dialog,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,11 +55,19 @@ def render_pending_section(db):
             with cols[0]:
                 if st.button("Accept", key=f"acc_rev_{i}_{video.video_id}", type="primary", use_container_width=True):
                     db.update_triage_status(video.video_id, "ACCEPTED", "manual_accept", 1.0)
-                    st.rerun()
+                    action_confirmation_dialog(
+                        "Intelligence Accepted",
+                        f"Video '{video.title[:40]}' has been admitted to the knowledge vault.",
+                        icon="✅"
+                    )
             with cols[1]:
                 if st.button("Reject", key=f"rej_rev_{i}_{video.video_id}", use_container_width=True):
                     db.update_triage_status(video.video_id, "REJECTED", "manual_reject", 1.0)
-                    st.rerun()
+                    action_confirmation_dialog(
+                        "Intelligence Rejected",
+                        f"Target '{video.title[:40]}' suppressed and moved to audit.",
+                        icon="✖"
+                    )
 
 
 def render_rejected_section(db):
@@ -78,11 +87,19 @@ def render_rejected_section(db):
                 with cols[0]:
                     if st.button("Override", key=f"ov_rev_{i}_{video.video_id}", type="primary", use_container_width=True):
                         db.manual_override_rejected_video(video.video_id)
-                        st.rerun()
+                        action_confirmation_dialog(
+                            "Override Complete",
+                            "The automated rejection filter has been bypassed manually.",
+                            icon="🔓"
+                        )
                 with cols[1]:
                     if st.button("Purge Intel", key=f"del_rev_{i}_{video.video_id}", use_container_width=True):
                         db.delete_video_data(video.video_id)
-                        st.rerun()
+                        action_confirmation_dialog(
+                            "Intelligence Purged",
+                            "All related metadata and artifacts have been permanently removed.",
+                            icon="🗑"
+                        )
 
     except Exception as e:
         st.error(f"Audit engine error: {e}")

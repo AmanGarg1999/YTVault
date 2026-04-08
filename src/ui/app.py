@@ -30,6 +30,8 @@ from src.ui.views import (
     topic_explorer, blueprint_center, research_agent_view
 )
 
+from src.ui.components.ui_helpers import action_confirmation_dialog, failure_confirmation_dialog
+
 # ---------------------------------------------------------------------------
 # Page Configuration
 # ---------------------------------------------------------------------------
@@ -186,32 +188,51 @@ st.markdown("""
         background: linear-gradient(135deg, var(--primary-glow) 0%, var(--primary-active) 100%);
         border: 1px solid rgba(255, 255, 255, 0.1);
         color: white;
-        font-weight: 600;
+        font-weight: 700;
         padding: 0.75rem 1.75rem;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         text-transform: none;
-        letter-spacing: normal;
+        letter-spacing: 0.02em;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
     }
     
     .stButton > button:hover {
-        box-shadow: 0 0 30px rgba(99, 102, 241, 0.4);
-        transform: translateY(-2px);
-        border-color: rgba(255, 255, 255, 0.2);
+        box-shadow: 0 0 35px rgba(99, 102, 241, 0.5);
+        transform: translateY(-3px);
+        border-color: rgba(255, 255, 255, 0.3);
+        filter: brightness(1.15);
     }
     
     .stButton > button:active {
-        transform: translateY(0);
+        transform: translateY(1px) scale(0.96);
+        box-shadow: inset 0 4px 10px rgba(0, 0, 0, 0.4);
+        filter: brightness(0.9);
+        transition: all 0.1s ease;
+    }
+
+    .stButton > button:focus:not(:active) {
+        border-color: var(--accent-glow);
+        box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.3);
     }
 
     /* Secondary Buttons */
     div[data-testid="stButton"] button[kind="secondary"] {
         background: var(--glass-bg);
         border: 1px solid var(--glass-border);
+        backdrop-filter: blur(10px);
     }
     
     div[data-testid="stButton"] button[kind="secondary"]:hover {
         background: var(--glass-active);
         border-color: var(--primary-glow);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+    }
+
+    div[data-testid="stButton"] button[kind="secondary"]:active {
+        background: rgba(99, 102, 241, 0.2);
+        transform: translateY(1px) scale(0.97);
+        box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
     }
 
     /* Command Bar Focal Point */
@@ -678,9 +699,24 @@ with st.container():
     with col_btn:
         if st.button("Harvest", type="primary", use_container_width=True, key="global_harvest_btn"):
             if harvest_url:
-                run_pipeline_background(harvest_url, db)
-                st.toast(f"Harvest started for {harvest_url[:30]}...")
-                st.rerun()
+                try:
+                    # Basic validation or initial check
+                    if "youtube.com" not in harvest_url and "youtu.be" not in harvest_url:
+                        raise ValueError("Invalid YouTube URL provided.")
+                        
+                    run_pipeline_background(harvest_url, db)
+                    action_confirmation_dialog(
+                        "Harvest Initialized",
+                        f"Intelligence gathering has started for {harvest_url[:40]}...",
+                        icon="✦"
+                    )
+                except Exception as e:
+                    failure_confirmation_dialog(
+                        "Harvest Failed to Initialize",
+                        str(e),
+                        retry_callback=lambda: run_pipeline_background(harvest_url, db),
+                        queue_callback=lambda: db.add_to_user_queue("URL", harvest_url, str(e))
+                    )
 
 st.markdown("<br>", unsafe_allow_html=True)
 

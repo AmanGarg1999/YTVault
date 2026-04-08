@@ -332,6 +332,50 @@ def loading_spinner(text: str = "Processing...") -> None:
     """, unsafe_allow_html=True)
 
 
+@st.dialog("Intelligence Core Action")
+def action_confirmation_dialog(title: str, message: str, icon: str = "✦"):
+    """
+    Render a high-end action confirmation dialog.
+    """
+    st.markdown(f"""
+    <div style="text-align: center; padding: 1rem 0;">
+        <div style="font-size: 3rem; margin-bottom: 1rem; color: var(--primary-glow);">{icon}</div>
+        <h3 style="color: white; margin-bottom: 0.5rem; font-family: 'Outfit', sans-serif;">{title}</h3>
+        <p style="color: var(--text-muted); font-size: 1rem; margin-bottom: 2rem;">{message}</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    if st.button("Acknowledge & Continue", type="primary", use_container_width=True, key="dialog_close_btn"):
+        st.rerun()
+
+
+@st.dialog("System Alert: Operation Interrupted")
+def failure_confirmation_dialog(title: str, error_message: str, retry_callback: Any = None, queue_callback: Any = None):
+    """
+    Render a high-end failure dialog with Retry and Queue options.
+    """
+    st.markdown(f"""
+    <div style="text-align: center; padding: 1rem 0;">
+        <div style="font-size: 3rem; margin-bottom: 1rem; color: var(--error-glow);">⚠️</div>
+        <h3 style="color: white; margin-bottom: 0.5rem; font-family: 'Outfit', sans-serif;">{title}</h3>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 2rem; background: rgba(239, 68, 68, 0.08); padding: 1rem; border-radius: 8px; border: 1px solid rgba(239, 68, 68, 0.2); font-family: 'JetBrains Mono', monospace; text-align: left; max-height: 200px; overflow-y: auto;">{error_message}</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col1:
+        if st.button("Retry Now", type="primary", use_container_width=True, key="fail_retry_btn"):
+            if retry_callback: retry_callback()
+            st.rerun()
+    with col2:
+        if st.button("Add to Queue", use_container_width=True, key="fail_queue_btn"):
+            if queue_callback: queue_callback()
+            st.rerun()
+    with col3:
+        if st.button("Dismiss", use_container_width=True, key="fail_dismiss_btn"):
+            st.rerun()
+
+
 # ===========================================================================
 # DATA DISPLAY COMPONENTS
 # ===========================================================================
@@ -386,18 +430,25 @@ def tts_button(text: str, label: str = "Audio Intel", key: Optional[str] = None)
             font-size: 0.8rem;
             font-weight: 800;
             cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             display: inline-flex;
             align-items: center;
             gap: 10px;
             text-transform: uppercase;
             letter-spacing: 0.1em;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }}
         .tts-btn:hover {{
-            background: rgba(99, 102, 241, 0.2);
+            background: rgba(99, 102, 241, 0.25);
             border-color: var(--primary-glow);
-            box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
-            transform: translateY(-1px);
+            box-shadow: 0 0 25px rgba(99, 102, 241, 0.4);
+            transform: translateY(-2px);
+            filter: brightness(1.1);
+        }}
+        .tts-btn:active {{
+            transform: translateY(1px) scale(0.97);
+            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
+            filter: brightness(0.9);
         }}
     </style>
     <button id="btn-{button_uuid}" class="tts-btn" onclick="toggleSpeech()">

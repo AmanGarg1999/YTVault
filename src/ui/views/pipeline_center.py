@@ -12,6 +12,7 @@ from src.ui.components import (
     glass_card,
     status_badge,
     spacer,
+    action_confirmation_dialog,
 )
 
 logger = logging.getLogger(__name__)
@@ -36,14 +37,20 @@ def render(db, run_pipeline_background, run_repair=None, get_diagnostics=None):
         with col_run:
             if st.button("Resume All Scans", type="primary", use_container_width=True):
                 count = db.set_global_control_state("RUNNING")
-                st.toast(f"Signaled {count} scans to RESUME")
-                st.rerun()
+                action_confirmation_dialog(
+                    "Global Command Sent",
+                    f"Resumption signal broadcast to {count} background orchestrators.",
+                    icon="▶"
+                )
         
         with col_stop:
             if st.button("Halt Operations", type="secondary", use_container_width=True):
                 count = db.set_global_control_state("STOPPED", "Global stop requested")
-                st.toast(f"Signaled {count} scans to STOP")
-                st.rerun()
+                action_confirmation_dialog(
+                    "Operations Halted",
+                    f"Emergency stop signal broadcast to {count} active processes.",
+                    icon="⏹"
+                )
 
     spacer("2rem")
 
@@ -119,7 +126,11 @@ def render_monitor_tab(db, run_pipeline_background):
                         if scan_id not in global_orch and getattr(scan, "source_url", "") not in global_orch:
                             if st.button("Re-attach", key=f"reattach_{scan_id}", use_container_width=True):
                                 run_pipeline_background(scan.source_url, db, scan_id=scan_id)
-                                st.rerun()
+                                action_confirmation_dialog(
+                                    "Orchestrator Re-attached",
+                                    "System has successfully re-acquired the background thread.",
+                                    icon="🔗"
+                                )
 
     # Channel Health Leaderboard
     st.divider()
@@ -150,7 +161,11 @@ def render_monitor_tab(db, run_pipeline_background):
                     
                     if st.button("Deep Sync Channel", key=f"sync_{ch.channel_id}", use_container_width=True):
                         run_pipeline_background(ch.url, db)
-                        st.rerun()
+                        action_confirmation_dialog(
+                            "Deep Sync Started",
+                            f"Full metadata and content synchronization initiated for {ch.name}.",
+                            icon="🔄"
+                        )
     else:
         st.caption("No channels discovered yet.")
 
@@ -208,8 +223,11 @@ def render_maintenance_tab(db, run_repair, get_diagnostics):
     if st.button("EXECUTE SYSTEM REPAIR", type="primary", use_container_width=True):
         if run_repair:
             run_repair()
-            st.toast("Unified Vault Repair started!")
-            st.rerun()
+            action_confirmation_dialog(
+                "Vault Repair Initiated",
+                "Unified health check and restoration sequence is now running in the background.",
+                icon="🔧"
+            )
 
 
 def render_logs_tab(db):

@@ -22,6 +22,7 @@ def render_research_agent(db: SQLiteStore):
                 with st.spinner(f"Agent investigating '{query}'..."):
                     report = agent.generate_report(query)
                     if report:
+                        st.toast("Investigation Complete!")
                         success_card("Investigation Complete", f"Created: {report.title}")
                         st.balloons()
                         st.rerun()

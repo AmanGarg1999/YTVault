@@ -17,6 +17,8 @@ from src.ui.components import (
     glass_card,
     status_badge,
     metric_grid,
+    action_confirmation_dialog,
+    failure_confirmation_dialog,
 )
 
 def render(db, run_pipeline_background, run_bulk_pipeline_background):
@@ -71,10 +73,22 @@ def render_harvest_tab(db, run_pipeline_background):
         with col1:
             if st.button("Start Harvest", type="primary", use_container_width=True):
                 if url:
-                    run_pipeline_background(url, db)
-                    st.toast("Harvest initiated!")
-                    time.sleep(1)
-                    st.rerun()
+                    try:
+                        if "youtube.com" not in url and "youtu.be" not in url:
+                            raise ValueError("Invalid YouTube URL provided.")
+                        run_pipeline_background(url, db)
+                        action_confirmation_dialog(
+                            "Harvest Initialized",
+                            f"Target URL: {url[:60]}\n\nScanning and processing background tasks has started.",
+                            icon="✦"
+                        )
+                    except Exception as e:
+                        failure_confirmation_dialog(
+                            "Harvest Failed to Initialize",
+                            str(e),
+                            retry_callback=lambda: run_pipeline_background(url, db),
+                            queue_callback=lambda: db.add_to_user_queue("URL", url, str(e))
+                        )
 
     spacer("2rem")
     section_header("Recent Intake History", icon="◯")
@@ -117,8 +131,13 @@ def render_pending_tab(db):
         col1, col2 = st.columns([1, 1])
         with col1:
             if st.button("Mass Accept All", type="primary", use_container_width=True):
-                for v in pending: db.update_triage_status(v.video_id, "ACCEPTED", "bulk")
-                st.rerun()
+                with st.spinner("Processing mass acceptance..."):
+                    for v in pending: db.update_triage_status(v.video_id, "ACCEPTED", "bulk")
+                action_confirmation_dialog(
+                    "Triage Optimized",
+                    f"Successfully accepted {len(pending)} intelligence targets into the vault.",
+                    icon="◈"
+                )
         
         spacer("1rem")
         for i, video in enumerate(pending[:15]):
@@ -165,10 +184,16 @@ def render_reprocess_tab(db, run_pipeline_background):
         with glass_card():
             st.info(f"**{len(manually_overridden)}** videos staged for override.")
             if st.button("Execute Bulk Reprocess", type="primary", use_container_width=True):
-                from src.pipeline.orchestrator import PipelineOrchestrator
-                orchestrator = PipelineOrchestrator()
-                orchestrator.process_manually_overridden_videos()
-                orchestrator.close()
+                with st.spinner("Initializing bulk reprocess..."):
+                    from src.pipeline.orchestrator import PipelineOrchestrator
+                    orchestrator = PipelineOrchestrator()
+                    orchestrator.process_manually_overridden_videos()
+                    orchestrator.close()
+                action_confirmation_dialog(
+                    "Reprocessing Signal Sent",
+                    "Bulk reprocessing of manually marked videos has been delegated to the orchestrator.",
+                    icon="⚿"
+                )
                 st.rerun()
 
 
@@ -181,6 +206,17 @@ def render_bulk_tab(db, run_bulk_pipeline_background):
         
         if st.button("Ignite Bulk Harvest", type="primary", disabled=not selected):
             urls = [c.url for c in selected]
-            run_bulk_pipeline_background(urls, db, force_metadata_refresh=True)
-            st.toast("Bulk harvest ignited!")
-            st.rerun()
+            try:
+                run_bulk_pipeline_background(urls, db, force_metadata_refresh=True)
+                action_confirmation_dialog(
+                    "Bulk Harvest Ignited",
+                    f"Processing {len(urls)} channels sequentially in the background.",
+                    icon="◈"
+                )
+            except Exception as e:
+                failure_confirmation_dialog(
+                    "Bulk Harvest Failed",
+                    str(e),
+                    retry_callback=lambda: run_bulk_pipeline_background(urls, db, force_metadata_refresh=True),
+                    queue_callback=lambda: [db.add_to_user_queue("URL", u, str(e)) for u in urls]
+                )

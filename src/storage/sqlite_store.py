@@ -630,6 +630,17 @@ SCHEMA_MIGRATIONS = [
     (23, """
         ALTER TABLE videos ADD COLUMN is_tutorial BOOLEAN DEFAULT 0;
     """),
+    # Version 24: User-driven retry queue for failures
+    (24, """
+        CREATE TABLE IF NOT EXISTS user_queue (
+            queue_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_type TEXT NOT NULL, -- 'URL', 'VIDEO_ID'
+            item_value TEXT NOT NULL,
+            failure_reason TEXT DEFAULT '',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_user_queue_type ON user_queue(item_type);
+    """),
 ]
 
 

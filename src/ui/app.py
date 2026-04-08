@@ -46,38 +46,31 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
     /* =====================================================================
-       MODERN DESIGN SYSTEM - INDIGO & SLATE
+       INTELLIGENCE CORE - NEBULA GLASSMORPHISM
        ===================================================================== */
     
     :root {
-        /* Primary - Indigo */
-        --primary-50: #eef2ff;
-        --primary-100: #e0e7ff;
-        --primary-500: #6366f1;
-        --primary-600: #4f46e1;
-        --primary-700: #4338ca;
+        /* Palette: Void Black & Electric Indigo */
+        --bg-deep: #030712;
+        --bg-nebula: radial-gradient(circle at 0% 0%, #0f172a 0%, #030712 50%, #020617 100%);
         
-        /* Semantic Colors */
-        --success-500: #10b981;
-        --warning-500: #f59e0b;
-        --error-500: #ef4444;
-        --info-500: #3b82f6;
+        --primary-glow: #6366f1;
+        --primary-active: #4f46e1;
+        --accent-glow: #22d3ee;
         
-        /* Neutrals - Slate (Dark Mode) */
-        --neutral-50: #f8fafc;
-        --neutral-100: #f1f5f9;
-        --neutral-200: #e2e8f0;
-        --neutral-300: #cbd5e1;
-        --neutral-400: #94a3b8;
-        --neutral-500: #64748b;
-        --neutral-600: #475569;
-        --neutral-700: #334155;
-        --neutral-800: #1e293b;
-        --neutral-900: #0f172a;
-        --neutral-950: #020617;
+        --glass-bg: rgba(15, 23, 42, 0.4);
+        --glass-border: rgba(255, 255, 255, 0.05);
+        --glass-active: rgba(99, 102, 241, 0.1);
+        
+        --success-glow: #10b981;
+        --warning-glow: #f59e0b;
+        --error-glow: #ef4444;
+        
+        --text-stellar: #f8fafc;
+        --text-muted: #94a3b8;
     }
     
     /* =====================================================================
@@ -87,126 +80,164 @@ st.markdown("""
     .stApp {
         font-family: 'Inter', -apple-system, sans-serif;
         font-size: 14px;
-        color: var(--neutral-100);
-        background: radial-gradient(circle at top left, #1e293b, #0f172a 60%, #020617);
+        color: var(--text-stellar);
+        background: var(--bg-nebula) !important;
     }
     
     h1, h2, h3, h4 { 
         font-family: 'Plus Jakarta Sans', sans-serif; 
-        letter-spacing: -0.02em;
+        letter-spacing: -0.025em;
     }
     
-    h1 { font-size: 2.25rem; font-weight: 800; color: white; }
-    h2 { font-size: 1.75rem; font-weight: 700; color: var(--neutral-100); }
-    h3 { font-size: 1.25rem; font-weight: 650; color: var(--neutral-200); }
+    h1 { font-size: 2.5rem; font-weight: 800; color: white; margin-bottom: 0.5rem; }
+    h2 { font-size: 1.85rem; font-weight: 700; color: var(--text-stellar); }
+    h3 { font-size: 1.35rem; font-weight: 650; color: var(--text-stellar); }
     
-    p { line-height: 1.6; color: var(--neutral-400); }
+    p { line-height: 1.6; color: var(--text-muted); }
     
     /* =====================================================================
-       ENHANCED COMPONENTS
+       ENHANCED COMPONENTS - GLASSMORPHISM
        ===================================================================== */
     
-    /* Progress Bars */
-    .stProgress > div > div > div > div {
-        background: linear-gradient(90deg, #6366f1, #a855f7);
-        border-radius: 999px;
-    }
-
-    /* Cards */
+    /* Metric Cards */
     .metric-card {
-        background: rgba(30, 41, 59, 0.4);
-        backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        border-radius: 16px;
-        padding: 1.5rem;
-        transition: all 0.3s ease;
+        background: var(--glass-bg);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid var(--glass-border);
+        border-radius: 20px;
+        padding: 1.75rem;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        overflow: hidden;
     }
     
     .metric-card:hover {
         background: rgba(30, 41, 59, 0.6);
-        border-color: rgba(99, 102, 241, 0.3);
-        transform: translateY(-4px);
-        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        border-color: rgba(99, 102, 241, 0.4);
+        transform: translateY(-6px);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3), 0 0 15px rgba(99, 102, 241, 0.1);
+    }
+    
+    .metric-card::after {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(99, 102, 241, 0.05) 0%, transparent 70%);
+        opacity: 0;
+        transition: opacity 0.4s ease;
+        pointer-events: none;
+    }
+    
+    .metric-card:hover::after {
+        opacity: 1;
     }
     
     .metric-card .value {
-        font-family: 'Plus Jakarta Sans', sans-serif;
-        font-size: 2.5rem;
+        font-family: 'Outfit', sans-serif;
+        font-size: 3rem;
         font-weight: 800;
         color: white;
-        margin-bottom: 0.25rem;
+        margin-bottom: 0.15rem;
+        letter-spacing: -0.03em;
     }
     
     .metric-card .label {
-        font-size: 0.8rem;
-        color: var(--neutral-500);
+        font-size: 0.75rem;
+        color: var(--text-muted);
         text-transform: uppercase;
-        letter-spacing: 0.05em;
-        font-weight: 600;
+        letter-spacing: 0.1em;
+        font-weight: 700;
     }
     
     /* Sidebar Navigation */
     .stSidebar {
-        background-color: var(--neutral-950) !important;
-        border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+        background-color: #020617 !important;
+        border-right: 1px solid var(--glass-border) !important;
     }
     
     .stSidebar [data-testid="stSidebarNav"] {
         background-color: transparent !important;
     }
     
-    /* Professional Sidebar Nav Items */
-    .nav-item {
-        padding: 0.6rem 1rem;
-        margin: 0.25rem 0;
-        border-radius: 10px;
-        color: var(--neutral-400);
-        font-weight: 500;
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        transition: all 0.2s ease;
-        cursor: pointer;
+    /* System Pulse Animation */
+    @keyframes pulse-glow {
+        0% { opacity: 0.5; box-shadow: 0 0 5px rgba(99, 102, 241, 0.2); }
+        50% { opacity: 1; box-shadow: 0 0 20px rgba(99, 102, 241, 0.5); }
+        100% { opacity: 0.5; box-shadow: 0 0 5px rgba(99, 102, 241, 0.2); }
     }
     
-    .nav-item:hover {
-        background: rgba(99, 102, 241, 0.1);
-        color: white;
-    }
-    
-    .nav-item.active {
-        background: rgba(99, 102, 241, 0.15);
-        color: var(--primary-500);
-        border-left: 3px solid var(--primary-500);
+    .status-pulse {
+        width: 8px;
+        height: 8px;
+        background: var(--primary-glow);
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 8px;
+        animation: pulse-glow 2s infinite ease-in-out;
     }
     
     /* Buttons */
     .stButton > button {
-        border-radius: 12px;
-        background: linear-gradient(135deg, #6366f1 0%, #4f46e1 100%);
-        border: none;
+        border-radius: 14px;
+        background: linear-gradient(135deg, var(--primary-glow) 0%, var(--primary-active) 100%);
+        border: 1px solid rgba(255, 255, 255, 0.1);
         color: white;
         font-weight: 600;
-        padding: 0.6rem 1.5rem;
-        transition: all 0.2s ease;
+        padding: 0.75rem 1.75rem;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        text-transform: none;
+        letter-spacing: normal;
     }
     
     .stButton > button:hover {
-        box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
-        transform: translateY(-1px);
+        box-shadow: 0 0 30px rgba(99, 102, 241, 0.4);
+        transform: translateY(-2px);
+        border-color: rgba(255, 255, 255, 0.2);
     }
     
+    .stButton > button:active {
+        transform: translateY(0);
+    }
+
+    /* Secondary Buttons */
+    div[data-testid="stButton"] button[kind="secondary"] {
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+    }
+    
+    div[data-testid="stButton"] button[kind="secondary"]:hover {
+        background: var(--glass-active);
+        border-color: var(--primary-glow);
+    }
+
+    /* Command Bar Focal Point */
+    .command-bar-container {
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        border-radius: 16px;
+        padding: 0.5rem 1rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    }
+
     /* Inputs */
-    .stTextInput input, .stTextArea textarea {
-        background-color: rgba(15, 23, 42, 0.6) !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        border-radius: 10px !important;
+    .stTextInput input {
+        background-color: rgba(2, 6, 23, 0.8) !important;
+        border: 1px solid var(--glass-border) !important;
+        border-radius: 12px !important;
         color: white !important;
+        font-size: 1rem !important;
+        padding: 0.75rem 1rem !important;
     }
     
-    .stTextInput input:focus, .stTextArea textarea:focus {
-        border-color: var(--primary-500) !important;
-        box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
+    .stTextInput input:focus {
+        border-color: var(--primary-glow) !important;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2) !important;
     }
 
     /* Accessibility */
@@ -216,17 +247,22 @@ st.markdown("""
     
     /* Custom Scrollbar */
     ::-webkit-scrollbar {
-        width: 8px;
+        width: 10px;
     }
     ::-webkit-scrollbar-track {
-        background: var(--neutral-950);
+        background: #020617;
     }
     ::-webkit-scrollbar-thumb {
-        background: var(--neutral-800);
-        border-radius: 4px;
+        background: #1e293b;
+        border: 2px solid #020617;
+        border-radius: 10px;
     }
     ::-webkit-scrollbar-thumb:hover {
-        background: var(--neutral-700);
+        background: #334155;
+    }
+    /* Hide Redundant Streamlit Sidebar Navigation */
+    div[data-testid="stSidebarNav"] {
+        display: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -492,16 +528,9 @@ health = check_service_health()
 
 # Sidebar Header with Branding
 st.sidebar.markdown("""
-<div style="
-    padding: 1.5rem;
-    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(79, 70, 225, 0.05));
-    border-radius: 12px;
-    border: 1px solid rgba(99, 102, 241, 0.1);
-    margin-bottom: 2rem;
-    text-align: left;
-">
-    <h1 style="margin: 0; font-size: 1.25rem; font-weight: 800; color: white;">KnowledgeVault</h1>
-    <p style="margin: 0.25rem 0 0; font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600;">Research Intelligence</p>
+<div style="padding: 1.5rem; background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(34, 211, 238, 0.05)); border-radius: 16px; border: 1px solid rgba(99, 102, 241, 0.2); margin-bottom: 2rem; text-align: left; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+    <h1 style="margin: 0; font-size: 1.5rem; font-weight: 800; color: white; letter-spacing: -0.03em;">KnowledgeVault</h1>
+    <p style="margin: 0.25rem 0 0; font-size: 0.7rem; color: var(--accent-glow); text-transform: uppercase; letter-spacing: 0.15em; font-weight: 700; opacity: 0.9;">Research Intelligence OS</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -510,37 +539,32 @@ with st.sidebar:
     cols = st.columns(3)
     with cols[0]:
         if health["database"]:
-            st.success("DB")
+            st.markdown("<div style='text-align:center; color:#10b981; font-weight:700; font-size:0.7rem;'>DB</div>", unsafe_allow_html=True)
         else:
-            st.error("DB")
+            st.markdown("<div style='text-align:center; color:#ef4444; font-weight:700; font-size:0.7rem;'>DB</div>", unsafe_allow_html=True)
     
     with cols[1]:
         if health["ollama"]:
-            st.success("LLM")
+            st.markdown("<div style='text-align:center; color:#10b981; font-weight:700; font-size:0.7rem;'>LLM</div>", unsafe_allow_html=True)
         else:
-            st.warning("LLM")
+            st.markdown("<div style='text-align:center; color:#f59e0b; font-weight:700; font-size:0.7rem;'>LLM</div>", unsafe_allow_html=True)
             
     with cols[2]:
         if vs and hasattr(vs, 'is_ready') and vs.is_ready():
-            st.success("VEC")
-        elif vs and hasattr(vs, 'health') and vs.health.get('collections'):
-            # Partial health (some collections missing but object created)
-            st.warning("VEC")
+            st.markdown("<div style='text-align:center; color:#10b981; font-weight:700; font-size:0.7rem;'>VEC</div>", unsafe_allow_html=True)
         else:
-            st.error("VEC")
+            st.markdown("<div style='text-align:center; color:#ef4444; font-weight:700; font-size:0.7rem;'>VEC</div>", unsafe_allow_html=True)
     
-    if health["errors"] or (vs and vs.health.get("errors")):
-        with st.expander("Service Details"):
-            for error in health["errors"]:
-                st.caption(error)
-            if vs and vs.health.get("errors"):
-                for error in vs.health["errors"]:
-                    st.caption(f"VectorStore: {error[:50]}")
+    st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
 
 # Categorized Navigation Structure
 NAV_STRUCTURE = {
-    "Research": [
+    "Discover": [
         "Dashboard", 
+        "Ingestion Hub", 
+        "Review Center",
+    ],
+    "Analyze": [
         "Intelligence Lab",
         "Research Agent",
         "Topic Explorer",
@@ -548,12 +572,8 @@ NAV_STRUCTURE = {
         "Comparative Lab",
         "Transcripts", 
     ],
-    "Operations": [
-        "Ingestion Hub", 
+    "System": [
         "Pipeline Center",
-        "Review Center",
-    ],
-    "Systems": [
         "Performance",
         "Export & Integration",
         "Settings"
@@ -578,24 +598,23 @@ if "current_page" not in st.session_state:
 
 # Render Sidebar with Categorized Navigation
 with st.sidebar:
-    st.markdown("## Navigation")
+    st.markdown("<p style='font-size:0.7rem; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:1rem;'>Intelligence Control</p>", unsafe_allow_html=True)
     
-    # We use a custom radio implementation to show categories
     selected_page = st.session_state.current_page
     
     for category, items in NAV_STRUCTURE.items():
-        st.markdown(f"**{category.upper()}**")
+        st.markdown(f"<p style='font-size:0.75rem; color:#475569; font-weight:800; margin-top:1.5rem; margin-bottom:0.5rem;'>{category.upper()}</p>", unsafe_allow_html=True)
         for item in items:
-            # Simple button-based nav or styled radio
+            # Button-based nav with conditional styling inside the button loop
+            is_active = (item == selected_page)
             if st.sidebar.button(
                 item, 
                 key=f"nav_{item}", 
                 use_container_width=True,
-                type="secondary" if item != selected_page else "primary"
+                type="primary" if is_active else "secondary"
             ):
                 st.session_state.current_page = item
                 st.rerun()
-        st.markdown("")
 
 page = st.session_state.current_page
 
@@ -619,14 +638,7 @@ with st.sidebar:
         st.caption("No active background scans")
 
 st.sidebar.markdown("""
-<div style="
-    padding: 1rem;
-    border-top: 1px solid rgba(14, 165, 233, 0.1);
-    margin-top: 1rem;
-    font-size: 0.8rem;
-    color: #888;
-    text-align: center;
-">
+<div style="padding: 1rem; border-top: 1px solid rgba(14, 165, 233, 0.1); margin-top: 1rem; font-size: 0.8rem; color: #888; text-align: center;">
     <p style="margin: 0; line-height: 1.5;">
         <a href='#' style='color: #0ea5e9; text-decoration: none;'>Documentation</a> • 
         <a href='#' style='color: #0ea5e9; text-decoration: none;'>Support</a>

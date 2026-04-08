@@ -32,7 +32,6 @@ Welcome to KnowledgeVault-YT, a local-first research intelligence system that tr
 3.  Pull the required LLM models:
     ```bash
     docker compose exec ollama ollama pull llama3.2:3b
-    docker compose exec ollama ollama pull llama3.1:8b
     docker compose exec ollama ollama pull nomic-embed-text
     ```
 4.  Access the UI at `http://localhost:8501`.

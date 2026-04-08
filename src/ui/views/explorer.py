@@ -10,11 +10,11 @@ logger = logging.getLogger(__name__)
 def render(db):
     """Render the Knowledge Explorer page."""
     st.markdown("""
-    <div class="main-header">
-        <h1>Knowledge Explorer</h1>
-        <p>Visualize connections and discover cross-entity relationships</p>
-    </div>
-    """, unsafe_allow_html=True)
+<div class="main-header">
+<h1>Knowledge Explorer</h1>
+<p>Visualize connections and discover cross-entity relationships</p>
+</div>
+""", unsafe_allow_html=True)
 
     try:
         from streamlit_agraph import agraph, Node, Edge, Config

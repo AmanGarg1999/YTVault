@@ -1,11 +1,13 @@
 """
-UI Helper Components — Professional UI/UX patterns for consistent styling
+UI Helper Components — Intelligence Core Design System (Nebula-Glassmorphism)
 
-Provides reusable components for headers, metrics, status badges, cards,
-and data displays across all Streamlit pages.
+Provides reusable, high-performance components for headers, metrics, status badges, 
+and data displays. Optimized for research-grade intelligence platforms.
 """
 
 import streamlit as st
+import json
+import re
 from typing import Optional, Dict, Any, List
 
 # ===========================================================================
@@ -18,96 +20,120 @@ def page_header(
     show_divider: bool = True
 ) -> None:
     """
-    Render a professional page header with optional subtitle.
-    
-    Args:
-        title: Main heading text
-        subtitle: Optional subheading
-        show_divider: Whether to show divider after header
+    Render a high-end page header with consistent typography and spacing.
     """
     st.markdown(f"""
-    <div style="margin-bottom: 2rem;">
-        <h1 style="color: white; margin-bottom: 0.5rem;">{title}</h1>
-        {f'<p style="color: var(--neutral-400); font-size: 1.1rem; max-width: 800px;">{subtitle}</p>' if subtitle else ''}
-    </div>
-    """, unsafe_allow_html=True)
+<div style="margin-bottom: 2.5rem; position: relative;">
+<h1 style="color: white; margin-bottom: 0.25rem; font-family: 'Outfit', sans-serif; letter-spacing: -0.04em; font-weight: 800;">{title}</h1>
+{f'<p style="color: var(--text-muted); font-size: 1rem; max-width: 850px; font-weight: 500;">{subtitle}</p>' if subtitle else ''}
+<div style="position: absolute; bottom: -1rem; left: 0; width: 60px; height: 4px; background: linear-gradient(90deg, var(--primary-glow), transparent); border-radius: 2px;"></div>
+</div>
+""", unsafe_allow_html=True)
     
     if show_divider:
-        st.divider()
+        spacer("2rem")
 
 
-def section_header(title: str) -> None:
+def section_header(title: str, icon: Optional[str] = None) -> None:
     """
-    Render a section header within a page.
-    
-    Args:
-        title: Section heading
+    Render a section header with optional icon and accent.
     """
-    st.markdown(f"### {title}")
+    icon_html = f"<span style='color: var(--accent-glow); margin-right: 0.5rem;'>{icon}</span>" if icon else ""
+    st.markdown(f"""
+<div style="display: flex; align-items: center; margin: 1.5rem 0 1rem 0;">
+<h3 style="margin: 0; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.15rem; font-weight: 700; color: #cbd5e1;">{icon_html}{title}</h3>
+</div>
+""", unsafe_allow_html=True)
 
 
 # ===========================================================================
-# METRIC DISPLAY COMPONENTS
+# METRIC & VISUALIZATION COMPONENTS
 # ===========================================================================
 
 def metric_card(
     value: Any,
     label: str,
     delta: Optional[str] = None,
-    delta_color: str = "neutral"
+    delta_color: str = "neutral",
+    glow: bool = False
 ) -> None:
     """
-    Render a single metric card with optional delta.
+    Render a glassmorphic metric card.
     
     Args:
-        value: Main metric value
-        label: Metric label
-        delta: Optional change indicator (e.g., "+5.2%", "-2")
-        delta_color: "positive", "negative", "neutral"
+        value: Main value (str or int)
+        label: Descriptor
+        delta: Optional change text
+        delta_color: positive, negative, info
+        glow: If True, adds a subtle persistent glow
     """
     delta_html = ""
     if delta:
         color_map = {
             "positive": "#10b981",
             "negative": "#ef4444",
+            "info": "#22d3ee",
             "neutral": "#64748b"
         }
         delta_color_hex = color_map.get(delta_color, "#64748b")
-        delta_html = f'<div style="color: {delta_color_hex}; font-size: 0.85rem; margin-top: 0.5rem; font-weight: 500;">{delta}</div>'
+        delta_html = f'<div style="color: {delta_color_hex}; font-size: 0.8rem; margin-top: 0.25rem; font-weight: 700;">{delta}</div>'
+    
+    glow_style = "box-shadow: 0 0 20px rgba(99, 102, 241, 0.15); border-color: rgba(99, 102, 241, 0.3);" if glow else ""
     
     st.markdown(f"""
-    <div class="metric-card">
-        <div class="label">{label}</div>
-        <div class="value">{value}</div>
-        {delta_html}
-    </div>
-    """, unsafe_allow_html=True)
+<div class="metric-card" style="{glow_style}">
+<div class="label">{label}</div>
+<div class="value">{value}</div>
+{delta_html}
+</div>
+""", unsafe_allow_html=True)
+
+
+def radial_health_chart(percentage: int, label: str, description: str = "") -> None:
+    """
+    Render a radial progress chart using custom SVG/CSS for 'Vault Health'.
+    """
+    # Color based on percentage
+    color = "#10b981" if percentage > 80 else ("#f59e0b" if percentage > 50 else "#ef4444")
+    
+    st.markdown(f"""
+<div class="metric-card" style="display: flex; align-items: center; gap: 1.5rem;">
+<div style="position: relative; width: 80px; height: 80px;">
+<svg viewBox="0 0 36 36" style="width: 100%; height: 100%; transform: rotate(-90deg);">
+<path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="3" />
+<path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="{color}" stroke-width="3" stroke-dasharray="{percentage}, 100" />
+</svg>
+<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.2rem; color: white;">{percentage}%</div>
+</div>
+<div>
+<div class="label" style="margin-bottom: 0.25rem;">{label}</div>
+<div style="font-size: 0.85rem; color: var(--text-muted);">{description}</div>
+</div>
+</div>
+""", unsafe_allow_html=True)
 
 
 def metric_grid(metrics: List[Dict[str, Any]], cols: int = 4) -> None:
     """
     Render multiple metrics in a responsive grid.
-    
-    Args:
-        metrics: List of dicts with keys: value, label, delta (optional), delta_color, icon
-        cols: Number of columns (responsive)
-    
-    Example:
-        metrics = [
-            {"value": 1425, "label": "Videos", "delta": "+12%", "delta_color": "positive"},
-            {"value": 3847, "label": "Chunks"},
-        ]
-        metric_grid(metrics, cols=3)
     """
     columns = st.columns(cols)
     for idx, metric in enumerate(metrics):
         with columns[idx % cols]:
-            metric_card(
-                metric["value"],
-                metric["label"],
-                metric.get("delta"),
-                metric.get("delta_color", "neutral")
-            )
+            if "percentage" in metric:
+                radial_health_chart(
+                    metric["percentage"], 
+                    metric["label"], 
+                    metric.get("description", "")
+                )
+            else:
+                metric_card(
+                    metric["value"],
+                    metric["label"],
+                    metric.get("delta"),
+                    metric.get("delta_color", "neutral"),
+                    glow=metric.get("glow", False)
+                )
 
 
 # ===========================================================================
@@ -116,164 +142,91 @@ def metric_grid(metrics: List[Dict[str, Any]], cols: int = 4) -> None:
 
 def status_badge(status: str, text: str = "") -> str:
     """
-    Generate HTML for a premium status badge.
-    
-    Args:
-        status: "success", "warning", "error", "info", "primary"
-        text: Badge label
+    Generate HTML for a premium Nebula status badge.
     """
-    status_classes = {
-        "success": "status-success",
-        "warning": "status-warning",
-        "error": "status-error",
-        "info": "status-info",
-        "primary": "status-primary"
-    }
-    class_name = status_classes.get(status.lower(), "status-info")
-    
-    # Use modern palette colors for badges
     colors = {
-        "status-success": "#059669",
-        "status-warning": "#d97706",
-        "status-error": "#dc2626",
-        "status-info": "#2563eb",
-        "status-primary": "#6366f1"
-    }
-    bg_colors = {
-        "status-success": "rgba(16, 185, 129, 0.1)",
-        "status-warning": "rgba(245, 158, 11, 0.1)",
-        "status-error": "rgba(239, 68, 68, 0.1)",
-        "status-info": "rgba(59, 130, 246, 0.1)",
-        "status-primary": "rgba(99, 102, 241, 0.1)"
+        "success": ("#10b981", "rgba(16, 185, 129, 0.1)"),
+        "warning": ("#f59e0b", "rgba(245, 158, 11, 0.1)"),
+        "error": ("#ef4444", "rgba(239, 68, 68, 0.1)"),
+        "info": ("#22d3ee", "rgba(34, 211, 238, 0.1)"),
+        "primary": ("#6366f1", "rgba(99, 102, 241, 0.1)")
     }
     
-    color = colors.get(class_name, "#2563eb")
-    bg = bg_colors.get(class_name, "rgba(59, 130, 246, 0.1)")
+    color, bg = colors.get(status.lower(), colors["info"])
     
     return f'''
-    <span style="
-        display: inline-block;
-        padding: 0.25rem 0.75rem;
-        border-radius: 6px;
-        font-size: 0.7rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        background: {bg};
-        color: {color};
-        border: 1px solid {color}33;
-    ">{text or status.upper()}</span>
-    '''
+<span style="display: inline-block; padding: 0.3rem 0.8rem; border-radius: 8px; font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; background: {bg}; color: {color}; border: 1px solid {color}44; backdrop-filter: blur(4px);">{text or status.upper()}</span>
+'''
 
 
 def inline_status(status: str, text: str = "") -> None:
-    """
-    Render a status badge inline with current content.
-    
-    Args:
-        status: "success", "warning", "error", "info"
-        text: Badge label
-    
-    Example:
-        inline_status("success", "Ready")
-    """
+    """Render status badge inline."""
     st.markdown(status_badge(status, text), unsafe_allow_html=True)
 
 
 # ===========================================================================
-# CARD COMPONENTS
+# CARD & CONTAINER COMPONENTS
 # ===========================================================================
 
-def info_card(title: str, content: str) -> None:
-    """Render an informational card."""
+def glass_card(title: Optional[str] = None, border_accent: Optional[str] = None):
+    """
+    Create a context manager for a glassmorphic container.
+    """
+    accent_style = f"border-left: 4px solid {border_accent};" if border_accent else ""
     st.markdown(f"""
-    <div style="
-        background: rgba(99, 102, 241, 0.05);
-        border-left: 4px solid var(--primary-500);
-        border-radius: 8px;
-        padding: 1.25rem;
-        margin: 1rem 0;
-    ">
-        <strong style="color: var(--primary-500); display: block; margin-bottom: 0.5rem;">{title}</strong>
-        <span style="color: var(--neutral-300); font-size: 0.95rem;">{content}</span>
-    </div>
-    """, unsafe_allow_html=True)
+<div style="background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 16px; padding: 1.5rem; margin: 1rem 0; {accent_style}">
+""", unsafe_allow_html=True)
+    if title:
+        st.markdown(f"<strong style='color: white; display: block; margin-bottom: 1rem; font-size: 1.1rem;'>{title}</strong>", unsafe_allow_html=True)
+    
+    # Usage: 
+    # with glass_card("Title"): 
+    #     st.write("Content")
+    return st.container()
 
+
+def info_card(title: str, content: str) -> None:
+    st.markdown(f"""
+<div style="background: rgba(34, 211, 238, 0.05); border-left: 4px solid var(--accent-glow); border-radius: 12px; padding: 1.25rem; margin: 1rem 0;">
+<strong style="color: var(--accent-glow); display: block; margin-bottom: 0.25rem; font-weight: 700;">{title}</strong>
+<span style="color: var(--text-muted); font-size: 0.95rem;">{content}</span>
+</div>
+""", unsafe_allow_html=True)
 
 def success_card(title: str, content: str) -> None:
-    """Render a success card."""
     st.markdown(f"""
-    <div style="
-        background: rgba(16, 185, 129, 0.05);
-        border-left: 4px solid var(--success-500);
-        border-radius: 8px;
-        padding: 1.25rem;
-        margin: 1rem 0;
-    ">
-        <strong style="color: var(--success-500); display: block; margin-bottom: 0.5rem;">{title}</strong>
-        <span style="color: var(--neutral-300); font-size: 0.95rem;">{content}</span>
-    </div>
-    """, unsafe_allow_html=True)
-
+<div style="background: rgba(16, 185, 129, 0.05); border-left: 4px solid var(--success-glow); border-radius: 12px; padding: 1.25rem; margin: 1rem 0;">
+<strong style="color: var(--success-glow); display: block; margin-bottom: 0.25rem; font-weight: 700;">{title}</strong>
+<span style="color: var(--text-muted); font-size: 0.95rem;">{content}</span>
+</div>
+""", unsafe_allow_html=True)
 
 def warning_card(title: str, content: str) -> None:
-    """Render a warning card."""
     st.markdown(f"""
-    <div style="
-        background: rgba(245, 158, 11, 0.05);
-        border-left: 4px solid var(--warning-500);
-        border-radius: 8px;
-        padding: 1.25rem;
-        margin: 1rem 0;
-    ">
-        <strong style="color: var(--warning-500); display: block; margin-bottom: 0.5rem;">{title}</strong>
-        <span style="color: var(--neutral-300); font-size: 0.95rem;">{content}</span>
-    </div>
-    """, unsafe_allow_html=True)
+<div style="background: rgba(245, 158, 11, 0.05); border-left: 4px solid var(--warning-glow); border-radius: 12px; padding: 1.25rem; margin: 1rem 0;">
+<strong style="color: var(--warning-glow); display: block; margin-bottom: 0.25rem; font-weight: 700;">{title}</strong>
+<span style="color: var(--text-muted); font-size: 0.95rem;">{content}</span>
+</div>
+""", unsafe_allow_html=True)
 
 
-def error_card(title: str, content: str) -> None:
-    """Render an error card."""
-    st.markdown(f"""
-    <div style="
-        background: rgba(239, 68, 68, 0.05);
-        border-left: 4px solid var(--error-500);
-        border-radius: 8px;
-        padding: 1.25rem;
-        margin: 1rem 0;
-    ">
-        <strong style="color: var(--error-500); display: block; margin-bottom: 0.5rem;">{title}</strong>
-        <span style="color: var(--neutral-300); font-size: 0.95rem;">{content}</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-import re
+# ===========================================================================
+# VIDEO & RESEARCH COMPONENTS
+# ===========================================================================
 
 def strip_html(text: str) -> str:
-    """Helper to strip HTML tags and LLM artifacts (like JSON fragments) from a string."""
-    if not text:
-        return ""
-    
-    # 1. Strip actual HTML tags
+    """Helper to strip HTML tags and LLM artifacts."""
+    if not text: return ""
     clean = re.compile('<.*?>')
     text = re.sub(clean, '', text)
-    
-    # 2. Strip LLM artifacts that often appear when parsing fails
-    # Remove things like {"category": "KNOWLEDGE", "reason": "..."}
     if text.strip().startswith('{') and text.strip().endswith('}'):
         try:
             import json
             parsed = json.loads(text)
-            if isinstance(parsed, dict):
-                return parsed.get("reason", parsed.get("summary", text))
-        except:
-            pass
-            
-    # 3. Remove common special tokens
-    text = re.sub(r'<\|.*?\|>', '', text)
-    
+            return parsed.get("reason", parsed.get("summary", text))
+        except: pass
     return text.strip()
+
 
 def video_card(
     video: Any,
@@ -282,116 +235,99 @@ def video_card(
     key_prefix: str = "vid"
 ) -> Any:
     """
-    Render a premium video card. Returns action columns if show_actions is True.
+    Render a professional video card with high visual hierarchy.
     """
-    with st.container(border=True):
-        col_img, col_info = st.columns([1, 3]) if show_thumbnail else (None, st.container())
+    with st.container(border=False):
+        # We render the main information as a single HTML block to prevent tag leakage
+        clean_title = strip_html(video.title)
+        dur_min = video.duration_seconds // 60
+        dur_sec = video.duration_seconds % 60
         
-        if show_thumbnail and col_img:
-            with col_img:
-                st.image(f"https://img.youtube.com/vi/{video.video_id}/mqdefault.jpg", use_container_width=True)
+        status = getattr(video, 'triage_status', 'PENDING')
+        status_color = "info"
+        if status == "ACCEPTED": status_color = "success"
+        elif status == "REJECTED": status_color = "error"
+        elif status == "PENDING_REVIEW": status_color = "warning"
         
-        with col_info:
-            clean_title = strip_html(video.title)
-            st.markdown(f"**{clean_title}**")
+        badge_html = status_badge(status_color, status)
+        confidence = getattr(video, 'triage_confidence', 0)
+        views = getattr(video, 'view_count', 0)
+
+        st.markdown(f"""
+<div style="background: rgba(15, 23, 42, 0.3); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 1.25rem; margin-bottom: 0.75rem;"><div style="display: flex; gap: 1.5rem; align-items: flex-start;">
+{f'<div style="width: 140px; flex-shrink: 0;"><img src="https://img.youtube.com/vi/{video.video_id}/mqdefault.jpg" style="width: 100%; border-radius: 8px;"></div>' if show_thumbnail else ''}
+<div style="flex-grow: 1;">
+<p style="font-size: 1.1rem; font-weight: 700; color: white; margin: 0; line-height: 1.4;">{clean_title}</p>
+<div style="display: flex; gap: 1rem; align-items: center; margin-top: 0.75rem; font-size: 0.75rem; color: #94a3b8; font-weight: 600;">
+{badge_html}<span>{dur_min}:{dur_sec:02d}</span><span>{views:,} VIEWS</span><span style="color: #6366f1;">{confidence:.0%} CONFIDENCE</span>
+</div></div></div></div>
+""", unsafe_allow_html=True)
+        
+        if show_actions:
+            cols = st.columns([1, 1, 1, 1])
+            return cols
             
-            dur_min = video.duration_seconds // 60
-            dur_sec = video.duration_seconds % 60
-            
-            status = getattr(video, 'triage_status', 'PENDING')
-            status_color = "info"
-            if status == "ACCEPTED": status_color = "success"
-            elif status == "REJECTED": status_color = "error"
-            elif status == "PENDING_REVIEW": status_color = "warning"
-            
-            badge_html = status_badge(status_color, status)
-            
-            st.markdown(f"""
-            <div style="display: flex; gap: 0.75rem; align-items: center; margin-top: 0.5rem; font-size: 0.8rem; color: #888;">
-                {badge_html}
-                <span style="opacity: 0.8;">{dur_min}m {dur_sec}s</span>
-                <span style="opacity: 0.8;">{getattr(video, 'view_count', 0):,} views</span>
-                <span style="color: var(--primary-500); font-weight: 500;">{getattr(video, 'triage_confidence', 0):.0%} confidence</span>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            triage_reason = getattr(video, 'triage_reason', '')
-            if triage_reason:
-                clean_reason = strip_html(triage_reason)
-                st.caption(f"Note: {clean_reason}")
-            
-            if show_actions:
-                st.markdown("<br>", unsafe_allow_html=True)
-                return st.columns([1, 1, 1, 1])
     return None
+
+
+# ===========================================================================
+# INTERACTION: SIDE-CAR PANEL
+# ===========================================================================
+
+def side_car_layout():
+    """
+    Initialize a side-car layout. Returns two columns (main, side).
+    """
+    if "side_car_active" not in st.session_state:
+        st.session_state.side_car_active = False
+    
+    if st.session_state.side_car_active:
+        return st.columns([1.8, 1])
+    else:
+        return st.columns([1])[0], None
+
+
+def render_side_car(title: str, content_func, close_key: str = "close_side"):
+    """
+    Render the content of the side-car panel.
+    """
+    st.markdown(f"""
+<div style="background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(20px); border: 1px solid var(--primary-glow); border-radius: 20px; padding: 2rem; height: 100%; box-shadow: -10px 0 50px rgba(0,0,0,0.5);">
+<h2 style="font-family: 'Outfit', sans-serif; font-size: 1.5rem; margin-top: 0;">{title}</h2>
+<hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 1.5rem 0;">
+""", unsafe_allow_html=True)
+    
+    content_func()
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    if st.button("Close Panel", key=close_key, use_container_width=True):
+        st.session_state.side_car_active = False
+        st.session_state.active_video_id = None
+        st.rerun()
 
 
 # ===========================================================================
 # PROGRESS & LOADING COMPONENTS
 # ===========================================================================
 
-def progress_step(
-    step: int,
-    total: int,
-    label: str,
-    status: str = "in_progress"
-) -> None:
-    """
-    Render a step in a progress pipeline.
-    
-    Args:
-        step: Current step number
-        total: Total steps
-        label: Step label
-        status: "pending", "in_progress", "completed", "error"
-    """
-    progress_percent = (step / total) * 100
-    
-    st.markdown(f"""
-    <div style="margin: 1.25rem 0;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-            <span style="font-weight: 600; color: white; display: flex; align-items: center; gap: 0.5rem;">
-                {label}
-            </span>
-            <span style="font-size: 0.75rem; color: var(--neutral-500); font-weight: 700; letter-spacing: 0.05em;">{step}/{total}</span>
-        </div>
-        <div style="
-            width: 100%;
-            height: 6px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 999px;
-            overflow: hidden;
-        ">
-            <div style="
-                width: {progress_percent}%;
-                height: 100%;
-                background: linear-gradient(90deg, #6366f1, #8b5cf6);
-                transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-            "></div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-
 def loading_spinner(text: str = "Processing...") -> None:
-    """Render a loading spinner with text."""
+    """Render a premium loading spinner with Nebula styling."""
     st.markdown(f"""
-    <div style="text-align: center; padding: 2rem;">
+    <div style="text-align: center; padding: 3rem;">
         <div style="
             display: inline-block;
-            width: 40px;
-            height: 40px;
-            border: 3px solid rgba(14, 165, 233, 0.2);
-            border-top-color: #0ea5e9;
+            width: 48px;
+            height: 48px;
+            border: 3px solid rgba(99, 102, 241, 0.1);
+            border-top-color: var(--primary-glow);
             border-radius: 50%;
-            animation: spin 0.8s linear infinite;
+            animation: spin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
         "></div>
-        <p style="margin-top: 1rem; color: #888;">{text}</p>
+        <p style="margin-top: 1.5rem; color: var(--text-muted); font-weight: 500; letter-spacing: 0.05em;">{text.upper()}</p>
     </div>
     <style>
-        @keyframes spin {{
-            to {{ transform: rotate(360deg); }}
-        }}
+        @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -405,163 +341,84 @@ def data_table(
     columns: Optional[List[str]] = None,
     show_index: bool = False
 ) -> None:
-    """
-    Render a styled data table.
-    
-    Args:
-        data: List of dictionaries or DataFrame
-        columns: Column names to display
-        show_index: Whether to show row index
-    """
+    """Render a styled data table with glassmorphic accents."""
     import pandas as pd
     df = pd.DataFrame(data) if isinstance(data, list) else data
-    
     if columns:
         df = df[columns]
-    
     st.dataframe(df, use_container_width=True, hide_index=not show_index)
 
 
 def key_value_display(items: Dict[str, Any]) -> None:
-    """
-    Render a key-value display panel.
-    """
-    html = '<div style="display: grid; grid-template-columns: auto 1fr; gap: 1.25rem; background: rgba(15, 23, 42, 0.3); padding: 1.5rem; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.05);">'
+    """Render a high-contrast key-value display panel."""
+    html = '<div style="display: grid; grid-template-columns: auto 1fr; gap: 1rem; background: rgba(15, 23, 42, 0.4); padding: 1.5rem; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.05);">'
     for key, value in items.items():
         html += f'''
-        <div style="font-weight: 700; color: var(--primary-400); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">{key}</div>
-        <div style="color: var(--neutral-200);">{value}</div>
+        <div style="font-weight: 800; color: var(--primary-glow); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em;">{key}</div>
+        <div style="color: #cbd5e1; font-size: 0.95rem;">{value}</div>
         '''
     html += '</div>'
     st.markdown(html, unsafe_allow_html=True)
 
 
 # ===========================================================================
-# FORM COMPONENTS
-# ===========================================================================
-
-def form_section(title: str, help_text: str = "") -> None:
-    """Render a visually distinct form section header."""
-    st.markdown(f"""
-    <div style="
-        padding: 1.25rem;
-        background: rgba(99, 102, 241, 0.03);
-        border-bottom: 2px solid rgba(99, 102, 241, 0.1);
-        margin: 2rem 0 1.5rem 0;
-    ">
-        <strong style="font-size: 1.25rem; color: white;">{title}</strong>
-        {f'<p style="margin: 0.5rem 0 0; color: var(--neutral-500); font-size: 0.95rem;">{help_text}</p>' if help_text else ''}
-    </div>
-    """, unsafe_allow_html=True)
-
-
-# ===========================================================================
 # UTILITIES
 # ===========================================================================
 
-def create_columns_equal(count: int, gap: str = "small"):
-    """
-    Create equal-width columns with consistent spacing.
-    
-    Args:
-        count: Number of columns
-        gap: "small", "medium", "large"
-    
-    Returns:
-        List of column containers
-    
-    Example:
-        cols = create_columns_equal(3)
-        with cols[0]:
-            st.write("Column 1")
-    """
-    return st.columns(count, gap=gap)
+def spacer(height: str = "1rem") -> None:
+    st.markdown(f'<div style="height: {height};"></div>', unsafe_allow_html=True)
 
 
-def tts_button(text: str, label: str = "Listen", key: Optional[str] = None) -> None:
-    """
-    Render a browser-native Text-To-Speech button.
-    
-    Uses the Web Speech API (window.speechSynthesis) which works 
-    entirely in the user's browser with zero server-side dependencies.
-    """
+def tts_button(text: str, label: str = "Audio Intel", key: Optional[str] = None) -> None:
+    """Enhanced TTS button with nebula styling."""
     import json
-    
-    # Clean text: remove newlines and use json.dumps for robust JS string escaping
     safe_text = json.dumps(text.replace("\n", " "))
-    
     button_uuid = key or f"tts_{hash(text) % 10**8}"
     
     js_code = f"""
     <style>
         .tts-btn {{
-            background: rgba(14, 165, 233, 0.1);
-            color: #0ea5e9;
-            border: 1px solid rgba(14, 165, 233, 0.3);
-            border-radius: 4px;
-            padding: 4px 12px;
-            font-size: 0.85rem;
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--primary-glow);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 8px;
+            padding: 10px 18px;
+            font-size: 0.8rem;
+            font-weight: 800;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             display: inline-flex;
             align-items: center;
-            gap: 6px;
+            gap: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
         }}
         .tts-btn:hover {{
-            background: rgba(14, 165, 233, 0.2);
-            border-color: #0ea5e9;
-        }}
-        .tts-btn.speaking {{
-            background: #0ea5e9;
-            color: white;
-            animation: pulse 1.5s infinite;
-        }}
-        @keyframes pulse {{
-            0% {{ opacity: 1; }}
-            50% {{ opacity: 0.7; }}
-            100% {{ opacity: 1; }}
+            background: rgba(99, 102, 241, 0.2);
+            border-color: var(--primary-glow);
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+            transform: translateY(-1px);
         }}
     </style>
-    
     <button id="btn-{button_uuid}" class="tts-btn" onclick="toggleSpeech()">
         <span>{label}</span>
     </button>
-    
     <script>
     var synth = window.speechSynthesis;
-    var utterance = null;
     var isSpeaking = false;
-    
     function toggleSpeech() {{
         const btn = document.getElementById('btn-{button_uuid}');
-        
         if (isSpeaking) {{
-            synth.cancel();
-            isSpeaking = false;
-            btn.classList.remove('speaking');
+            synth.cancel(); isSpeaking = false;
             btn.innerHTML = '<span>{label}</span>';
         }} else {{
-            // Cancel any current speech across the page
             synth.cancel();
-            
-            utterance = new SpeechSynthesisUtterance({safe_text});
-            utterance.onend = function() {{
-                isSpeaking = false;
-                btn.classList.remove('speaking');
-                btn.innerHTML = '<span>{label}</span>';
-            }};
-            
-            synth.speak(utterance);
-            isSpeaking = true;
-            btn.classList.add('speaking');
+            const utt = new SpeechSynthesisUtterance({safe_text});
+            utt.onend = () => {{ isSpeaking = false; btn.innerHTML = '<span>{label}</span>'; }};
+            synth.speak(utt); isSpeaking = true;
             btn.innerHTML = '<span>Stop</span>';
         }}
     }}
     </script>
     """
-    st.components.v1.html(js_code, height=45)
-
-
-def spacer(height: str = "1rem") -> None:
-    """Add vertical spacing."""
-    st.markdown(f'<div style="height: {height};"></div>', unsafe_allow_html=True)
+    st.components.v1.html(js_code, height=60)

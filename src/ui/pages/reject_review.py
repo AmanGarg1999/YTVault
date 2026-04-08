@@ -10,11 +10,11 @@ logger = logging.getLogger(__name__)
 def render(db, run_pipeline_background):
     """Render the Rejected Videos Review page."""
     st.markdown("""
-    <div class="main-header">
-        <h1>Rejected Videos Review</h1>
-        <p>Review videos that were rejected by triage and manually force ingestion</p>
-    </div>
-    """, unsafe_allow_html=True)
+<div class="main-header">
+<h1>Rejected Videos Review</h1>
+<p>Review videos that were rejected by triage and manually force ingestion</p>
+</div>
+""", unsafe_allow_html=True)
 
     try:
         rejected = db.get_videos_by_status_sorted(

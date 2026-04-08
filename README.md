@@ -1,6 +1,6 @@
 # KnowledgeVault-YT: Local-First Research Intelligence
 
-KnowledgeVault-YT is a specialized research intelligence system that autonomousy ingests, triages, and synthesizes YouTube content into a structured Knowledge Graph. Built with a privacy-first, local-only architecture, it enables high-fidelity knowledge extraction from video transcripts without cloud dependencies.
+KnowledgeVault-YT is a specialized research intelligence system that autonomously ingests, triages, and synthesizes YouTube content into a structured Knowledge Graph. Built with a privacy-first, local-only architecture, it enables high-fidelity knowledge extraction from video transcripts without cloud dependencies.
 
 ---
 
@@ -9,7 +9,7 @@ KnowledgeVault-YT is a specialized research intelligence system that autonomousy
 KnowledgeVault-YT delivers professional-grade intelligence through a robust multi-stage pipeline:
 
 *   **Autonomous Ingestion**: Discovers and harvests metadata and transcripts from channels, playlists, or individual videos.
-*   **Intelligent Triage**: USes a dual-phase rule and LLM-based system to filter signal from noise, ensuring only knowledge-dense content is indexed.
+*   **Intelligent Triage**: Uses a dual-phase rule and LLM-based system to filter signal from noise, ensuring only knowledge-dense content is indexed.
 *   **Hybrid Three-Layer Storage**: Combines relational (SQLite), vector (ChromaDB), and graph (Neo4j) databases for comprehensive retrieval.
 *   **Advanced RAG Engine**: Performs hybrid semantic and full-text search with timestamped citations and source-backed synthesis.
 *   **Knowledge Graph Synthesis**: Maps entities, topics, and claims across different sources to reveal hidden connections and thematic evolution.
@@ -41,7 +41,6 @@ KnowledgeVault-YT delivers professional-grade intelligence through a robust mult
 3.  **Prepare Models**:
     ```bash
     docker compose exec ollama ollama pull llama3.2:3b
-    docker compose exec ollama ollama pull llama3.1:8b
     docker compose exec ollama ollama pull nomic-embed-text
     ```
 4.  **Access UI**:
@@ -113,32 +112,19 @@ knowledgeVault-YT/
 ├── src/                # Core application source code
 ├── tests/              # Comprehensive test suite
 ├── docker-compose.yml  # Deployment configuration
+├── .env.example        # Template for security credentials
 └── pyproject.toml      # Project dependencies and metadata
 ```
 
 ---
 
-## License
+## 🔒 Security
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
-       # Architecture & Specs
-│   └── usage/                     # User guides & Quickstarts
-├── scripts/                       # Maintenance scripts
-├── src/                           # Source Code
-│   ├── main.py                    # CLI entry point
-│   ├── ingestion/                 # 10-stage pipeline modules
-│   ├── intelligence/              # AI/RAG features
-│   ├── pipeline/                  # Orchestration logic
-│   ├── storage/                   # Triple-store (SQL/Vector/Graph)
-│   ├── ui/                        # Streamlit interface
-│   └── utils/                     # Shared utilities
-├── tests/                         # Comprehensive test suite
-│   ├── ui/                        # UI-specific tests
-│   └── utils/                     # Utility tests
-├── docker-compose.yml
-├── Dockerfile
-└── pyproject.toml
-```
+KnowledgeVault-YT is designed with security hygiene in mind:
+*   **Local-First**: All data stays on your machine.
+*   **Credential Management**: Use the provided [.env.example](.env.example) to create a `.env` file for sensitive credentials (like `NEO4J_PASSWORD`).
+*   **Audit Trails**: Data deletions and system events are logged in the `data/logs` directory.
+
 
 ---
 
@@ -153,9 +139,9 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 
 ---
 
-## 📄 License
+## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
 ---
 

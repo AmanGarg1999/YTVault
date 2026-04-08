@@ -1,4 +1,4 @@
-# UI Components - Professional UI/UX patterns and helpers
+# UI Components — Intelligence Core Design System (Nebula-Glassmorphism)
 
 from .ui_helpers import (
     # Header Components
@@ -8,33 +8,34 @@ from .ui_helpers import (
     # Metric Display
     metric_card,
     metric_grid,
+    radial_health_chart,
     
     # Status & Badges
     status_badge,
     inline_status,
     
-    # Cards
+    # Cards & Containers
+    glass_card,
     info_card,
     success_card,
     warning_card,
-    error_card,
     video_card,
     
+    # Interactions
+    side_car_layout,
+    render_side_car,
+    
     # Progress & Loading
-    progress_step,
     loading_spinner,
     
     # Data Display
     data_table,
     key_value_display,
     
-    # Form Components
-    form_section,
-    
     # Utilities
-    create_columns_equal,
     spacer,
     tts_button,
+    strip_html,
 )
 
 __all__ = [
@@ -42,19 +43,20 @@ __all__ = [
     "section_header",
     "metric_card",
     "metric_grid",
+    "radial_health_chart",
     "status_badge",
     "inline_status",
+    "glass_card",
     "info_card",
     "success_card",
     "warning_card",
-    "error_card",
     "video_card",
-    "progress_step",
+    "side_car_layout",
+    "render_side_car",
     "loading_spinner",
     "data_table",
     "key_value_display",
-    "form_section",
-    "create_columns_equal",
     "spacer",
     "tts_button",
+    "strip_html",
 ]

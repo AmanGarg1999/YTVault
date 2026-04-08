@@ -12,11 +12,11 @@ def render(db, run_pipeline_background):
     """Render the unified Ingestion Hub with all intake operations."""
     
     st.markdown("""
-    <div class="main-header">
-        <h1>Ingestion Hub</h1>
-        <p>Start harvests, manage triage queue, and override rejections</p>
-    </div>
-    """, unsafe_allow_html=True)
+<div class="main-header">
+<h1>Ingestion Hub</h1>
+<p>Start harvests, manage triage queue, and override rejections</p>
+</div>
+""", unsafe_allow_html=True)
 
     try:
         # =====================================================================

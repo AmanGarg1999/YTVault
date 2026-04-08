@@ -37,10 +37,11 @@ chromadb:
   similarity_space: "cosine"
 
 # Neo4j Configuration
+# Note: Security best practice is to set NEO4J_PASSWORD via environment variable.
 neo4j:
   uri: "bolt://localhost:7687"
   user: "neo4j"
-  password: "knowledgevault"
+  password: "knowledgevault"  # Default password, override in .env
 
 # Ingestion Pipeline
 ingestion:

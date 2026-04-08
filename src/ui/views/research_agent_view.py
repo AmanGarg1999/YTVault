@@ -5,7 +5,7 @@ from src.ui.components import page_header, section_header, info_card, success_ca
 from src.storage.sqlite_store import SQLiteStore
 from src.intelligence.research_agent import ResearchAgent
 
-def render_research_agent(db: SQLiteStore):
+def render(db: SQLiteStore):
     """Render the Autonomous Research Agent interface."""
     page_header("Research Agent", "Autonomous Synthesis & Briefing")
 

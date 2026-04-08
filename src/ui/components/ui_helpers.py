@@ -209,6 +209,14 @@ def warning_card(title: str, content: str) -> None:
 </div>
 """, unsafe_allow_html=True)
 
+def error_card(title: str, content: str) -> None:
+    st.markdown(f"""
+<div style="background: rgba(239, 68, 68, 0.05); border-left: 4px solid var(--error-glow); border-radius: 12px; padding: 1.25rem; margin: 1rem 0;">
+<strong style="color: var(--error-glow); display: block; margin-bottom: 0.25rem; font-weight: 700;">{title}</strong>
+<span style="color: var(--text-muted); font-size: 0.95rem;">{content}</span>
+</div>
+""", unsafe_allow_html=True)
+
 
 # ===========================================================================
 # VIDEO & RESEARCH COMPONENTS

@@ -17,28 +17,17 @@ try:
     print("   ✓ Config and database imports OK")
     
     print("\n2. Testing page imports...")
-    pages = [
-        "dashboard",
-        "ingestion_hub",
-        "pipeline_center",
-        "intelligence_lab",
-        "explorer",
-        "guest_intel",
-        "export_center",
-        "logs_monitor",
-        "data_management",
-        "reject_review",
-        "transcript_viewer",
-        "performance_metrics",
-        "comparative_lab",
-    ]
+    views_dir = Path(__file__).resolve().parent.parent.parent / "src" / "ui" / "views"
+    pages = [f.stem for f in views_dir.glob("*.py") if f.stem != "__init__" and not f.name.startswith(".")]
     
-    for page in pages:
+    for page in sorted(pages):
         try:
             module = __import__(f"src.ui.views.{page}", fromlist=[page])
             # Check if module has render function
             if hasattr(module, "render"):
                 print(f"   ✓ {page:25} - Has render() function")
+            elif hasattr(module, "render_view"):
+                 print(f"   ✓ {page:25} - Has render_view() function (Alternative)")
             else:
                 print(f"   ⚠ {page:25} - Missing render() function")
         except Exception as e:

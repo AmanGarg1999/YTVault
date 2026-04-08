@@ -7,7 +7,6 @@ import streamlit as st
 from src.ui.components import (
     page_header,
     section_header,
-    progress_step,
     info_card,
     warning_card,
     error_card,

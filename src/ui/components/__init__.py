@@ -19,6 +19,7 @@ from .ui_helpers import (
     info_card,
     success_card,
     warning_card,
+    error_card,
     video_card,
     
     # Interactions
@@ -36,6 +37,10 @@ from .ui_helpers import (
     spacer,
     tts_button,
     strip_html,
+    
+    # Dialogs & Confirmations
+    action_confirmation_dialog,
+    failure_confirmation_dialog,
 )
 
 __all__ = [
@@ -50,6 +55,7 @@ __all__ = [
     "info_card",
     "success_card",
     "warning_card",
+    "error_card",
     "video_card",
     "side_car_layout",
     "render_side_car",
@@ -59,4 +65,6 @@ __all__ = [
     "spacer",
     "tts_button",
     "strip_html",
+    "action_confirmation_dialog",
+    "failure_confirmation_dialog",
 ]

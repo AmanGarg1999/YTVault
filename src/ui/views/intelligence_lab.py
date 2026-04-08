@@ -19,7 +19,7 @@ from src.storage.sqlite_store import SQLiteStore
 from src.intelligence.summarizer import SummarizerEngine
 from src.intelligence.bridge_discovery import BridgeDiscoveryEngine
 
-def render_intelligence_lab(db: SQLiteStore):
+def render(db: SQLiteStore):
     page_header(
         "Intelligence Lab",
         "Exploring non-linear connections, market trends, and thematic bridges within your vault."

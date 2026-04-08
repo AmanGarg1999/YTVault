@@ -202,37 +202,62 @@ class VectorStore:
         cfg = settings["chromadb"]
         ollama_cfg = settings["ollama"]
 
-        self.client = chromadb.PersistentClient(path=cfg["path"])
-        self.embedding_fn = OllamaEmbeddingFunction(
-            model_name=ollama_cfg.get("embedding_model", "nomic-embed-text")
-        )
-        
-        # Transcript Chunks Collection
-        self.collection = self.client.get_or_create_collection(
-            name=cfg.get("collection_name", "transcript_chunks"),
-            metadata={"hnsw:space": cfg.get("similarity_space", "cosine")},
-            embedding_function=self.embedding_fn,
-        )
-        
-        # Research Claims Collection (New for P1-E)
-        self.claims_collection = self.client.get_or_create_collection(
-            name="research_claims",
-            metadata={"hnsw:space": "cosine"},
-            embedding_function=self.embedding_fn,
-        )
+        self.health = {"ready": False, "collections": {}, "errors": []}
+        self.client = None
+        self.embedding_fn = None
+        self.collection = None
+        self.claims_collection = None
+        self.summaries_collection = None
 
-        # Video Summaries Collection (New for Research Agent Upgrade)
-        self.summaries_collection = self.client.get_or_create_collection(
-            name="video_summaries",
-            metadata={"hnsw:space": "cosine"},
-            embedding_function=self.embedding_fn,
-        )
-        
-        logger.info(
-            f"VectorStore initialized: {self.collection.count()} chunks, "
-            f"{self.claims_collection.count()} claims, "
-            f"{self.summaries_collection.count()} summaries"
-        )
+        try:
+            self.client = chromadb.PersistentClient(path=cfg["path"])
+            self.embedding_fn = OllamaEmbeddingFunction(
+                model_name=ollama_cfg.get("embedding_model", "nomic-embed-text")
+            )
+            
+            def safe_get_collection(name, metadata):
+                """Attempt to get or create collection, handling embedding function conflicts."""
+                try:
+                    # Try preferred way (with configured embedding function)
+                    return self.client.get_or_create_collection(
+                        name=name,
+                        metadata=metadata,
+                        embedding_function=self.embedding_fn
+                    )
+                except ValueError as e:
+                    if "embedding function" in str(e).lower():
+                        logger.warning(f"Embedding function conflict for collection '{name}': {e}. Falling back to persisted function.")
+                        # Load existing collection without providing a new function to avoid conflict
+                        # This works because our search/upsert methods manually generate vectors
+                        return self.client.get_collection(name=name)
+                    raise e
+            
+            # Transcript Chunks Collection
+            self.collection = safe_get_collection(
+                cfg.get("collection_name", "transcript_chunks"),
+                {"hnsw:space": cfg.get("similarity_space", "cosine")}
+            )
+            self.health["collections"]["transcript_chunks"] = True
+            
+            # Research Claims Collection
+            self.claims_collection = safe_get_collection("research_claims", {"hnsw:space": "cosine"})
+            self.health["collections"]["research_claims"] = True
+            
+            # Video Summaries Collection
+            self.summaries_collection = safe_get_collection("video_summaries", {"hnsw:space": "cosine"})
+            self.health["collections"]["video_summaries"] = True
+            
+            self.health["ready"] = True
+            logger.info("VectorStore initialized successfully (resilient mode)")
+            
+        except Exception as e:
+            self.health["ready"] = False
+            self.health["errors"].append(str(e))
+            logger.error(f"VectorStore critical initialization failure: {e}")
+
+    def is_ready(self) -> bool:
+        """Check if the vector store is initialized and collections are accessible."""
+        return self.health["ready"] and self.collection is not None
 
     def upsert_summary(self, video_id: str, summary_text: str, channel_id: str = "",
                        topics: list[str] = None) -> None:

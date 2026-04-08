@@ -248,6 +248,33 @@ def error_card(title: str, content: str) -> None:
     """, unsafe_allow_html=True)
 
 
+import re
+
+def strip_html(text: str) -> str:
+    """Helper to strip HTML tags and LLM artifacts (like JSON fragments) from a string."""
+    if not text:
+        return ""
+    
+    # 1. Strip actual HTML tags
+    clean = re.compile('<.*?>')
+    text = re.sub(clean, '', text)
+    
+    # 2. Strip LLM artifacts that often appear when parsing fails
+    # Remove things like {"category": "KNOWLEDGE", "reason": "..."}
+    if text.strip().startswith('{') and text.strip().endswith('}'):
+        try:
+            import json
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                return parsed.get("reason", parsed.get("summary", text))
+        except:
+            pass
+            
+    # 3. Remove common special tokens
+    text = re.sub(r'<\|.*?\|>', '', text)
+    
+    return text.strip()
+
 def video_card(
     video: Any,
     show_thumbnail: bool = True,
@@ -265,7 +292,8 @@ def video_card(
                 st.image(f"https://img.youtube.com/vi/{video.video_id}/mqdefault.jpg", use_container_width=True)
         
         with col_info:
-            st.markdown(f"**{video.title}**")
+            clean_title = strip_html(video.title)
+            st.markdown(f"**{clean_title}**")
             
             dur_min = video.duration_seconds // 60
             dur_sec = video.duration_seconds % 60
@@ -287,8 +315,10 @@ def video_card(
             </div>
             """, unsafe_allow_html=True)
             
-            if hasattr(video, 'triage_reason') and video.triage_reason:
-                st.caption(f"Note: {video.triage_reason}")
+            triage_reason = getattr(video, 'triage_reason', '')
+            if triage_reason:
+                clean_reason = strip_html(triage_reason)
+                st.caption(f"Note: {clean_reason}")
             
             if show_actions:
                 st.markdown("<br>", unsafe_allow_html=True)

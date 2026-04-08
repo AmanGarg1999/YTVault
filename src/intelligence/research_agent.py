@@ -7,7 +7,7 @@ from pathlib import Path
 
 from src.storage.sqlite_store import SQLiteStore, ResearchReport
 from src.storage.vector_store import VectorStore
-from src.intelligence.rag_engine import RAGEngine
+from src.intelligence.rag_engine import RAGEngine, Citation
 from src.config import get_settings
 import ollama
 
@@ -74,7 +74,26 @@ class ResearchAgent:
         if not paper_content:
             return None
 
-        # 4. Persistence
+        # 4. Append Bibliography (Verifiable Citations)
+        paper_content += "\n\n## BIBLIOGRAPHY & VERIFICATION\n"
+        bib_items = []
+        for i, cit in enumerate(rag_response.citations if rag_response.citations else []):
+            source_num = i + 1
+            bib_items.append(
+                f"[^{source_num}]: {cit.video_title} - {cit.channel_name} "
+                f"([View @ {cit.timestamp_str}]({cit.youtube_link}))"
+            )
+        
+        if bib_items:
+            paper_content += "\n".join(bib_items)
+        else:
+            # Fallback for summary results
+            for i, res in enumerate(summary_results):
+                video = self.db.get_video(res["video_id"])
+                if video:
+                    paper_content += f"- {video.title} ([Video Link]({video.url}))\n"
+
+        # 5. Persistence
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         safe_query = "".join([c if c.isalnum() else "_" for c in query[:30]])
         filename = f"report_{safe_query}_{timestamp}.md"
@@ -112,7 +131,8 @@ class ResearchAgent:
            - CONTRASTING PERSPECTIVES (If any)
            - ACTIONABLE RECOMMENDATIONS
            - CONCLUSION
-        3. CITE YOUR SOURCES: Whenever mentioning an insight, use [Source Name] style.
+        3. CITE YOUR SOURCES: Whenever mentioning an insight, use Markdown footnotes [^1], [^2], etc.
+           These must correspond to the sources provided in the context blocks.
         4. Focus on SYNTHESIS: Don't just repeat the sources; connect the dots between them.
         
         OUTPUT FORMAT: Markdown.

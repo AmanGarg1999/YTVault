@@ -247,8 +247,12 @@ def init_db():
 @st.cache_resource
 def init_vs():
     """Initialize vector store (cached across reruns)."""
-    from src.storage.vector_store import VectorStore
-    return VectorStore()
+    try:
+        from src.storage.vector_store import VectorStore
+        return VectorStore()
+    except Exception as e:
+        logger.error(f"Failed to initialize VectorStore: {e}")
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -261,6 +265,7 @@ def check_service_health():
     health_status = {
         "database": False,
         "ollama": False,
+        "vector_store": False,
         "errors": []
     }
     
@@ -285,7 +290,9 @@ def check_service_health():
             health_status["ollama"] = True
     except Exception as e:
         health_status["errors"].append(f"Ollama: Service unavailable")
-    
+
+    # Check Vector Store (Direct check if instance exists and is ready)
+    # Note: We rely on the global 'vs' instance defined later
     return health_status
 
 
@@ -414,6 +421,13 @@ def run_repair_background():
             settings = get_settings()
             thread_db = SQLiteStore(settings["sqlite"]["path"])
             orchestrator = PipelineOrchestrator()
+            
+            def update_progress(current, total):
+                if unique_id in st._global_orchestrators:
+                    st._global_orchestrators[unique_id]["progress_current"] = current
+                    st._global_orchestrators[unique_id]["progress_total"] = total
+            
+            orchestrator.set_callbacks(on_progress=update_progress)
             orchestrator.repair_vault_health()
         except Exception as e:
             logger.error(f"Background repair failed: {e}", exc_info=True)
@@ -430,6 +444,9 @@ def run_repair_background():
         "thread": thread,
         "orchestrator": None,
         "start_time": time.time(),
+        "progress_current": 0,
+        "progress_total": 0,
+        "type": "repair"
     }
     thread.start()
     return unique_id
@@ -490,23 +507,35 @@ st.sidebar.markdown("""
 
 # Service Health Status
 with st.sidebar:
-    cols = st.columns(2)
+    cols = st.columns(3)
     with cols[0]:
         if health["database"]:
-            st.success("Database")
+            st.success("DB")
         else:
-            st.error("Database")
+            st.error("DB")
     
     with cols[1]:
         if health["ollama"]:
-            st.success("Ollama")
+            st.success("LLM")
         else:
-            st.warning("Ollama")
+            st.warning("LLM")
+            
+    with cols[2]:
+        if vs and hasattr(vs, 'is_ready') and vs.is_ready():
+            st.success("VEC")
+        elif vs and hasattr(vs, 'health') and vs.health.get('collections'):
+            # Partial health (some collections missing but object created)
+            st.warning("VEC")
+        else:
+            st.error("VEC")
     
-    if health["errors"]:
+    if health["errors"] or (vs and vs.health.get("errors")):
         with st.expander("Service Details"):
             for error in health["errors"]:
                 st.caption(error)
+            if vs and vs.health.get("errors"):
+                for error in vs.health["errors"]:
+                    st.caption(f"VectorStore: {error[:50]}")
 
 # Categorized Navigation Structure
 NAV_STRUCTURE = {
@@ -646,7 +675,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 PAGE_MAP = {
     "Dashboard": lambda: dashboard.render(db),
     "Ingestion Hub": lambda: ingestion_hub.render(db, run_pipeline_background, run_bulk_pipeline_background),
-    "Pipeline Center": lambda: pipeline_center.render(db, run_pipeline_background),
+    "Pipeline Center": lambda: pipeline_center.render(db, run_pipeline_background, run_repair_background, get_vault_diagnostics),
     "Review Center": lambda: reject_review.render(db),
     "Performance": lambda: performance_metrics.render(),
     "Intelligence Lab": lambda: intelligence_lab.render_intelligence_lab(db),

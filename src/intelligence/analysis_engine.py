@@ -49,13 +49,17 @@ class AnalysisEngine:
             current_peak = None
             
             # heatmap_data is typically a list of {start_time, end_time, score}
+            # or yt-dlp format: {start, end, value}
             for entry in heatmap_data:
-                score = entry.get("score", 0)
+                score = entry.get("score") if "score" in entry else entry.get("value", 0)
+                start = entry.get("start_time") if "start_time" in entry else entry.get("start", 0)
+                end = entry.get("end_time") if "end_time" in entry else entry.get("end", 0)
+                
                 if score >= threshold:
                     if current_peak is None:
                         current_peak = HeatmapPeak(
-                            start_time=entry["start_time"],
-                            end_time=entry["end_time"],
+                            start_time=start,
+                            end_time=end,
                             score=score
                         )
                     else:

@@ -471,53 +471,44 @@ class PipelineOrchestrator:
         
         if total_to_repair == 0:
             self._report_status("✅ Vault Health is 100%. No repairs needed.")
+            if self._on_progress:
+                self._on_progress(100, 100)
             return counts
             
         self._report_status(f"Repairing {total_to_repair} videos with identified gaps...")
         
         processed_ids = set()
         
-        # 0. Stuck in Discovery -> Reset to METADATA_HARVESTED (forces triage)
-        for video in stuck_discovery:
-            if video.video_id in processed_ids: continue
-            self._report_status(f"Repairing Stuck Discovery: {video.title[:40]}...")
-            self.db.update_checkpoint_stage(video.video_id, "METADATA_HARVESTED")
-            # We don't change triage_status manually, _resume_video -> _stage_triage will do it
-            video = self.db.get_video(video.video_id)
-            self._resume_video(video, "health_repair")
-            processed_ids.add(video.video_id)
+        def _do_repair(vids, label):
+            for video in vids:
+                if video.video_id in processed_ids: continue
+                self._report_status(f"Repairing {label}: {video.title[:40]}...")
+                
+                if label == "Stuck Discovery":
+                    self.db.update_checkpoint_stage(video.video_id, "METADATA_HARVESTED")
+                elif label == "Heatmap/MetaData":
+                    self.db.update_checkpoint_stage(video.video_id, "METADATA_HARVESTED")
+                elif label == "Transcript":
+                    self.db.update_checkpoint_stage(video.video_id, "TRIAGE_COMPLETE")
+                elif label == "Summary":
+                    chunks = self.db.get_chunks_for_video(video.video_id)
+                    if chunks:
+                        self.db.update_checkpoint_stage(video.video_id, "CHUNK_ANALYZED")
+                    else:
+                        self.db.update_checkpoint_stage(video.video_id, "TRIAGE_COMPLETE")
+                
+                v_to_resume = self.db.get_video(video.video_id)
+                self._resume_video(v_to_resume, "health_repair")
+                processed_ids.add(video.video_id)
+                
+                if self._on_progress:
+                    self._on_progress(len(processed_ids), total_to_repair)
 
-        # Process in priority order (Earliest stage gaps first)
-        # 1. Missing Heatmaps -> Reset to METADATA_HARVESTED
-        for video in missing_heatmaps:
-            if video.video_id in processed_ids: continue
-            self._report_status(f"Repairing Heatmap/MetaData: {video.title[:40]}...")
-            self.db.update_checkpoint_stage(video.video_id, "METADATA_HARVESTED")
-            video = self.db.get_video(video.video_id)
-            self._resume_video(video, "health_repair")
-            processed_ids.add(video.video_id)
-
-        # 2. Missing Transcripts -> Reset to TRIAGE_COMPLETE
-        for video in missing_transcripts:
-            if video.video_id in processed_ids: continue
-            self._report_status(f"Repairing Transcript: {video.title[:40]}...")
-            self.db.update_checkpoint_stage(video.video_id, "TRIAGE_COMPLETE")
-            video = self.db.get_video(video.video_id)
-            self._resume_video(video, "health_repair")
-            processed_ids.add(video.video_id)
-            
-        # 3. Missing Summaries -> Reset to CHUNK_ANALYZED (if chunks exist) or TRIAGE_COMPLETE
-        for video in missing_summaries:
-            if video.video_id in processed_ids: continue
-            self._report_status(f"Repairing Summary: {video.title[:40]}...")
-            chunks = self.db.get_chunks_for_video(video.video_id)
-            if chunks:
-                self.db.update_checkpoint_stage(video.video_id, "CHUNK_ANALYZED")
-            else:
-                self.db.update_checkpoint_stage(video.video_id, "TRIAGE_COMPLETE")
-            video = self.db.get_video(video.video_id)
-            self._resume_video(video, "health_repair")
-            processed_ids.add(video.video_id)
+        # Process in priority order
+        _do_repair(stuck_discovery, "Stuck Discovery")
+        _do_repair(missing_heatmaps, "Heatmap/MetaData")
+        _do_repair(missing_transcripts, "Transcript")
+        _do_repair(missing_summaries, "Summary")
             
         self._report_status(f"Vault Health Repair completed for {len(processed_ids)} videos.")
         return counts
@@ -784,6 +775,7 @@ class PipelineOrchestrator:
                     status=result.decision.value,
                     reason=result.reason,
                     confidence=result.confidence,
+                    is_tutorial=result.is_tutorial,
                 )
                 log_level = "SUCCESS" if result.decision.value == "ACCEPTED" else "INFO"
                 self.db.log_pipeline_event(

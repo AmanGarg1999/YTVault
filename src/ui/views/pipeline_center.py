@@ -9,23 +9,46 @@ import streamlit as st
 logger = logging.getLogger(__name__)
 
 
-def render(db, run_pipeline_background):
-    """Render the unified Pipeline Center with monitoring, control, and logging."""
-    
+def render(db, run_pipeline_background, run_repair=None, get_diagnostics=None):
+    """Render the Pipeline Control Center."""
     st.markdown("""
     <div class="main-header">
-        <h1>Pipeline Center</h1>
-        <p>Monitor active scans, manage processing, and view real-time pipeline logs</p>
+        <h1>Pipeline Control Center</h1>
+        <p>Monitor active harvests, manage the queue, and handle failures</p>
     </div>
     """, unsafe_allow_html=True)
+
+    # =====================================================================
+    # GLOBAL CONTROLS
+    # =====================================================================
+    with st.container(border=True):
+        col1, col2, col3 = st.columns([2, 1, 1])
+        with col1:
+            st.markdown("### Global Queue Controls")
+            st.caption("Control all active discovery and ingestion tasks simultaneously.")
+        
+        with col2:
+            if st.button("RUN ALL PENDING", type="primary", use_container_width=True):
+                count = db.set_global_control_state("RUNNING")
+                st.success(f"Signaled {count} scans to RESUME")
+                st.rerun()
+        
+        with col3:
+            if st.button("STOP ALL SCANS", type="secondary", use_container_width=True):
+                count = db.set_global_control_state("STOPPED", "Global stop requested")
+                st.warning(f"Signaled {count} scans to STOP")
+                st.rerun()
+
+    st.markdown("<br>", unsafe_allow_html=True)
 
     try:
         # =====================================================================
         # TABS: Monitor, Control, Logs
         # =====================================================================
-        tab_monitor, tab_control, tab_logs = st.tabs([
+        tab_monitor, tab_control, tab_maintenance, tab_logs = st.tabs([
             "Active Scans",
             "Control",
+            "Health & Maintenance",
             "Logs"
         ])
 
@@ -42,7 +65,13 @@ def render(db, run_pipeline_background):
             render_control_tab(db, run_pipeline_background)
 
         # =====================================================================
-        # TAB 3: LOGS - Live activity feed
+        # TAB 3: MAINTENANCE - Vault health and repair
+        # =====================================================================
+        with tab_maintenance:
+            render_maintenance_tab(db, run_repair, get_diagnostics)
+
+        # =====================================================================
+        # TAB 4: LOGS - Live activity feed
         # =====================================================================
         with tab_logs:
             render_logs_tab(db)
@@ -345,7 +374,11 @@ def render_logs_tab(db):
         )
     
     # Fetch logs
-    scan_id = None if scan_filter == "All" else scan_filter
+    scan_id = None
+    if scan_filter != "All":
+        import re
+        match = re.search(r"\(([^)]+)\)$", scan_filter)
+        scan_id = match.group(1) if match else scan_filter
     
     logs = db.get_logs(scan_id=scan_id, limit=log_limit)
     logs = [log for log in logs if log.level in level_filter]
@@ -407,12 +440,84 @@ LANGUAGE_MAP = {
 
 
 def _get_active_scans(db):
-    """Get list of active scan IDs for dropdown."""
+    """Get list of active scan labels (Channel Name + ID)."""
     try:
         scans = db.get_active_scans()
-        return [s.scan_id for s in scans]
+        return [f"{s.channel_name} ({s.scan_id})" for s in scans]
     except:
         return []
+
+
+def render_maintenance_tab(db, run_repair, get_diagnostics):
+    """Tab 3: Vault health checkpoints and systematic repair."""
+    st.markdown("### Vault Health & Systematic Repair")
+    
+    # Check for active background repair
+    active_repair = None
+    if hasattr(st, "_global_orchestrators"):
+        for rid, info in st._global_orchestrators.items():
+            if info.get("type") == "repair":
+                active_repair = info
+                break
+    
+    if active_repair:
+        current = active_repair.get("progress_current", 0)
+        total = active_repair.get("progress_total", 0)
+        
+        if total > 0:
+            progress = current / total
+            st.info(f"**Vault Repair in Progress...** (Processed {current}/{total} videos)")
+            st.progress(progress)
+        else:
+            st.info("**Vault Repair Initializing...**")
+            st.progress(0.0)
+        
+        if st.button("REFRESH STATUS", key="refresh_repair_pc"):
+            st.rerun()
+        st.markdown("---")
+
+    if get_diagnostics:
+        diag = get_diagnostics(db)
+        
+        # Health Overview Metrics
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Total Videos", diag["total"])
+        with col2:
+            st.metric("Transcripts", f"{diag['pct_transcripts']}%", delta=f"-{diag['missing_transcripts']} missing" if diag['missing_transcripts'] else None, delta_color="inverse")
+        with col3:
+            st.metric("Summaries", f"{diag['pct_summaries']}%", delta=f"-{diag['missing_summaries']} missing" if diag['missing_summaries'] else None, delta_color="inverse")
+        with col4:
+            st.metric("Heatmaps", f"{diag['pct_heatmaps']}%", delta=f"-{diag['missing_heatmaps']} missing" if diag['missing_heatmaps'] else None, delta_color="inverse")
+        
+        # Progress Bars
+        st.write("#### Data Coverage")
+        st.progress(diag['pct_transcripts'] / 100, text=f"Transcripts: {diag['pct_transcripts']}%")
+        st.progress(diag['pct_summaries'] / 100, text=f"Summaries: {diag['pct_summaries']}%")
+        st.progress(diag['pct_heatmaps'] / 100, text=f"Heatmaps: {diag['pct_heatmaps']}%")
+        
+        st.info("""
+        **Vault Repair** systematically fixes identified gaps:
+        - **Missing Transcripts**: Resets videos to re-fetch transcripts.
+        - **Missing Summaries**: Triggers the new Map-Reduce summarization stage.
+        - **Missing Heatmaps**: Refreshes metadata to include audience interest heatmaps.
+        """)
+        
+        if st.button("RUN FULL VAULT REPAIR", type="primary", use_container_width=True, key="run_repair_pc"):
+            if run_repair:
+                run_repair()
+                st.success("Unified Vault Repair started in background!")
+                st.toast("Vault health repair in progress...")
+                db.log_pipeline_event(
+                    level="INFO",
+                    message="Manual full vault health repair started",
+                    stage="REPAIR"
+                )
+                st.rerun()
+            else:
+                st.error("Repair runner not available")
+    else:
+        st.warning("Diagnostics engine not available")
 
 
 def _relative_time(dt: datetime) -> str:

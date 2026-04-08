@@ -66,8 +66,15 @@ def render(db):
                 "delta_color": "info"
             },
             {
-                "value": f"{(stats.get('done', 0) / max(stats.get('total_videos', 1), 1) * 100):.0f}%",
-                "label": "Health Index",
+                "value": f"{(stats.get('done', 0) / max(stats.get('accepted', 1), 1) * 100):.0f}%",
+                "label": "Content Readiness",
+                "delta": "Vault Health",
+                "delta_color": "positive"
+            },
+            {
+                "value": f"{((stats.get('done', 0) + stats.get('rejected', 0)) / max(stats.get('total_videos', 1), 1) * 100):.0f}%",
+                "label": "Pipeline Coverage",
+                "delta": "Queue Handled",
                 "delta_color": "info"
             }
         ]
@@ -136,27 +143,34 @@ def render(db):
         
         total = stats.get("total_videos", 0)
         if total > 0:
+            # Calculate progress based on ACCEPTED videos (what matters for research)
+            accepted = stats.get("accepted", 0)
             done = stats.get("done", 0)
-            progress = done / total
             
-            # Detailed progress breakdown
-            progress_data = {
-                "Total Videos": total,
-                "Completed": done,
-                "In Progress": stats.get("in_progress", 0),
-                "Pending": stats.get("pending", 0),
-                "Rejected": stats.get("rejected", 0),
-            }
-            
-            col_a, col_b = st.columns([2, 1])
+            col_a, col_b = st.columns(2)
             with col_a:
-                # Clamp progress between 0 and 1.0 to avoid Streamlit ValueError
-                safe_progress = max(0.0, min(1.0, progress))
-                st.progress(safe_progress, text=f"Overall Progress: {done}/{total} ({progress:.0%})")
+                if accepted > 0:
+                    progress = done / accepted
+                    safe_progress = max(0.0, min(1.0, progress))
+                    st.progress(safe_progress, text=f"Research Readiness: {done}/{accepted} ({progress:.0%})")
+                else:
+                    st.progress(0.0, text="Research Readiness: 0/0 (0%)")
+            
             with col_b:
-                st.markdown(f"**Est. Time Remaining:** {stats.get('eta_minutes', 'N/A')} min" if stats.get('eta_minutes') else "**ETA:** Computing...")
+                eta = stats.get('eta_minutes', 0)
+                if eta > 0:
+                    st.markdown(f"**Est. Time Remaining:** {eta} min")
+                else:
+                    st.markdown("**Status:** System Synchronized")
             
             with st.expander("Detailed Pipeline Breakdown"):
+                progress_data = {
+                    "Discovered videos": stats.get("discovered", 0),
+                    "Accepted for index": stats.get("accepted", 0),
+                    "Processing complete": stats.get("done", 0),
+                    "Pending triage": stats.get("pending", 0),
+                    "Currently in-flight": stats.get("in_progress", 0)
+                }
                 key_value_display(progress_data)
         else:
             warning_card("No Videos Ingested Yet", "Start a Harvest from the Harvest Manager to begin processing YouTube content.")

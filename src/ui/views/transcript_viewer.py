@@ -44,27 +44,55 @@ def render_single_transcript(db: SQLiteStore):
     
     st.subheader("View Single Transcript")
     
-    # Select video
-    videos = db.execute("""
-        SELECT v.video_id, v.title, c.name as channel, v.upload_date, v.duration_seconds
-        FROM videos v
-        JOIN channels c ON v.channel_id = c.channel_id
-        WHERE v.video_id IN (SELECT DISTINCT video_id FROM transcript_chunks)
-        ORDER BY v.upload_date DESC
-        LIMIT 100
-    """).fetchall()
+    # =====================================================================
+    # Navigation & Video Selection (Scalable)
+    # =====================================================================
+    st.markdown("### Select Video to View")
     
-    if not videos:
-        st.warning("No processed videos found. Run the pipeline first.")
+    # Fetch all accepted videos
+    all_videos = db.get_videos_by_status("ACCEPTED", limit=2000)
+    
+    if not all_videos:
+        st.info("No accepted videos found. Process some videos first!")
+        return
+
+    # Selection Logic using cards
+    if "selected_transcript_vid" not in st.session_state:
+        st.session_state.selected_transcript_vid = None
+
+    # Search filter
+    search_query = st.text_input("🔍 Search videos...", placeholder="Type to filter titles or channels...", key="transcript_vid_search")
+    
+    filtered_vids = all_videos
+    if search_query:
+        filtered_vids = [v for v in all_videos if search_query.lower() in v.title.lower() or search_query.lower() in v.channel_id.lower()]
+    
+    # Display results as a grid of selection cards
+    if filtered_vids:
+        st.write(f"Showing {len(filtered_vids[:12])} of {len(filtered_vids)} videos")
+        cols = st.columns(3)
+        for i, video in enumerate(filtered_vids[:12]):
+            with cols[i % 3]:
+                with st.container(border=True):
+                    st.caption(video.channel_id[:20])
+                    st.markdown(f"**{video.title[:60]}...**")
+                    if st.button("VIEW TRANSCRIPT", key=f"sel_vid_{video.video_id}", use_container_width=True):
+                        st.session_state.selected_transcript_vid = video.video_id
+                        st.rerun()
+
+    if not st.session_state.selected_transcript_vid:
+        st.info("Select a video from the grid above to view its transcript.")
+        return
+
+    selected_vid_id = st.session_state.selected_transcript_vid
+    
+    video = db.get_video(selected_vid_id)
+    
+    if not video:
+        st.error("Selected video not found.")
         return
     
-    video_options = {
-        f"{v['title'][:60]} ({v['channel']}, {v['upload_date']})": v['video_id']
-        for v in videos
-    }
-    
-    selected = st.selectbox("Select Video", video_options.keys())
-    video_id = video_options[selected]
+    video_id = video.video_id
     
     # Fetch transcript
     transcript = db.get_full_transcript(video_id)
@@ -274,31 +302,48 @@ def render_compare_transcripts(db: SQLiteStore):
         JOIN channels c ON v.channel_id = c.channel_id
         WHERE v.video_id IN (SELECT DISTINCT video_id FROM transcript_chunks)
         ORDER BY v.upload_date DESC
-        LIMIT 100
+        LIMIT 2000
     """).fetchall()
     
     if not videos:
         st.warning("No processed videos found")
         return
     
-    video_options = {
-        f"{v['title'][:50]} ({v['channel']}, {v['upload_date']})": v['video_id']
-        for v in videos
-    }
+    if "compare_list" not in st.session_state:
+        st.session_state.compare_list = []
     
-    st.write("Select 2-3 videos to compare side-by-side")
+    st.write("Add 2-3 videos to your comparison list")
     
-    selected_ids = st.multiselect(
-        "Videos to compare",
-        video_options.keys(),
-        max_selections=3
-    )
+    col_search, col_reset = st.columns([4, 1])
+    with col_search:
+        search_q = st.text_input("🔍 Search for videos to compare...", placeholder="Search vidoes...", key="compare_search")
+    with col_reset:
+        if st.button("Reset List", use_container_width=True):
+            st.session_state.compare_list = []
+            st.rerun()
+
+    # Filtered list
+    filtered_compare = [v for v in videos if search_q.lower() in v['title'].lower()] if search_q else videos[:10]
     
-    if len(selected_ids) < 2:
-        st.info("Select at least 2 videos to compare")
+    if filtered_compare:
+        cols = st.columns(2)
+        for i, v in enumerate(filtered_compare[:6]):
+            with cols[i % 2]:
+                with st.container(border=True):
+                    st.markdown(f"**{v['title'][:60]}...**")
+                    st.caption(f"{v['channel']} | {v['upload_date']}")
+                    if v['video_id'] in st.session_state.compare_list:
+                        st.success("Selected")
+                    elif len(st.session_state.compare_list) < 3:
+                        if st.button("Select", key=f"comp_sel_{v['video_id']}", use_container_width=True):
+                            st.session_state.compare_list.append(v['video_id'])
+                            st.rerun()
+
+    if len(st.session_state.compare_list) < 2:
+        st.info(f"Comparison list: {len(st.session_state.compare_list)}/3 selected. Select at least 2 videos.")
         return
     
-    video_ids = [video_options[sel] for sel in selected_ids]
+    video_ids = st.session_state.compare_list
     transcripts = db.compare_transcripts(video_ids)
     
     if not transcripts:

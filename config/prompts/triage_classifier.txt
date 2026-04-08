@@ -13,4 +13,11 @@ classify it into exactly ONE category:
   could be educational or entertainment depending on the actual transcript.
 
 Respond with ONLY a valid JSON object (no markdown, no explanation):
-{"category": "KNOWLEDGE|NOISE|AMBIGUOUS", "confidence": 0.0-1.0, "reason": "brief one-line explanation"}
+{
+  "category": "KNOWLEDGE|NOISE|AMBIGUOUS", 
+  "confidence": 0.0-1.0, 
+  "reason": "brief one-line explanation",
+  "is_tutorial": true|false
+}
+
+Note: Set "is_tutorial": true only if the content is a step-by-step guide, instructional walkthrough, or specific HOW-TO session.

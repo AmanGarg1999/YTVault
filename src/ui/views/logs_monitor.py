@@ -55,7 +55,11 @@ def render(db):
             )
         
         # Fetch logs
-        scan_id = None if scan_filter == "All" else scan_filter
+        scan_id = None
+        if scan_filter != "All":
+            import re
+            match = re.search(r"\(([^)]+)\)$", scan_filter)
+            scan_id = match.group(1) if match else scan_filter
         
         logs = db.get_logs(scan_id=scan_id, limit=log_limit)
         logs = [log for log in logs
@@ -74,11 +78,27 @@ def render(db):
                 }
                 icon = icon_map.get(log.level, "•")
                 
+                # Get video/channel titles for display
+                video_title = "—"
+                if log.video_id:
+                    v = db.get_video(log.video_id)
+                    video_title = v.title[:40] + "..." if v else log.video_id[:12]
+                
+                channel_name = "—"
+                if log.channel_id:
+                    c = db.get_channel(log.channel_id)
+                    channel_name = c.name if c else log.channel_id[:12]
+                elif log.scan_id:
+                    # Try to infer channel from scan_id if possible
+                    # (This is a bit slow, but only for the first page of logs)
+                    pass
+
                 log_data.append({
                     "Time": log.timestamp,
                     "Level": f"{icon} {log.level}",
                     "Stage": log.stage or "—",
-                    "Video": log.video_id[:12] + "..." if log.video_id else "—",
+                    "Channel": channel_name,
+                    "Video": video_title,
                     "Message": log.message[:80] + "..." if len(log.message) > 80 else log.message,
                 })
             
@@ -339,10 +359,11 @@ def render(db):
 
 
 def _get_active_scans(db) -> list[str]:
-    """Get list of active scan IDs."""
+    """Get list of active scan labels (Channel Name + ID)."""
     try:
         active = db.get_active_scans()
-        return [scan.scan_id for scan in active]
+        # Return as "Channel Name (scan_id)"
+        return [f"{scan.channel_name} ({scan.scan_id})" for scan in active]
     except Exception as e:
         logger.debug(f"Could not get active scans: {e}")
         return []

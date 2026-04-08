@@ -67,6 +67,7 @@ class Video:
     category: str = ""
     thumbnail_url: str = ""
     heatmap_json: str = "[]"
+    is_tutorial: bool = False
 
     def __post_init__(self):
         """Handle potential data migration or extra fields."""
@@ -622,9 +623,12 @@ SCHEMA_MIGRATIONS = [
     """),
     # Version 22: P1-E — Claim Corroboration & Clustering
     (22, """
-        ALTER TABLE claims ADD COLUMN corroboration_count INTEGER DEFAULT 1;
         ALTER TABLE claims ADD COLUMN cluster_id TEXT DEFAULT NULL;
         CREATE INDEX IF NOT EXISTS idx_claims_cluster ON claims(cluster_id);
+    """),
+    # Version 23: Tutorial classification for Blueprints
+    (23, """
+        ALTER TABLE videos ADD COLUMN is_tutorial BOOLEAN DEFAULT 0;
     """),
 ]
 
@@ -689,6 +693,10 @@ class SQLiteStore:
                 )
                 self.conn.commit()
                 logger.info(f"Applied migration v{version}")
+                
+                # Backfill FTS5 after its version is applied
+                if version == 2:
+                    self.populate_fts_index()
             except Exception as e:
                 logger.error(f"Migration v{version} failed: {e}")
                 raise
@@ -872,15 +880,15 @@ class SQLiteStore:
         return result
 
     def update_triage_status(
-        self, video_id: str, status: str, reason: str = "", confidence: float = 0.0
+        self, video_id: str, status: str, reason: str = "", confidence: float = 0.0, is_tutorial: bool = False
     ) -> None:
-        """Update a video's triage status."""
+        """Update a video's triage status and tutorial classification."""
         self.conn.execute(
             """UPDATE videos
                SET triage_status = ?, triage_reason = ?, triage_confidence = ?,
-                   updated_at = CURRENT_TIMESTAMP
+                   is_tutorial = ?, updated_at = CURRENT_TIMESTAMP
                WHERE video_id = ?""",
-            (status, reason, confidence, video_id),
+            (status, reason, confidence, int(is_tutorial), video_id),
         )
         self.conn.commit()
 
@@ -1419,12 +1427,13 @@ class SQLiteStore:
         return ActionableBlueprint(**dict(row)) if row else None
 
     def get_all_blueprints(self) -> list[dict]:
-        """Get all blueprints with video titles."""
+        """Get all blueprints with video titles, filtered by tutorial status."""
         rows = self.conn.execute(
             """SELECT b.*, v.title, c.name as channel_name 
                FROM actionable_blueprints b
                JOIN videos v ON b.video_id = v.video_id
                JOIN channels c ON v.channel_id = c.channel_id
+               WHERE v.is_tutorial = 1
                ORDER BY b.created_at DESC"""
         ).fetchall()
         return [dict(r) for r in rows]
@@ -1924,12 +1933,9 @@ class SQLiteStore:
             ORDER BY chunk_index ASC
         """, (video_id,)).fetchall()
         
-        if not chunks:
-            return None
-        
-        # Reconstruct transcript
-        full_raw = " ".join([c['raw_text'] for c in chunks])
-        full_cleaned = " ".join([c['cleaned_text'] for c in chunks])
+        # Reconstruct transcript with null safety
+        full_raw = " ".join([c['raw_text'] or "" for c in chunks]) if chunks else ""
+        full_cleaned = " ".join([c['cleaned_text'] or "" for c in chunks]) if chunks else ""
         
         channel = self.get_channel(video.channel_id)
         
@@ -1943,8 +1949,8 @@ class SQLiteStore:
             "transcript_strategy": video.transcript_strategy,
             "full_raw_text": full_raw,
             "full_cleaned_text": full_cleaned,
-            "chunks": chunks,
-            "total_chunks": len(chunks)
+            "chunks": chunks or [],
+            "total_chunks": len(chunks) if chunks else 0
         }
     
     def get_chunk(self, chunk_id: str) -> Optional[TranscriptChunk]:
@@ -1957,7 +1963,27 @@ class SQLiteStore:
         return None
 
     def search_transcript(self, video_id: str, search_term: str) -> list[dict]:
-        """Find occurrences of a term in a video's transcript."""
+        """Find occurrences of a term in a video's transcript (using FTS5 if possible)."""
+        try:
+            # P1: Try FTS5 first for phrase support and snippets
+            results = self.execute("""
+                SELECT chunk_id, video_id, 
+                       snippet(chunks_fts, 2, '**', '**', '...', 30) AS snippet,
+                       (SELECT chunk_index FROM transcript_chunks WHERE rowid = chunks_fts.rowid) as chunk_index,
+                       (SELECT start_timestamp FROM transcript_chunks WHERE rowid = chunks_fts.rowid) as start_timestamp,
+                       (SELECT end_timestamp FROM transcript_chunks WHERE rowid = chunks_fts.rowid) as end_timestamp,
+                       (SELECT cleaned_text FROM transcript_chunks WHERE rowid = chunks_fts.rowid) as cleaned_text
+                FROM chunks_fts
+                WHERE video_id = ? AND content MATCH ?
+                ORDER BY rank ASC
+            """, (video_id, search_term)).fetchall()
+            
+            if results:
+                return [dict(r) for r in results]
+        except Exception as e:
+            logger.debug(f"FTS5 search_transcript failed (falling back to LIKE): {e}")
+
+        # Fallback to basic LIKE
         results = self.execute("""
             SELECT chunk_id, chunk_index, cleaned_text, raw_text,
                    start_timestamp, end_timestamp, word_count
@@ -1967,7 +1993,7 @@ class SQLiteStore:
             ORDER BY chunk_index ASC
         """, (video_id, f"%{search_term}%", f"%{search_term}%")).fetchall()
         
-        return results
+        return [dict(r) for r in results]
     
     def get_transcript_at_timestamp(self, video_id: str, seconds: float, 
                                      context_seconds: int = 30) -> Optional[dict]:
@@ -2001,7 +2027,31 @@ class SQLiteStore:
         return transcripts
     
     def search_all_transcripts(self, search_term: str, limit: int = 100) -> list[dict]:
-        """Global search across all transcripts."""
+        """Global search across all transcripts with enhanced relevance ranking."""
+        try:
+            results = self.execute("""
+                SELECT 
+                    tc.video_id,
+                    v.title,
+                    c.name as channel,
+                    COUNT(DISTINCT tc.chunk_id) as chunk_count,
+                    MIN(rank) as min_score
+                FROM chunks_fts fts
+                JOIN transcript_chunks tc ON fts.rowid = tc.rowid
+                JOIN videos v ON tc.video_id = v.video_id
+                JOIN channels c ON v.channel_id = c.channel_id
+                WHERE fts.content MATCH ?
+                GROUP BY tc.video_id
+                ORDER BY min_score ASC, chunk_count DESC, v.upload_date DESC
+                LIMIT ?
+            """, (search_term, limit)).fetchall()
+            
+            if results:
+                return [dict(r) for r in results]
+        except Exception as e:
+            logger.debug(f"FTS5 search_all_transcripts failed (falling back to LIKE): {e}")
+
+        # Fallback to basic LIKE
         results = self.execute("""
             SELECT DISTINCT
                 tc.video_id,
@@ -2017,7 +2067,7 @@ class SQLiteStore:
             LIMIT ?
         """, (f"%{search_term}%", f"%{search_term}%", limit)).fetchall()
         
-        return results
+        return [dict(r) for r in results]
 
     def update_scan_checkpoint(
         self, scan_id: str, total_discovered: int = 0,
@@ -2084,46 +2134,46 @@ class SQLiteStore:
         return ScanCheckpoint(**dict(row))
 
     def get_active_scans(self) -> list[ScanCheckpoint]:
-        """Get all in-progress scans with human-readable channel names."""
-        sql = """
-            SELECT 
-                s.*, 
-                (
-                    SELECT name FROM channels WHERE url = s.source_url
-                    UNION
-                    SELECT c.name FROM channels c
-                    JOIN videos v ON c.channel_id = v_ch.channel_id -- Wait, small error in my thought, fixing below
-                    WHERE v.url = s.source_url
-                    LIMIT 1
-                ) as channel_name
-            FROM scan_checkpoints s
-            WHERE s.status = 'IN_PROGRESS'
-            GROUP BY s.scan_id
-            ORDER BY s.started_at DESC
-        """
-        # Actually, let me simplify and fix the join logic in the subquery
-        sql = """
-            SELECT 
-                s.*, 
-                COALESCE(
-                    (SELECT name FROM channels WHERE url = s.source_url LIMIT 1),
-                    (SELECT c.name FROM channels c 
-                     JOIN videos v ON c.channel_id = v.channel_id 
-                     WHERE v.url = s.source_url LIMIT 1),
-                    'Unknown Source'
-                ) as channel_name
-            FROM scan_checkpoints s
-            WHERE s.status = 'IN_PROGRESS'
-            AND s.started_at = (
-                SELECT MAX(started_at) 
-                FROM scan_checkpoints 
-                WHERE source_url = s.source_url AND status = 'IN_PROGRESS'
-            )
-            GROUP BY s.source_url
-            ORDER BY s.started_at DESC
-        """
-        rows = self.conn.execute(sql).fetchall()
-        return [ScanCheckpoint(**dict(r)) for r in rows]
+
+        """Get all currently running scans with their metadata, strictly deduplicated."""
+        try:
+            # P0: Strictly deduplicate by picking THE latest scan ID for every source_url
+            # P1: Improved channel name resolution fallback
+            sql = """
+                SELECT 
+                    s.*, 
+                    COALESCE(
+                        (SELECT name FROM channels WHERE url = s.source_url OR channel_id = s.source_url LIMIT 1),
+                        (SELECT c.name FROM channels c 
+                         JOIN videos v ON c.channel_id = v.channel_id 
+                         WHERE v.url = s.source_url LIMIT 1),
+                        'Generic Scan'
+                    ) as channel_name
+                FROM scan_checkpoints s
+                WHERE s.id IN (
+                    SELECT MAX(id) 
+                    FROM scan_checkpoints 
+                    WHERE status = 'IN_PROGRESS' 
+                    GROUP BY source_url
+                )
+                ORDER BY s.started_at DESC
+            """
+            rows = self.conn.execute(sql).fetchall()
+            return [ScanCheckpoint(**dict(row)) for row in rows]
+        except Exception as e:
+            logger.error(f"Failed to get active scans: {e}")
+            return []
+
+    def set_global_control_state(self, status: str, pause_reason: str = None):
+        """Set control state for ALL active scans."""
+        try:
+            active = self.get_active_scans()
+            for scan in active:
+                self.set_control_state(scan.scan_id, status, pause_reason)
+            return len(active)
+        except Exception as e:
+            logger.error(f"Failed to set global control state: {e}")
+            return 0
 
     def get_active_scan_for_url(self, url: str) -> Optional[ScanCheckpoint]:
         """Check if there is already an active scan for this URL."""
@@ -2232,29 +2282,50 @@ class SQLiteStore:
     # -------------------------------------------------------------------
 
     def get_pipeline_stats(self) -> dict:
-        """Get aggregate pipeline statistics for the dashboard."""
+        """Get aggregate pipeline statistics for the dashboard with intuitive mapping."""
         stats = {}
-        # Basic video states
-        for status in ["DISCOVERED", "ACCEPTED", "REJECTED", "PENDING_REVIEW"]:
-            row = self.conn.execute(
-                "SELECT COUNT(*) as cnt FROM videos WHERE triage_status = ?",
-                (status,),
-            ).fetchone()
-            stats[status.lower()] = row["cnt"]
-
-        # Checkpoint stages (Intelligence targets)
-        for stage in ["METADATA_HARVESTED", "TRIAGE_COMPLETE", "DONE", "SUMMARIZED"]:
-            row = self.conn.execute(
-                "SELECT COUNT(*) as cnt FROM videos WHERE checkpoint_stage = ?",
-                (stage,),
-            ).fetchone()
-            stats[stage.lower()] = row["cnt"]
-
-        # Totals
+        
+        # 1. Total counts
         stats["total_videos"] = self.conn.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
         stats["total_channels"] = self.conn.execute("SELECT COUNT(*) FROM channels").fetchone()[0]
         stats["total_subscribers"] = self.conn.execute("SELECT SUM(follower_count) FROM channels").fetchone()[0] or 0
         stats["total_summaries"] = self.conn.execute("SELECT COUNT(*) FROM video_summaries").fetchone()[0]
+        stats["total_chunks"] = self.conn.execute("SELECT COUNT(*) FROM transcript_chunks").fetchone()[0]
+        
+        # 2. Triage states
+        res = self.conn.execute(
+            "SELECT triage_status, COUNT(*) as cnt FROM videos GROUP BY triage_status"
+        ).fetchall()
+        triage_map = {row["triage_status"]: row["cnt"] for row in res}
+        
+        stats["discovered"] = triage_map.get("DISCOVERED", 0)
+        stats["accepted"] = triage_map.get("ACCEPTED", 0)
+        stats["rejected"] = triage_map.get("REJECTED", 0)
+        stats["pending_review"] = triage_map.get("PENDING_REVIEW", 0)
+        
+        # 3. Checkpoint stages
+        res = self.conn.execute(
+            "SELECT checkpoint_stage, COUNT(*) as cnt FROM videos GROUP BY checkpoint_stage"
+        ).fetchall()
+        stage_map = {row["checkpoint_stage"]: row["cnt"] for row in res}
+        
+        stats["metadata_harvested"] = stage_map.get("METADATA_HARVESTED", 0)
+        stats["triage_complete"] = stage_map.get("TRIAGE_COMPLETE", 0)
+        stats["done"] = stage_map.get("DONE", 0) + stage_map.get("SUMMARIZED", 0) + stage_map.get("GRAPH_SYNCED", 0)
+        
+        # 4. Derived metrics for Dashboard
+        # "Pending" in dashboard usually means videos discovered but not yet handled
+        stats["pending"] = stats["discovered"] + stats["pending_review"]
+        
+        # "In Progress" means accepted but not yet DONE
+        stats["in_progress"] = self.conn.execute(
+            """SELECT COUNT(*) FROM videos 
+               WHERE triage_status = 'ACCEPTED' 
+                 AND checkpoint_stage NOT IN ('DONE', 'SUMMARIZED', 'GRAPH_SYNCED')"""
+        ).fetchone()[0]
+        
+        # ETA calculation (very rough: 30s per in-progress video)
+        stats["eta_minutes"] = max(1, (stats["in_progress"] * 30) // 60) if stats["in_progress"] > 0 else 0
         
         return stats
 

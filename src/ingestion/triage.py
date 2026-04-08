@@ -34,6 +34,7 @@ class TriageResult:
     decision: TriageDecision
     reason: str
     confidence: float = 1.0
+    is_tutorial: bool = False
     phase: str = "rule"       # "rule" or "llm"
     latency_ms: float = 0.0
 
@@ -226,6 +227,7 @@ class TriageEngine:
         """Helper to convert parsed LLM JSON to TriageResult."""
         category = str(parsed.get("category", "AMBIGUOUS")).upper()
         confidence = float(parsed.get("confidence", 0.0))
+        is_tutorial = bool(parsed.get("is_tutorial", False))
 
         if category == "KNOWLEDGE" and confidence >= self.confidence_threshold:
             decision = TriageDecision.ACCEPT
@@ -234,11 +236,12 @@ class TriageEngine:
         else:
             decision = TriageDecision.PENDING
 
-        logger.debug(f"Triage Result for {video.video_id}: {decision.value} ({confidence:.2f})")
+        logger.debug(f"Triage Result for {video.video_id}: {decision.value} ({confidence:.2f}), is_tutorial: {is_tutorial}")
         return TriageResult(
             decision=decision,
             reason=parsed.get("reason", "llm_classification"),
             confidence=confidence,
+            is_tutorial=is_tutorial,
             phase="llm",
             latency_ms=latency_ms,
         )

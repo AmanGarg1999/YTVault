@@ -27,7 +27,7 @@ from src.ui.views import (
     explorer, guest_intel, export_center,
     logs_monitor, data_management, reject_review,
     transcript_viewer, performance_metrics, comparative_lab,
-    topic_explorer, blueprint_center, research_agent_view
+    topic_explorer, blueprint_center, research_agent_view, monitoring_hub
 )
 
 from src.ui.components.ui_helpers import action_confirmation_dialog, failure_confirmation_dialog
@@ -583,6 +583,7 @@ NAV_STRUCTURE = {
     "Discover": [
         "Dashboard", 
         "Ingestion Hub", 
+        "Monitoring Hub",
         "Review Center",
     ],
     "Analyze": [
@@ -733,6 +734,7 @@ PAGE_MAP = {
     "Blueprint Center": lambda: blueprint_center.render(db),
     "Transcripts": lambda: transcript_viewer.render(db),
     "Export & Integration": lambda: export_center.render(db),
+    "Monitoring Hub": lambda: monitoring_hub.render(db),
     "Settings": lambda: data_management.render(db, run_repair_background, get_vault_diagnostics),
 }
 

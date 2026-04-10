@@ -235,6 +235,21 @@ class ResearchReport:
 
 
 @dataclass
+class MonitoredChannel:
+    channel_id: str
+    last_brief_at: Optional[str] = None
+    created_at: str = ""
+
+
+@dataclass
+class WeeklyBrief:
+    brief_id: int = 0
+    channel_ids_json: str = "[]"
+    content: str = ""
+    created_at: str = ""
+
+
+@dataclass
 class PipelineLog:
     """Pipeline activity log entry."""
     log_id: int = 0
@@ -640,6 +655,20 @@ SCHEMA_MIGRATIONS = [
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_user_queue_type ON user_queue(item_type);
+    """),
+    # Version 25: Phase 4 Intelligence (Monitored Channels, Weekly Briefs)
+    (25, """
+        CREATE TABLE IF NOT EXISTS monitored_channels (
+            channel_id    TEXT PRIMARY KEY REFERENCES channels(channel_id),
+            last_brief_at DATETIME,
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS weekly_briefs (
+            brief_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            channel_ids_json TEXT DEFAULT '[]',
+            content       TEXT NOT NULL,
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
     """),
 ]
 
@@ -1619,6 +1648,59 @@ class SQLiteStore:
             (limit,),
         ).fetchall()
         return [ResearchReport(**dict(r)) for r in rows]
+
+    # -------------------------------------------------------------------
+    # Phase 4: Live Monitoring & Subscription
+    # -------------------------------------------------------------------
+
+    def insert_monitored_channel(self, channel_id: str) -> None:
+        """Subscribe to a channel for automated briefs."""
+        self.conn.execute(
+            "INSERT OR IGNORE INTO monitored_channels (channel_id) VALUES (?)",
+            (channel_id,)
+        )
+        self.conn.commit()
+
+    def remove_monitored_channel(self, channel_id: str) -> None:
+        """Unsubscribe from a channel."""
+        self.conn.execute(
+            "DELETE FROM monitored_channels WHERE channel_id = ?",
+            (channel_id,)
+        )
+        self.conn.commit()
+
+    def get_monitored_channels(self) -> list[MonitoredChannel]:
+        """Get all channels currently being followed."""
+        rows = self.conn.execute(
+            "SELECT * FROM monitored_channels ORDER BY created_at DESC"
+        ).fetchall()
+        return [MonitoredChannel(**dict(r)) for r in rows]
+
+    def update_last_brief_time(self, channel_ids: list[str]) -> None:
+        """Update the last brief timestamp for monitored channels."""
+        placeholders = ",".join(["?"] * len(channel_ids))
+        self.conn.execute(
+            f"UPDATE monitored_channels SET last_brief_at = CURRENT_TIMESTAMP WHERE channel_id IN ({placeholders})",
+            channel_ids
+        )
+        self.conn.commit()
+
+    def insert_weekly_brief(self, brief: WeeklyBrief) -> int:
+        """Record a generated weekly intelligence brief."""
+        cursor = self.conn.execute(
+            "INSERT INTO weekly_briefs (channel_ids_json, content) VALUES (?, ?)",
+            (brief.channel_ids_json, brief.content)
+        )
+        self.conn.commit()
+        return cursor.lastrowid
+
+    def get_weekly_briefs(self, limit: int = 10) -> list[WeeklyBrief]:
+        """Get recent weekly briefs."""
+        rows = self.conn.execute(
+            "SELECT * FROM weekly_briefs ORDER BY created_at DESC LIMIT ?",
+            (limit,)
+        ).fetchall()
+        return [WeeklyBrief(**dict(r)) for r in rows]
 
     def get_topic_trends(self, limit: int = 10) -> list[dict]:
         """Get topic mention frequency over time (monthly)."""

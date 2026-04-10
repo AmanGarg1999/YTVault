@@ -24,7 +24,7 @@ def _find_project_root() -> Path:
 
 PROJECT_ROOT = _find_project_root()
 CONFIG_DIR = PROJECT_ROOT / "config"
-DATA_DIR = PROJECT_ROOT / "data"
+DATA_DIR = PROJECT_ROOT / os.environ.get("DATA_DIR_OVERRIDE", "data")
 
 
 def load_settings() -> dict:

@@ -14,6 +14,7 @@ from src.ui.components import (
     spacer,
     action_confirmation_dialog,
     failure_confirmation_dialog,
+    tts_button
 )
 from src.storage.sqlite_store import SQLiteStore
 from src.intelligence.summarizer import SummarizerEngine
@@ -74,8 +75,9 @@ def render(db: SQLiteStore, run_repair_background=None):
     spacer("2rem")
 
     # 1. Visualization Tabs
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab2b, tab3, tab4 = st.tabs([
         "Knowledge Mind-Map", 
+        "Knowledge Clusters",
         "Market Trends", 
         "Expert Network", 
         "Thematic Bridges"
@@ -85,6 +87,9 @@ def render(db: SQLiteStore, run_repair_background=None):
         render_mind_map(db)
 
     with tab2:
+        render_knowledge_clusters(db)
+
+    with tab2b:
         render_market_trends(db)
 
     with tab3:
@@ -294,3 +299,87 @@ def render_thematic_bridges(db: SQLiteStore):
             with cols[2]:
                 st.markdown(f"_{bridge.insight}_")
             st.caption(f"Synthesized via {bridge.llm_model} | {bridge.created_at}")
+
+
+# =====================================================================
+# KNOWLEDGE CLUSTERS (RE-HOMED FROM TOPIC EXPLORER)
+# =====================================================================
+
+def render_knowledge_clusters(db):
+    """Render the consolidated cluster discovery interface."""
+    topics = db.get_consolidated_topics()
+    
+    if not topics:
+        info_card("No Clusters Detected", "The automated insight engine requires more summarized content to form clusters.")
+        return
+
+    # Cluster Search
+    search_query = st.text_input("Filter Clusters", "", placeholder="Search research entities or themes...", label_visibility="collapsed", key="cluster_search")
+    
+    filtered_topics = [t for t in topics if search_query.lower() in t["name"].lower()] if search_query else topics
+
+    # Detail View vs. Gallery View
+    selected_topic = st.session_state.get("selected_cluster")
+    
+    if selected_topic:
+        _render_cluster_detail(db, selected_topic)
+    else:
+        _render_cluster_gallery(filtered_topics)
+
+
+def _render_cluster_gallery(topics):
+    """Render the grid of topic cards."""
+    cols = st.columns(3)
+    for idx, topic in enumerate(topics):
+        with cols[idx % 3]:
+            with glass_card():
+                st.markdown(f"**{topic['name']}**")
+                st.caption(f"{topic['video_count']} Videos | {topic['channel_count']} Channels")
+                if st.button("Probe Cluster", key=f"cl_btn_{topic['name']}", use_container_width=True):
+                    st.session_state.selected_cluster = topic["name"]
+                    st.rerun()
+
+
+def _render_cluster_detail(db, topic_name):
+    """Render the detailed view for a single topic."""
+    if st.button("← Back to Discovery", key="back_to_clusters"):
+        st.session_state.selected_cluster = None
+        st.rerun()
+        
+    details = db.get_topic_details(topic_name)
+    if not details:
+        st.error(f"Cluster synchronization error for: {topic_name}")
+        return
+
+    channels = sorted(list(set(d["channel_name"] for d in details)))
+    section_header(f"Cluster Intelligence: {topic_name}", icon="◈")
+    
+    m_grid = [
+        {"value": len(details), "label": "Source Videos"},
+        {"value": len(channels), "label": "Channels"},
+    ]
+    metric_grid(m_grid, cols=2)
+    
+    st.divider()
+    
+    # 1. Synthesized Perspective
+    st.markdown("#### Consolidated Synthesis")
+    all_takeaways = []
+    for d in details: all_takeaways.extend(d["takeaways"])
+    unique_takeaways = sorted(list(set(all_takeaways)))[:15]
+    
+    takeaway_text = "\n".join([f"- {t}" for t in unique_takeaways])
+    st.markdown(takeaway_text)
+    tts_button(f"Brief for {topic_name}: {takeaway_text}", label="Listen to Synthesis")
+
+    st.divider()
+
+    # 2. Expert Perspectives
+    st.markdown("#### Channel-Specific Trace")
+    for channel in channels:
+        channel_clips = [d for d in details if d["channel_name"] == channel]
+        with st.expander(f"{channel} ({len(channel_clips)} insights)"):
+            for clip in channel_clips:
+                st.markdown(f"**Video:** [{clip['title']}]({clip['url']})")
+                st.info(clip["summary_text"])
+                st.divider()

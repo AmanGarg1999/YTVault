@@ -26,6 +26,8 @@ def render(db, vs):
         diversity_weight = st.slider("Synthesis Focus", 0.0, 1.0, 0.5, 
                                    help="0: Detail heavy, 1: Comparison heavy")
         st.markdown("---")
+        st.caption("Tip: Try comparing a technical topic like '3D rendering' or a conceptual one like 'Creative Freedom'.")
+        st.markdown("---")
 
     # Channel Selection
     channels = db.get_all_channels()
@@ -116,8 +118,7 @@ def render(db, vs):
                 st.error(f"Analysis error: {e}")
                 logger.error(f"Comparative Lab error: {e}", exc_info=True)
 
-    # Footer - Sample Topics
-    st.markdown("---")
-    st.caption("Tip: Try comparing a technical topic like '3D rendering' or a conceptual one like 'Creative Freedom'.")
+    # Footer
+    st.divider()
 
 

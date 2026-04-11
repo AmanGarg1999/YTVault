@@ -277,15 +277,20 @@ class VectorStore:
         )
         logger.info(f"Upserted summary for video {video_id} to vector store")
 
-    def search_summaries(self, query: str, top_k: int = 5) -> list[dict]:
-        """Search across video summaries."""
+    def search_summaries(self, query: str, top_k: int = 5, where: Optional[dict] = None) -> list[dict]:
+        """Search across video summaries with optional filtering."""
         if not self.summaries_collection:
             return []
         query_vecs = self.embedding_fn([query])
-        results = self.summaries_collection.query(
-            query_embeddings=query_vecs,
-            n_results=top_k,
-        )
+        
+        kwargs = {
+            "query_embeddings": query_vecs,
+            "n_results": top_k,
+        }
+        if where:
+            kwargs["where"] = where
+            
+        results = self.summaries_collection.query(**kwargs)
         
         output = []
         if results["ids"] and results["ids"][0]:
@@ -298,15 +303,20 @@ class VectorStore:
                 })
         return output
 
-    def search_claims(self, query: str, top_k: int = 10) -> list[dict]:
-        """Search across research claims semantic collection."""
+    def search_claims(self, query: str, top_k: int = 10, where: Optional[dict] = None) -> list[dict]:
+        """Search across research claims semantic collection with optional filtering."""
         if not self.claims_collection:
             return []
         query_vecs = self.embedding_fn([query])
-        results = self.claims_collection.query(
-            query_embeddings=query_vecs,
-            n_results=top_k,
-        )
+        
+        kwargs = {
+            "query_embeddings": query_vecs,
+            "n_results": top_k,
+        }
+        if where:
+            kwargs["where"] = where
+
+        results = self.claims_collection.query(**kwargs)
         
         output = []
         if results["ids"] and results["ids"][0]:

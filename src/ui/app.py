@@ -27,7 +27,7 @@ from src.ui.views import (
     explorer, guest_intel, export_center,
     logs_monitor, data_management, reject_review,
     transcript_viewer, performance_metrics, comparative_lab,
-    topic_explorer, blueprint_center, research_agent_view, monitoring_hub,
+    blueprint_center, research_agent_view, monitoring_hub,
     global_search
 )
 
@@ -288,6 +288,37 @@ st.markdown("""
     ::-webkit-scrollbar-thumb:hover {
         background: #334155;
     }
+    /* Standardize Streamlit Link Buttons to use Nebula Glassmorphism */
+    div[data-testid="stLinkButton"] a {
+        border-radius: 14px !important;
+        background: linear-gradient(135deg, var(--primary-glow) 0%, var(--primary-active) 100%) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        color: white !important;
+        font-weight: 700 !important;
+        padding: 0.75rem 1.75rem !important;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        text-transform: none !important;
+        letter-spacing: 0.02em !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important;
+        text-decoration: none !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+
+    div[data-testid="stLinkButton"] a:hover {
+        box-shadow: 0 0 35px rgba(99, 102, 241, 0.5) !important;
+        transform: translateY(-3px) !important;
+        border-color: rgba(255, 255, 255, 0.3) !important;
+        filter: brightness(1.15) !important;
+    }
+
+    div[data-testid="stLinkButton"] a:active {
+        transform: translateY(1px) scale(0.96) !important;
+        box-shadow: inset 0 4px 10px rgba(0, 0, 0, 0.4) !important;
+        filter: brightness(0.9) !important;
+    }
+    
     /* Hide Redundant Streamlit Sidebar Navigation */
     div[data-testid="stSidebarNav"] {
         display: none !important;
@@ -595,7 +626,6 @@ NAV_STRUCTURE = {
     ],
     "Analyze": [
         "Intelligence Lab",
-        "Topic Explorer",
         "Global Search",
         "Blueprint Center",
         "Comparative Lab",
@@ -706,25 +736,28 @@ with st.container():
         )
     with col_btn:
         if st.button("Harvest", type="primary", use_container_width=True, key="global_harvest_btn"):
-            if harvest_url:
-                try:
-                    # Basic validation or initial check
-                    if "youtube.com" not in harvest_url and "youtu.be" not in harvest_url:
-                        raise ValueError("Invalid YouTube URL provided.")
-                        
-                    run_pipeline_background(harvest_url, db)
-                    action_confirmation_dialog(
-                        "Harvest Initialized",
-                        f"Intelligence gathering has started for {harvest_url[:40]}...",
-                        icon="✦"
-                    )
-                except Exception as e:
-                    failure_confirmation_dialog(
-                        "Harvest Failed to Initialize",
-                        str(e),
-                        retry_callback=lambda: run_pipeline_background(harvest_url, db),
-                        queue_callback=lambda: db.add_to_user_queue("URL", harvest_url, str(e))
-                    )
+            if not harvest_url:
+                st.warning("Please enter a valid YouTube URL.")
+            else:
+                with st.spinner("Analyzing target intelligence..."):
+                    try:
+                        # Basic validation or initial check
+                        if "youtube.com" not in harvest_url and "youtu.be" not in harvest_url:
+                            raise ValueError("Invalid YouTube URL provided. Must be a youtube.com or youtu.be link.")
+                            
+                        run_pipeline_background(harvest_url, db)
+                        action_confirmation_dialog(
+                            "Harvest Initialized",
+                            f"Intelligence gathering has started for {harvest_url[:40]}...",
+                            icon="✦"
+                        )
+                    except Exception as e:
+                        failure_confirmation_dialog(
+                            "Harvest Failed to Initialize",
+                            str(e),
+                            retry_callback=lambda: run_pipeline_background(harvest_url, db),
+                            queue_callback=lambda: db.add_to_user_queue("URL", harvest_url, str(e))
+                        )
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -736,7 +769,6 @@ PAGE_MAP = {
     "Performance": lambda: performance_metrics.render(),
     "Intelligence Lab": lambda: intelligence_lab.render(db, run_repair_background),
     "Research Agent": lambda: research_agent_view.render(db),
-    "Topic Explorer": lambda: topic_explorer.render(db),
     "Global Search": lambda: global_search.render_global_search(db, vs),
     "Comparative Lab": lambda: comparative_lab.render(db, vs),
     "Blueprint Center": lambda: blueprint_center.render(db),

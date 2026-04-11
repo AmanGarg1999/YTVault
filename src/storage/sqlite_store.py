@@ -2247,7 +2247,19 @@ class SQLiteStore:
                 ORDER BY s.started_at DESC
             """
             rows = self.conn.execute(sql).fetchall()
-            return [ScanCheckpoint(**dict(row)) for row in rows]
+            results = []
+            for row in rows:
+                row_dict = dict(row)
+                if row_dict.get('channel_name') == 'Generic Scan':
+                    url = row_dict.get('source_url', '')
+                    if '@' in url:
+                        handle = url.split('@')[-1].split('/')[0].split('?')[0]
+                        row_dict['channel_name'] = f"@{handle}"
+                    elif 'youtube.com/channel/' in url:
+                        c_id = url.split('youtube.com/channel/')[-1].split('/')[0].split('?')[0]
+                        row_dict['channel_name'] = f"Channel {c_id[:8]}..."
+                results.append(ScanCheckpoint(**row_dict))
+            return results
         except Exception as e:
             logger.error(f"Failed to get active scans: {e}")
             return []

@@ -107,12 +107,9 @@ def render(db, vs):
                     with cols[2]:
                         st.metric("Overall Confidence", f"{response.confidence.overall:.1%}")
 
-                # 6. Content Gap Analysis (New Feature)
+                # 6. Comparative Synthesis Complete
                 st.divider()
-                st.markdown("## Content Gap Analysis")
-                st.caption("Identifying high-performing topics from one channel that are missing in others.")
-                
-                render_content_gap_analysis(db, channel_ids, channel_names)
+                st.success("Cross-channel comparative synthesis complete.")
 
             except Exception as e:
                 status.update(label="Analysis failed", state="error")
@@ -124,74 +121,3 @@ def render(db, vs):
     st.caption("Tip: Try comparing a technical topic like '3D rendering' or a conceptual one like 'Creative Freedom'.")
 
 
-def render_content_gap_analysis(db, channel_ids, channel_names):
-    """Analyze and display topic gaps between channels."""
-    if len(channel_ids) < 2:
-        st.info("Select at least 2 channels to enable Gap Analysis.")
-        return
-
-    try:
-        # 1. Get top videos for each channel
-        channel_data = {}
-        for cid in channel_ids:
-            videos = db.execute("""
-                SELECT v.video_id, v.title, v.view_count,
-                       (CAST(v.like_count + v.comment_count AS REAL) / NULLIF(v.view_count, 0)) as engagement_rate
-                FROM videos v
-                WHERE v.channel_id = ?
-                ORDER BY engagement_rate DESC, v.view_count DESC
-                LIMIT 10
-            """, (cid,)).fetchall()
-            
-            # Simple keyword extraction from titles
-            all_keywords = set()
-            stop_words = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "with", "is", "are", "how", "to", "you", "your", "that"}
-            for v in videos:
-                import re
-                title_clean = re.sub(r'[^\w\s]', '', v["title"].lower())
-                words = title_clean.split()
-                keywords = [w for w in words if len(w) > 3 and w not in stop_words]
-                all_keywords.update(keywords)
-            
-            channel_data[cid] = {
-                "name": channel_names[cid],
-                "keywords": all_keywords,
-                "top_videos": videos
-            }
-
-        # 2. Compare and find gaps
-        for i, cid_a in enumerate(channel_ids):
-            other_cids = [cid for cid in channel_ids if cid != cid_a]
-            
-            unique_keywords = channel_data[cid_a]["keywords"].copy()
-            for other_cid in other_cids:
-                unique_keywords -= channel_data[other_cid]["keywords"]
-            
-            if unique_keywords:
-                with st.expander(f"Unique Strengths of **{channel_data[cid_a]['name']}**", expanded=(i==0)):
-                    st.write(f"Topics that are high-performing for {channel_data[cid_a]['name']} but missing from others:")
-                    
-                    # Sort keywords by how often they appear in top video titles
-                    keyword_counts = {}
-                    for v in channel_data[cid_a]["top_videos"]:
-                        title = v["title"].lower()
-                        for kw in unique_keywords:
-                            if kw in title:
-                                keyword_counts[kw] = keyword_counts.get(kw, 0) + 1
-                    
-                    sorted_kws = sorted(keyword_counts.items(), key=lambda x: x[1], reverse=True)
-                    
-                    if sorted_kws:
-                        cols = st.columns(min(len(sorted_kws), 4) or 1)
-                        for idx, (kw, count) in enumerate(sorted_kws[:12]):
-                            with cols[idx % len(cols)]:
-                                st.markdown(f"`{kw.upper()}`")
-                                st.caption(f"Used in {count} top videos")
-                    else:
-                        st.info("No unique high-performing keywords detected in top videos.")
-            else:
-                st.info(f"No significant content gap found for **{channel_data[cid_a]['name']}**.")
-
-    except Exception as e:
-        st.error(f"Gap Analysis error: {e}")
-        logger.error(f"Gap Analysis error: {e}", exc_info=True)

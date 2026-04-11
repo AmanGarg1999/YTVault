@@ -873,14 +873,9 @@ class SQLiteStore:
 
     def record_stats_snapshot(
         self, video_id: str, view_count: int, like_count: int, comment_count: int
-    ) -> None:
-        """Record a snapshot of a video's performance metrics."""
-        self.conn.execute(
-            """INSERT INTO video_stats_history (video_id, view_count, like_count, comment_count)
-               VALUES (?, ?, ?, ?)""",
-            (video_id, view_count, like_count, comment_count),
-        )
-        self.conn.commit()
+    ):
+        """No-op: Historical engagement tracking disabled."""
+        pass
 
     def get_videos_by_status(self, status: str, limit: int = 100) -> list[Video]:
         """Get videos by triage status."""
@@ -2381,8 +2376,9 @@ class SQLiteStore:
         # 1. Total counts
         stats["total_videos"] = self.conn.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
         stats["total_channels"] = self.conn.execute("SELECT COUNT(*) FROM channels").fetchone()[0]
-        stats["total_subscribers"] = self.conn.execute("SELECT SUM(follower_count) FROM channels").fetchone()[0] or 0
+        stats["total_subscribers"] = 0 # Tracking disabled
         stats["total_summaries"] = self.conn.execute("SELECT COUNT(*) FROM video_summaries").fetchone()[0]
+        stats["summarized"] = stats["total_summaries"] # Fix for Intelligence Lab meter
         stats["total_chunks"] = self.conn.execute("SELECT COUNT(*) FROM transcript_chunks").fetchone()[0]
         
         # 2. Triage states

@@ -53,8 +53,7 @@ class ResearchAgent:
             for res in summary_results:
                 video = self.db.get_video(res["video_id"])
                 if video:
-                    stats = f"Views: {video.view_count:,}, Likes: {video.like_count:,}"
-                    context_blocks.append(f"SOURCE: {video.title} ({stats})\nSUMMARY: {res['text']}")
+                    context_blocks.append(f"SOURCE: {video.title}\nSUMMARY: {res['text']}")
                     sources.append({"video_id": res["video_id"], "title": video.title})
 
         # Add RAG evidence context
@@ -63,7 +62,7 @@ class ResearchAgent:
             for cit in rag_response.citations:
                 # Fetch full video stats for metadata expansion
                 video = self.db.get_video(cit.video_id)
-                stats_info = f", Views: {video.view_count:,}, Likes: {video.like_count:,}" if video else ""
+                stats_info = ""
                 
                 # Fetch sentiment for this chunk if available
                 sentiment = self.db.execute(
@@ -138,7 +137,7 @@ class ResearchAgent:
         
         RESEARCH TOPIC: {query}
         
-        Context from Vault Content (includes engagement metrics and sentiment):
+        Context from Vault Content (includes sentiment analysis):
         {context}
         
         Requirements for the White Paper:
@@ -151,7 +150,7 @@ class ResearchAgent:
            - CONCLUSION
         3. CITE YOUR SOURCES: Whenever mentioning an insight, use Markdown footnotes [^1], [^2], etc.
            These must correspond to the sources provided in the context blocks.
-        4. Focus on SYNTHESIS: Connect the dots between engagement metrics (views/likes) and content value.
+        4. Focus on SYNTHESIS: Connect the dots between qualitative insights and the broader research topic.
         
         OUTPUT FORMAT: Markdown.
         """

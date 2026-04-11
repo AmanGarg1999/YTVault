@@ -166,7 +166,6 @@ def _render_pending_review_tab(db):
                     dur_sec = video.duration_seconds % 60
                     st.caption(
                         f"Duration: {dur_min}m {dur_sec}s │ "
-                        f"Views: {video.view_count:,} │ "
                         f"Confidence: {video.triage_confidence:.0%}"
                     )
                     if video.triage_reason:

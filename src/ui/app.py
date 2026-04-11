@@ -727,7 +727,7 @@ PAGE_MAP = {
     "Pipeline Center": lambda: pipeline_center.render(db, run_pipeline_background, run_repair_background, get_vault_diagnostics),
     "Review Center": lambda: reject_review.render(db),
     "Performance": lambda: performance_metrics.render(),
-    "Intelligence Lab": lambda: intelligence_lab.render(db),
+    "Intelligence Lab": lambda: intelligence_lab.render(db, run_repair_background),
     "Research Agent": lambda: research_agent_view.render(db),
     "Topic Explorer": lambda: topic_explorer.render(db),
     "Comparative Lab": lambda: comparative_lab.render(db, vs),

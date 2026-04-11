@@ -222,9 +222,16 @@ class PipelineOrchestrator:
 
         # Create scan checkpoint
         active_scan = self.db.get_active_scan_for_url(url)
+        
+        # Track counts from DB if resuming
+        processed_count = 0
+        discovered_count = 0
+        
         if active_scan:
             logger.info(f"Using existing active scan {active_scan.scan_id} for {url}")
             scan_id = active_scan.scan_id
+            processed_count = active_scan.total_processed
+            discovered_count = active_scan.total_discovered
         else:
             scan_id = self.checkpoint.create_scan(url, parsed.url_type)
             self.db.set_control_state(scan_id, "RUNNING")
@@ -255,7 +262,6 @@ class PipelineOrchestrator:
             thread.start()
 
             max_workers = self.settings.get("pipeline", {}).get("max_parallel_videos", 4)
-            processed_count = 0
             active_futures = {} # vid -> future
             
             self._report_status(f"Starting parallel processing with max_workers={max_workers}")
@@ -302,9 +308,15 @@ class PipelineOrchestrator:
                         continue # Wait for active futures to finish
                     
                     vid, is_new = item
-                    if is_new:
+                    if is_new or force_metadata_refresh:
                         if self.db.claim_video(vid, scan_id):
                             self._report_status(f"Queuing video {vid}")
+                            
+                            # If forcing refresh on an existing video, reset its checkpoint
+                            if not is_new and force_metadata_refresh:
+                                logger.info(f"Forcing re-process: resetting checkpoint for {vid}")
+                                self.db.update_checkpoint_stage(vid, "METADATA_HARVESTED")
+                                
                             active_futures[vid] = executor.submit(self._process_single_video, vid, scan_id)
                         else:
                             logger.info(f"Skipping video {vid}: already locked by another scan")
@@ -574,17 +586,13 @@ class PipelineOrchestrator:
                     if video and channel:
                         self.db.upsert_channel(channel)
                         self.db.insert_video(video)
-                        # Record initial stats snapshot
-                        self.db.record_stats_snapshot(
-                            video.video_id, video.view_count, video.like_count, video.comment_count
-                        )
                         discovery_queue.put((vid, is_new))
                 except Exception as e:
                     logger.error(f"Metadata extraction failed for {vid}: {e}")
             else:
                 discovery_queue.put((vid, False))
 
-            if discovered_count % 10 == 0:
+            if discovered_count % 2 == 0:
                 self.checkpoint.update_scan_progress(
                     scan_id, total_discovered=discovered_count
                 )

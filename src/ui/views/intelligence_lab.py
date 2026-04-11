@@ -19,7 +19,7 @@ from src.storage.sqlite_store import SQLiteStore
 from src.intelligence.summarizer import SummarizerEngine
 from src.intelligence.bridge_discovery import BridgeDiscoveryEngine
 
-def render(db: SQLiteStore):
+def render(db: SQLiteStore, run_repair_background=None):
     page_header(
         "Intelligence Lab",
         "Exploring non-linear connections, market trends, and thematic bridges within your vault."
@@ -40,30 +40,36 @@ def render(db: SQLiteStore):
             st.caption(f"Knowledge Graph features require the 'Summarization' stage. {total_vids - summarized} videos pending.")
             
             if st.button("Prioritize Summarization Backfill", type="primary"):
-                to_process = db.get_videos_for_summarization(limit=20)
-                if not to_process:
-                    st.success("Internal state synchronized.")
-                else:
+                if run_repair_background:
                     try:
-                        st.toast("Backfill prioritization engaged...")
-                        summarizer = SummarizerEngine(db)
-                        prog_bar = st.progress(0, text="Synthesizing Knowledge...")
-                        for i, vid_id in enumerate(to_process):
-                            summarizer.generate_summary(vid_id)
-                            prog_bar.progress((i + 1) / len(to_process))
-                        
-                        action_confirmation_dialog(
-                            "Summarization Complete",
-                            f"Successfully synthesized intelligence for {len(to_process)} target videos.",
-                            icon="◈"
-                        )
+                        run_repair_background()
+                        st.toast("Intelligence synthesis engaged in the background...")
+                        time.sleep(1)
+                        st.rerun()
                     except Exception as e:
                         failure_confirmation_dialog(
-                            "Summarization Batch Interrupted",
+                            "Backfill Initialization Failed",
                             str(e),
-                            retry_callback=None, # Too complex for a simple lambda here
-                            queue_callback=lambda: [db.add_to_user_queue("VIDEO_ID", vid_id, str(e)) for vid_id in to_process]
+                            retry_callback=None,
+                            queue_callback=None
                         )
+                else:
+                    # Fallback for small batches if no background runner
+                    to_process = db.get_videos_for_summarization(limit=20)
+                    if not to_process:
+                        st.success("Internal state synchronized.")
+                    else:
+                        try:
+                            st.toast("Backfill prioritization engaged...")
+                            summarizer = SummarizerEngine(db)
+                            prog_bar = st.progress(0, text="Synthesizing Knowledge...")
+                            for i, vid_id in enumerate(to_process):
+                                summarizer.generate_summary(vid_id)
+                                prog_bar.progress((i + 1) / len(to_process))
+                            
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Batch failed: {e}")
 
     spacer("2rem")
 

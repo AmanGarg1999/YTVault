@@ -223,10 +223,10 @@ st.markdown("""
 
     /* Secondary Buttons */
     div[data-testid="stButton"] button[kind="secondary"] {
-        background: rgba(30, 41, 59, 0.7);
-        border: 1px solid rgba(255, 255, 255, 0.15);
+        background: rgba(30, 41, 59, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.25);
         backdrop-filter: blur(10px);
-        color: #e2e8f0;
+        color: #ffffff;
     }
     
     div[data-testid="stButton"] button[kind="secondary"]:hover {
@@ -715,14 +715,8 @@ st.sidebar.markdown("""
 # Global Command Bar & Rendering
 # ---------------------------------------------------------------------------
 
-# Inject Global Command Bar at the top of the main area
-st.markdown("""
-<div class="command-bar-container">
-    <div style="display: flex; align-items: center; gap: 1rem;">
-        <span style="font-weight: 600; color: var(--neutral-400);">COMMAND BAR</span>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+# Inject Global Command Bar spacing
+st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
 
 # Command Bar Functionality (hidden until triggered or persistent)
 with st.container():
@@ -737,7 +731,11 @@ with st.container():
     with col_btn:
         if st.button("Harvest", type="primary", use_container_width=True, key="global_harvest_btn"):
             if not harvest_url:
-                st.warning("Please enter a valid YouTube URL.")
+                failure_confirmation_dialog(
+                    "Input Required",
+                    "The harvest engine requires a target YouTube URL to begin ingestion.",
+                    retry_callback=None
+                )
             else:
                 with st.spinner("Analyzing target intelligence..."):
                     try:

@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from src.storage.sqlite_store import SQLiteStore
 from src.storage.vector_store import VectorStore
-from src.ui.components.ui_helpers import glass_card, video_card
+from src.ui.components.ui_helpers import glass_card, video_card, failure_confirmation_dialog, info_card
 import logging
 
 logger = logging.getLogger(__name__)
@@ -119,7 +119,7 @@ def render_global_search(db: SQLiteStore, vs: VectorStore):
                 ranked_results = sorted(scores.items(), key=lambda x: x[1]["rrf"], reverse=True)[:top_k]
 
                 if not ranked_results:
-                    st.info("No matching insights found for the given filters.")
+                    info_card("No Insights Found", "The intelligence algorithm could not find matching patterns for your current query and filters.")
                     return
 
                 st.write(f"Found {len(ranked_results)} relevant videos:")
@@ -143,7 +143,11 @@ def render_global_search(db: SQLiteStore, vs: VectorStore):
                             st.rerun()
 
             except Exception as e:
-                st.error("Search engine encountered an unexpected error.")
+                failure_confirmation_dialog(
+                    "Search Engine Interrupted",
+                    f"The global search core encountered a technical anomaly: {str(e)}",
+                    retry_callback=None
+                )
                 logger.error(f"Global search fatal: {e}", exc_info=True)
 
     else:

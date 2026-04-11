@@ -76,7 +76,7 @@ def render_single_transcript(db: SQLiteStore):
                 with st.container(border=True):
                     st.caption(video.channel_id[:20])
                     st.markdown(f"**{video.title[:60]}...**")
-                    if st.button("VIEW TRANSCRIPT", key=f"sel_vid_{video.video_id}", use_container_width=True):
+                    if st.button("VIEW TRANSCRIPT", key=f"sel_vid_{video.video_id}", use_container_width=True, type="primary"):
                         st.session_state.selected_transcript_vid = video.video_id
                         st.rerun()
 
@@ -212,7 +212,7 @@ def render_single_transcript(db: SQLiteStore):
         
         timestamp = minutes * 60 + seconds
         
-        if st.button("Jump to timestamp", key="jump_btn"):
+        if st.button("Jump to timestamp", key="jump_btn", type="primary"):
             context = db.get_transcript_at_timestamp(video_id, timestamp, context_seconds=30)
             
             if context and context['chunks']:
@@ -247,7 +247,7 @@ def render_single_transcript(db: SQLiteStore):
                 with st.expander(f"**Highlight {i}** ({timestamp_str}) - Interest Score: {h.score:.1f}", expanded=(i == 1)):
                     st.markdown(f"> {h.transcript_text}")
                     
-                    if st.button(f"Jump to {timestamp_str}", key=f"jump_h_{i}"):
+                    if st.button(f"Jump to {timestamp_str}", key=f"jump_h_{i}", type="primary"):
                         st.session_state.ts_min = mins
                         st.session_state.ts_sec = secs
                         # We would need a more complex way to force tab change,
@@ -342,7 +342,7 @@ def render_compare_transcripts(db: SQLiteStore):
                     if v['video_id'] in st.session_state.compare_list:
                         st.success("Selected")
                     elif len(st.session_state.compare_list) < 3:
-                        if st.button("Select", key=f"comp_sel_{v['video_id']}", use_container_width=True):
+                        if st.button("Select", key=f"comp_sel_{v['video_id']}", use_container_width=True, type="primary"):
                             st.session_state.compare_list.append(v['video_id'])
                             st.rerun()
 

@@ -26,53 +26,6 @@ def render(db: SQLiteStore, run_repair_background=None):
         "Exploring non-linear connections, market trends, and thematic bridges within your vault."
     )
 
-    # 0. Vault Readiness Metrics
-    stats = db.get_pipeline_stats()
-    total_vids = stats.get("total_videos", 0)
-    summarized = stats.get("summarized", 0)
-    
-    with glass_card():
-        cols = st.columns([1, 2])
-        with cols[0]:
-            st.metric("Intelligence Core Readiness", f"{summarized}/{total_vids}")
-        with cols[1]:
-            prog = summarized / total_vids if total_vids > 0 else 0
-            st.progress(prog)
-            st.caption(f"Knowledge Graph features require the 'Summarization' stage. {total_vids - summarized} videos pending.")
-            
-            if st.button("Prioritize Summarization Backfill", type="primary"):
-                if run_repair_background:
-                    try:
-                        run_repair_background()
-                        st.toast("Intelligence synthesis engaged in the background...")
-                        time.sleep(1)
-                        st.rerun()
-                    except Exception as e:
-                        failure_confirmation_dialog(
-                            "Backfill Initialization Failed",
-                            str(e),
-                            retry_callback=None,
-                            queue_callback=None
-                        )
-                else:
-                    # Fallback for small batches if no background runner
-                    to_process = db.get_videos_for_summarization(limit=20)
-                    if not to_process:
-                        st.success("Internal state synchronized.")
-                    else:
-                        try:
-                            st.toast("Backfill prioritization engaged...")
-                            summarizer = SummarizerEngine(db)
-                            prog_bar = st.progress(0, text="Synthesizing Knowledge...")
-                            for i, vid_id in enumerate(to_process):
-                                summarizer.generate_summary(vid_id)
-                                prog_bar.progress((i + 1) / len(to_process))
-                            
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Batch failed: {e}")
-
-    spacer("2rem")
 
     # 1. Visualization Tabs
     tab1, tab2, tab2b, tab3, tab4 = st.tabs([

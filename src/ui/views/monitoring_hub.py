@@ -32,7 +32,7 @@ def render(db):
         render_briefs(db, monitor)
 
 def render_subscriptions(db, monitor):
-    section_header("Active Subscriptions", icon="📡")
+    section_header("Active Subscriptions")
     
     # Add new subscription
     with glass_card():

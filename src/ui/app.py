@@ -141,11 +141,14 @@ st.markdown("""
     
     .metric-card .value {
         font-family: 'Outfit', sans-serif;
-        font-size: 3rem;
+        font-size: 1.85rem;
         font-weight: 800;
         color: white;
         margin-bottom: 0.15rem;
-        letter-spacing: -0.03em;
+        letter-spacing: -0.04em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     
     .metric-card .label {
@@ -195,6 +198,8 @@ st.markdown("""
         text-transform: none;
         letter-spacing: 0.02em;
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        white-space: nowrap;
+        min-width: 110px;
     }
     
     .stButton > button:hover {
@@ -218,9 +223,10 @@ st.markdown("""
 
     /* Secondary Buttons */
     div[data-testid="stButton"] button[kind="secondary"] {
-        background: var(--glass-bg);
-        border: 1px solid var(--glass-border);
+        background: rgba(30, 41, 59, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.15);
         backdrop-filter: blur(10px);
+        color: #e2e8f0;
     }
     
     div[data-testid="stButton"] button[kind="secondary"]:hover {

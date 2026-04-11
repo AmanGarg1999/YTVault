@@ -95,14 +95,14 @@ def render(db):
             metrics = [
                 {
                     "value": stats.get("total_channels", 0),
-                    "label": "Channels",
+                    "label": "Channel" if stats.get("total_channels") == 1 else "Channels",
                     "delta": f"+{stats.get('new_channels', 0)}" if stats.get('new_channels') else None,
                     "delta_color": "positive",
                     "glow": True
                 },
                 {
                     "value": stats.get("total_videos", 0),
-                    "label": "Videos",
+                    "label": "Video" if stats.get("total_videos") == 1 else "Videos",
                     "delta": f"+{stats.get('new_videos', 0)}" if stats.get('new_videos') else None,
                     "delta_color": "positive"
                 },

@@ -28,11 +28,16 @@ def render(db):
         info_card("No Topics Found", "Injest and analyze more videos to see consolidated topics here.")
         return
 
-    # 3. Sidebar Filters & Stats
+    # 3. Sidebar Stats
     st.sidebar.markdown("### Vault Summary")
     st.sidebar.metric("Unique Topics", len(topics))
     
-    search_query = st.sidebar.text_input("Search Topics", "")
+    # 4. Main Search & Filter area
+    col_search, col_stats = st.columns([2, 1])
+    with col_search:
+        search_query = st.text_input("Search Topics", "", placeholder="Search research clusters or entities...", label_visibility="collapsed")
+    with col_stats:
+        st.markdown(f"<div style='text-align: right; color: var(--text-muted); padding-top: 0.5rem;'>{len(topics)} Unique Clusters</div>", unsafe_allow_html=True)
     
     # Filter topics based on search
     if search_query:
@@ -57,13 +62,13 @@ def _render_topic_gallery(topics):
     for idx, topic in enumerate(topics):
         with cols[idx % 3]:
             with st.container(border=True):
-                st.markdown(f"### {topic['name']}")
+                st.markdown(f"<div style='word-break: break-word; line-height: 1.2; margin-bottom: 0.5rem;'><h3 style='margin: 0; font-size: 1.2rem;'>{topic['name']}</h3></div>", unsafe_allow_html=True)
                 
                 # Metrics in a small row
                 st.markdown(f"""
                 <div style="display: flex; gap: 1rem; color: #888; font-size: 0.9rem;">
-                    <span>{topic['video_count']} Videos</span>
-                    <span>{topic['channel_count']} Channels</span>
+                    <span>{topic['video_count']} {'Video' if topic['video_count'] == 1 else 'Videos'}</span>
+                    <span>{topic['channel_count']} {'Channel' if topic['channel_count'] == 1 else 'Channels'}</span>
                 </div>
                 """, unsafe_allow_html=True)
                 

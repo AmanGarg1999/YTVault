@@ -26,11 +26,17 @@ def render(db):
         )
         return
 
-    # 2. Sidebar Filters
+    # 2. Sidebar Stats
     st.sidebar.markdown("### Checklist Stats")
     st.sidebar.metric("Total Blueprints", len(blueprints))
     
-    search_query = st.sidebar.text_input("Search Checklists", "")
+    # 3. Main Search
+    search_query = st.text_input(
+        "Search Checklists", 
+        "", 
+        placeholder="Search procedural blueprints...",
+        label_visibility="collapsed"
+    )
     
     if search_query:
         filtered = [b for b in blueprints if search_query.lower() in b["title"].lower() or search_query.lower() in b["channel_name"].lower()]

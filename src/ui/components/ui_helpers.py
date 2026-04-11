@@ -354,7 +354,11 @@ def video_card(
 <div style="flex-grow: 1;">
 <p style="font-size: 1.1rem; font-weight: 700; color: white; margin: 0; line-height: 1.4;">{clean_title}</p>
 <div style="display: flex; gap: 1rem; align-items: center; margin-top: 0.75rem; font-size: 0.75rem; color: #94a3b8; font-weight: 600;">
-<span>{badge_html}<span>{dur_min}:{dur_sec:02d}</span><span style="color: #6366f1;">{confidence:.0%} CONFIDENCE</span>
+<span>{badge_html}</span>
+<span style="color: rgba(255,255,255,0.1);">|</span>
+<span>{dur_min}:{dur_sec:02d}</span>
+<span style="color: rgba(255,255,255,0.1);">|</span>
+<span style="color: #6366f1;">{min(1.0, confidence):.0%} CONFIDENCE</span>
 </div></div></div></div>
 """, unsafe_allow_html=True)
         

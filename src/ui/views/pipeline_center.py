@@ -76,7 +76,11 @@ def render(db, run_pipeline_background, run_repair=None, get_diagnostics=None):
             render_logs_tab(db)
 
     except Exception as e:
-        st.error(f"Pipeline Center error: {e}")
+        failure_confirmation_dialog(
+            "System Intelligence Error",
+            f"The pipeline control center encountered a signal loss: {str(e)}",
+            retry_callback=None
+        )
         logger.error(f"Pipeline Center error: {e}", exc_info=True)
 
 
@@ -84,7 +88,7 @@ def render_monitor_tab(db, run_pipeline_background):
     active_scans = db.get_active_scans()
 
     if not active_scans:
-        st.info("No active scans running at the moment.")
+        info_card("No Active Operations", "All intelligence discovery threads are currently dormant. Start a harvest to monitor progress here.")
     else:
         for scan in active_scans:
             with glass_card():
@@ -173,7 +177,7 @@ def render_monitor_tab(db, run_pipeline_background):
 def render_control_tab(db, run_pipeline_background):
     active_scans = db.get_active_scans()
     if not active_scans:
-        st.info("No active scans to control.")
+        info_card("No Operations to Control", "The strategic orchestrator is currently idle. Initiate a harvest to see control interfaces.")
         return
 
     for idx, scan in enumerate(active_scans):

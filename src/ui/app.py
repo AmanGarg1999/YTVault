@@ -92,11 +92,11 @@ st.markdown("""
         letter-spacing: -0.025em;
     }
     
-    h1 { font-size: 2.5rem; font-weight: 800; color: white; margin-bottom: 0.5rem; }
-    h2 { font-size: 1.85rem; font-weight: 700; color: var(--text-stellar); }
-    h3 { font-size: 1.35rem; font-weight: 650; color: var(--text-stellar); }
+    h1 { font-size: 2.75rem; font-weight: 800; color: white; margin-bottom: 0.5rem; }
+    h2 { font-size: 2rem; font-weight: 700; color: var(--text-stellar); }
+    h3 { font-size: 1.5rem; font-weight: 650; color: var(--text-stellar); }
     
-    p { line-height: 1.6; color: var(--text-muted); }
+    p { line-height: 1.7; color: var(--text-muted); font-size: 1rem; }
     
     /* =====================================================================
        ENHANCED COMPONENTS - GLASSMORPHISM
@@ -193,13 +193,14 @@ st.markdown("""
         border: 1px solid rgba(255, 255, 255, 0.1);
         color: white;
         font-weight: 700;
+        font-size: 1rem;
         padding: 0.75rem 1.75rem;
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         text-transform: none;
         letter-spacing: 0.02em;
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
         white-space: nowrap;
-        min-width: 110px;
+        min-width: 120px;
     }
     
     .stButton > button:hover {
@@ -240,6 +241,20 @@ st.markdown("""
         background: rgba(99, 102, 241, 0.2);
         transform: translateY(1px) scale(0.97);
         box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Danger Button Variant */
+    div.danger-btn button {
+        background: rgba(239, 68, 68, 0.15) !important;
+        border: 1px solid rgba(239, 68, 68, 0.4) !important;
+        color: #fca5a5 !important;
+    }
+    
+    div.danger-btn button:hover {
+        background: rgba(239, 68, 68, 0.4) !important;
+        border-color: #ef4444 !important;
+        color: white !important;
+        box-shadow: 0 0 25px rgba(239, 68, 68, 0.3) !important;
     }
 
     /* Command Bar Focal Point */
@@ -296,6 +311,7 @@ st.markdown("""
         color: white !important;
         font-weight: 700 !important;
         padding: 0.75rem 1.75rem !important;
+        font-size: 1rem !important;
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
         text-transform: none !important;
         letter-spacing: 0.02em !important;

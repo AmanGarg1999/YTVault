@@ -61,6 +61,7 @@ def render_pending_section(db):
                         icon="✅"
                     )
             with cols[1]:
+                st.markdown('<div class="danger-btn">', unsafe_allow_html=True)
                 if st.button("Reject", key=f"rej_rev_{i}_{video.video_id}", use_container_width=True):
                     db.update_triage_status(video.video_id, "REJECTED", "manual_reject", 1.0)
                     action_confirmation_dialog(
@@ -68,6 +69,7 @@ def render_pending_section(db):
                         f"Target '{video.title[:40]}' suppressed and moved to audit.",
                         icon="✖"
                     )
+                st.markdown('</div>', unsafe_allow_html=True)
 
 
 def render_rejected_section(db):
@@ -93,6 +95,7 @@ def render_rejected_section(db):
                             icon="🔓"
                         )
                 with cols[1]:
+                    st.markdown('<div class="danger-btn">', unsafe_allow_html=True)
                     if st.button("Purge Intel", key=f"del_rev_{i}_{video.video_id}", use_container_width=True):
                         db.delete_video_data(video.video_id)
                         action_confirmation_dialog(
@@ -100,6 +103,7 @@ def render_rejected_section(db):
                             "All related metadata and artifacts have been permanently removed.",
                             icon="🗑"
                         )
+                    st.markdown('</div>', unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"Audit engine error: {e}")

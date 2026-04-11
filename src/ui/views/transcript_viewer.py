@@ -47,7 +47,6 @@ def render_single_transcript(db: SQLiteStore):
     # =====================================================================
     # Navigation & Video Selection (Scalable)
     # =====================================================================
-    st.markdown("### Select Video to View")
     
     # Fetch all accepted videos
     all_videos = db.get_videos_by_status("ACCEPTED", limit=2000)

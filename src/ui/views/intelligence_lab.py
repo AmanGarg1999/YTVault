@@ -226,18 +226,30 @@ def render_guest_side_car(db: SQLiteStore, guest_name: str):
                     st.session_state.navigate = "Transcripts"
                     st.rerun()
 
-def render_thematic_bridges(db: SQLiteStore):
+def render_thematic_bridges(db: SQLiteStore, run_repair_background=None):
     section_header("Thematic Bridge Discovery", icon="⚿")
     
     col1, col2 = st.columns([3, 1])
     with col2:
         if st.button("Probe Neural Bridges", type="primary", use_container_width=True):
             with st.spinner("Synthesizing bridges..."):
-                engine = BridgeDiscoveryEngine(db)
-                engine.discover_bridges(sample_size=3)
-                st.toast("Neural bridges synthesized!")
-                time.sleep(0.5)
-                st.rerun()
+                if run_repair_background:
+                    try:
+                        run_repair_background()
+                        action_confirmation_dialog("Intelligence synthesis engaged in the background...")
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        failure_confirmation_dialog("Synthesis Failed", str(e))
+                else:
+                    engine = BridgeDiscoveryEngine(db)
+                    engine.discover_bridges(sample_size=3)
+                    action_confirmation_dialog(
+                        "Neural Bridges Synthesized",
+                        "The thematic discovery engine has completed its sweep of the knowledge vault.",
+                        icon="⚿"
+                    )
+                    st.rerun()
 
     bridges = db.get_thematic_bridges()
     if not bridges:

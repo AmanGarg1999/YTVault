@@ -349,16 +349,16 @@ def video_card(
         views = getattr(video, 'view_count', 0)
 
         st.markdown(f"""
-<div style="background: rgba(15, 23, 42, 0.3); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; padding: 1.5rem; margin-bottom: 1.25rem; box-shadow: 0 4px 20px rgba(0,0,0,0.1);"><div style="display: flex; gap: 1.75rem; align-items: flex-start;">
-{f'<div style="width: 160px; flex-shrink: 0;"><img src="https://img.youtube.com/vi/{video.video_id}/mqdefault.jpg" style="width: 100%; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);"></div>' if show_thumbnail else ''}
+<div style="background: rgba(15, 23, 42, 0.3); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; padding: 1.75rem; margin-bottom: 1.25rem; box-shadow: 0 4px 20px rgba(0,0,0,0.1);"><div style="display: flex; gap: 1.75rem; align-items: flex-start;">
+{f'<div style="width: 180px; flex-shrink: 0;"><img src="https://img.youtube.com/vi/{video.video_id}/mqdefault.jpg" style="width: 100%; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);"></div>' if show_thumbnail else ''}
 <div style="flex-grow: 1;">
-<p style="font-size: 1.1rem; font-weight: 700; color: white; margin: 0; line-height: 1.4;">{clean_title}</p>
-<div style="display: flex; gap: 1rem; align-items: center; margin-top: 0.75rem; font-size: 0.75rem; color: #94a3b8; font-weight: 600;">
+<p style="font-size: 1.25rem; font-weight: 700; color: white; margin: 0; line-height: 1.4; letter-spacing: -0.02em;">{clean_title}</p>
+<div style="display: flex; gap: 1.25rem; align-items: center; margin-top: 1rem; font-size: 0.85rem; color: #cbd5e1; font-weight: 600;">
 <span>{badge_html}</span>
 <span style="color: rgba(255,255,255,0.1);">|</span>
 <span>{dur_min}:{dur_sec:02d}</span>
 <span style="color: rgba(255,255,255,0.1);">|</span>
-<span style="color: #6366f1;">{min(1.0, confidence):.0%} CONFIDENCE</span>
+<span style="color: #818cf8;">{min(1.0, confidence):.0%} CONFIDENCE</span>
 </div></div></div></div>
 """, unsafe_allow_html=True)
         

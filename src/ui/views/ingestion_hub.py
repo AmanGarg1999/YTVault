@@ -61,7 +61,11 @@ def render_harvest_tab(db, run_pipeline_background):
         with col1:
             if st.button("Start Harvest", type="primary", use_container_width=True):
                 if not url:
-                    st.warning("Please provide a target URL to begin ingestion.")
+                    failure_confirmation_dialog(
+                        "Target Required",
+                        "The ingestion engine needs a valid YouTube URL to initiate the discovery phase.",
+                        retry_callback=None
+                    )
                 else:
                     with st.spinner("Initializing research harvest..."):
                         try:
@@ -80,10 +84,6 @@ def render_harvest_tab(db, run_pipeline_background):
                                 retry_callback=lambda: run_pipeline_background(url, db),
                                 queue_callback=lambda: db.add_to_user_queue("URL", url, str(e))
                             )
-
-    spacer("2rem")
-    section_header("Recent Intake History", icon="◯")
-    
     scans = db.get_active_scans()
     if scans:
         with glass_card():

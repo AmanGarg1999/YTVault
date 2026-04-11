@@ -16,6 +16,31 @@ def render(db):
     </div>
     """, unsafe_allow_html=True)
 
+    try:
+        from src.intelligence.export import ExportEngine
+        exporter = ExportEngine(db)
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("### Pipeline Statistics")
+            if st.button("Export Stats (Markdown)"):
+                content = exporter.export_pipeline_stats()
+                st.download_button("Download", content, "pipeline_stats.md")
+                st.markdown(content)
+
+        with col2:
+            st.markdown("### Guest Registry")
+            fmt = st.selectbox("Format", ["markdown", "json", "csv"], key="guest_fmt")
+            if st.button("Export Guests"):
+                content = exporter.export_guests(fmt=fmt)
+                ext = {"markdown": "md", "json": "json", "csv": "csv"}[fmt]
+                st.download_button("Download", content, f"guests.{ext}")
+                if fmt == "markdown":
+                    st.markdown(content)
+                else:
+                    st.code(content)
+
         st.markdown("---")
         st.markdown("### Bulk Research Packages")
         st.info("Export high-fidelity intelligence packages (transcripts, summaries, and claims) for multiple videos at once.")
@@ -35,10 +60,9 @@ def render(db):
         
         with col_exec:
             if st.button("Generate Bulk ZIP", type="primary", use_container_width=True, disabled=not selected_vids):
-                # We'll simulate a zip or just offer them one by one if zip is too heavy for simple streamlit
-                # Better: offer a combined Markdown file
                 import io
                 import zipfile
+                from datetime import datetime
                 
                 buf = io.BytesIO()
                 with zipfile.ZipFile(buf, "a", zipfile.ZIP_DEFLATED, False) as zip_file:

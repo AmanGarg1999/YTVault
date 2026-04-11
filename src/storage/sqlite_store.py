@@ -2360,8 +2360,9 @@ class SQLiteStore:
         result = []
         for r in rows:
             d = dict(r)
-            d["takeaways"] = json.loads(d.pop("takeaways_json", "[]"))
-            d["topic_meta"] = json.loads(d.pop("topic_data", "{}"))
+            # Use 'or' to handle NULL values from DB
+            d["takeaways"] = json.loads(d.pop("takeaways_json", "[]") or "[]")
+            d["topic_meta"] = json.loads(d.pop("topic_data", "{}") or "{}")
             result.append(d)
         return result
 
@@ -2555,22 +2556,20 @@ class SQLiteStore:
         rows = self.conn.execute(query, params).fetchall()
         return [PipelineLog(**dict(r)) for r in rows]
 
-    def get_log_summary(self, scan_id: str = "") -> dict:
-        """Get summary of logs for a scan."""
-        query = "SELECT level, COUNT(*) as count FROM pipeline_logs WHERE 1=1"
-        params = []
-        
-        if scan_id:
-            query += " AND scan_id = ?"
-            params.append(scan_id)
-        
-        query += " GROUP BY level"
-        rows = self.conn.execute(query, params).fetchall()
-        
         summary = {}
         for row in rows:
             summary[row["level"]] = row["count"]
         return summary
+
+    def get_video_pipeline_history(self, video_id: str) -> list[dict]:
+        """Fetch chronological log history for a specific video."""
+        rows = self.conn.execute(
+            """SELECT * FROM pipeline_logs 
+               WHERE video_id = ? 
+               ORDER BY timestamp ASC""",
+            (video_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     def clear_logs(self, older_than_days: int = 30) -> int:
         """Delete old logs. Returns count deleted."""

@@ -146,7 +146,7 @@ def render(db):
                         with cols[1]:
                             if st.button("Read Source", key=f"btn_src_{row['video_id']}", use_container_width=True):
                                 st.session_state.navigate = "Transcripts"
-                                st.session_state.active_video_id = row['video_id']
+                                st.session_state.selected_transcript_vid = row['video_id']
                                 st.rerun()
             else:
                 info_card("Knowledge Base Initializing", "Metadata is being harvested from your channels...")

@@ -8,6 +8,7 @@ and data displays. Optimized for research-grade intelligence platforms.
 import streamlit as st
 import json
 import re
+from contextlib import contextmanager
 from typing import Optional, Dict, Any, List
 
 # ===========================================================================
@@ -168,6 +169,7 @@ def inline_status(status: str, text: str = "") -> None:
 # CARD & CONTAINER COMPONENTS
 # ===========================================================================
 
+@contextmanager
 def glass_card(title: Optional[str] = None, border_accent: Optional[str] = None):
     """
     Create a context manager for a glassmorphic container.
@@ -179,10 +181,12 @@ def glass_card(title: Optional[str] = None, border_accent: Optional[str] = None)
     if title:
         st.markdown(f"<strong style='color: white; display: block; margin-bottom: 1rem; font-size: 1.1rem;'>{title}</strong>", unsafe_allow_html=True)
     
-    # Usage: 
-    # with glass_card("Title"): 
-    #     st.write("Content")
-    return st.container()
+    try:
+        # We don't return st.container() because we want the content to be 
+        # rendered between the start and end div tags in the Streamlit flow.
+        yield
+    finally:
+        st.markdown("</div>", unsafe_allow_html=True)
 
 
 def info_card(title: str, content: str) -> None:
@@ -216,6 +220,89 @@ def error_card(title: str, content: str) -> None:
 <span style="color: var(--text-muted); font-size: 0.95rem;">{content}</span>
 </div>
 """, unsafe_allow_html=True)
+
+
+def pipeline_trace_timeline(logs: List[Dict[str, Any]]) -> None:
+    """
+    Render a vertical chronological timeline of pipeline events.
+    """
+    if not logs:
+        st.info("No pipeline telemetry found for this video.")
+        return
+
+    st.markdown("""
+<style>
+    .timeline-container {
+        padding: 1rem;
+        position: relative;
+    }
+    .timeline-item {
+        margin-left: 2rem;
+        padding-bottom: 2rem;
+        position: relative;
+        border-left: 2px solid rgba(99, 102, 241, 0.2);
+        padding-left: 2rem;
+    }
+    .timeline-item:last-child {
+        border-left: none;
+        padding-bottom: 0;
+    }
+    .timeline-dot {
+        position: absolute;
+        left: -7px;
+        top: 0;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--primary-glow);
+        box-shadow: 0 0 10px var(--primary-glow);
+    }
+    .timeline-time {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        margin-bottom: 0.25rem;
+        font-weight: 600;
+    }
+    .timeline-stage {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: #f8fafc;
+        margin-bottom: 0.5rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    .timeline-msg {
+        font-size: 0.9rem;
+        color: #cbd5e1;
+        background: rgba(15, 23, 42, 0.4);
+        padding: 0.75rem;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .error-log { border-left-color: #ef4444; }
+    .error-dot { background: #ef4444; box-shadow: 0 0 10px #ef4444; }
+</style>
+<div class="timeline-container">
+""", unsafe_allow_html=True)
+
+    for log in logs:
+        is_error = log.get("level") == "ERROR"
+        dot_class = "timeline-dot error-dot" if is_error else "timeline-dot"
+        item_class = "timeline-item error-log" if is_error else "timeline-item"
+        
+        st.markdown(f"""
+    <div class="{item_class}">
+        <div class="{dot_class}"></div>
+        <div class="timeline-time">{log['timestamp']}</div>
+        <div class="timeline-stage">{log['stage']}</div>
+        <div class="timeline-msg">
+            {log['message']}
+            {f'<div style="color:#ef4444; font-size:0.8rem; margin-top:0.5rem; font-family:monospace;">{log["error_detail"]}</div>' if log.get("error_detail") else ''}
+        </div>
+    </div>
+""", unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ===========================================================================
@@ -262,8 +349,8 @@ def video_card(
         views = getattr(video, 'view_count', 0)
 
         st.markdown(f"""
-<div style="background: rgba(15, 23, 42, 0.3); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 1.25rem; margin-bottom: 0.75rem;"><div style="display: flex; gap: 1.5rem; align-items: flex-start;">
-{f'<div style="width: 140px; flex-shrink: 0;"><img src="https://img.youtube.com/vi/{video.video_id}/mqdefault.jpg" style="width: 100%; border-radius: 8px;"></div>' if show_thumbnail else ''}
+<div style="background: rgba(15, 23, 42, 0.3); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; padding: 1.5rem; margin-bottom: 1.25rem; box-shadow: 0 4px 20px rgba(0,0,0,0.1);"><div style="display: flex; gap: 1.75rem; align-items: flex-start;">
+{f'<div style="width: 160px; flex-shrink: 0;"><img src="https://img.youtube.com/vi/{video.video_id}/mqdefault.jpg" style="width: 100%; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);"></div>' if show_thumbnail else ''}
 <div style="flex-grow: 1;">
 <p style="font-size: 1.1rem; font-weight: 700; color: white; margin: 0; line-height: 1.4;">{clean_title}</p>
 <div style="display: flex; gap: 1rem; align-items: center; margin-top: 0.75rem; font-size: 0.75rem; color: #94a3b8; font-weight: 600;">

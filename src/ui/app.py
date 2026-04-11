@@ -27,7 +27,8 @@ from src.ui.views import (
     explorer, guest_intel, export_center,
     logs_monitor, data_management, reject_review,
     transcript_viewer, performance_metrics, comparative_lab,
-    topic_explorer, blueprint_center, research_agent_view, monitoring_hub
+    topic_explorer, blueprint_center, research_agent_view, monitoring_hub,
+    global_search
 )
 
 from src.ui.components.ui_helpers import action_confirmation_dialog, failure_confirmation_dialog
@@ -588,8 +589,8 @@ NAV_STRUCTURE = {
     ],
     "Analyze": [
         "Intelligence Lab",
-        "Research Agent",
         "Topic Explorer",
+        "Global Search",
         "Blueprint Center",
         "Comparative Lab",
         "Transcripts", 
@@ -730,6 +731,7 @@ PAGE_MAP = {
     "Intelligence Lab": lambda: intelligence_lab.render(db, run_repair_background),
     "Research Agent": lambda: research_agent_view.render(db),
     "Topic Explorer": lambda: topic_explorer.render(db),
+    "Global Search": lambda: global_search.render_global_search(db, vs),
     "Comparative Lab": lambda: comparative_lab.render(db, vs),
     "Blueprint Center": lambda: blueprint_center.render(db),
     "Transcripts": lambda: transcript_viewer.render(db),

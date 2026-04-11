@@ -135,9 +135,45 @@ def render_mind_map(db: SQLiteStore):
     config = Config(width=800, height=500, directed=False, physics=True, hierarchical=False)
     
     if nodes:
-        agraph(nodes=nodes, edges=edges, config=config)
+        selected_topic = agraph(nodes=nodes, edges=edges, config=config)
+        if selected_topic:
+            st.session_state.selected_graph_topic = selected_topic
+        
+        if st.session_state.get("selected_graph_topic"):
+            render_topic_side_car(db, st.session_state.selected_graph_topic)
     else:
         info_card("Sparse Graph", "Synthesize more content to reveal connection clusters.")
+
+def render_topic_side_car(db: SQLiteStore, topic_name: str):
+    """Render a side-panel with details for the selected topic."""
+    st.markdown("---")
+    st.markdown(f"### ◈ Insight Detail: {topic_name}")
+    
+    if st.button("Clear Selection"):
+        st.session_state.selected_graph_topic = None
+        st.rerun()
+
+    details = db.get_topic_details(topic_name)
+    if not details:
+        st.info("No detailed insights stored for this specific topic node.")
+        return
+
+    st.write(f"Found in {len(details)} videos:")
+    
+    for d in details[:5]:
+        with glass_card():
+            st.markdown(f"**{d['title']}**")
+            st.caption(f"{d['channel_name']} | {d['upload_date']}")
+            
+            # Show top takeaways
+            if d.get("takeaways"):
+                for t in d["takeaways"][:2]:
+                    st.markdown(f"- {t}")
+            
+            if st.button("Deep Analysis", key=f"lab_vid_{d['video_id']}"):
+                st.session_state.selected_transcript_vid = d['video_id']
+                st.session_state.navigate = "Transcripts"
+                st.rerun()
 
 def render_market_trends(db: SQLiteStore):
     section_header("Topic Momentum Analysis", icon="📈")
@@ -181,7 +217,56 @@ def render_guest_network(db: SQLiteStore):
         edges.append(Edge(source=r["guest_a"], target=r["guest_b"], label=r["topic"], color="#475569"))
 
     config = Config(width=800, height=500, directed=False, physics=True)
-    agraph(nodes=nodes, edges=edges, config=config)
+    selected_guest = agraph(nodes=nodes, edges=edges, config=config)
+    if selected_guest:
+        st.session_state.selected_graph_guest = selected_guest
+    
+    if st.session_state.get("selected_graph_guest"):
+        render_guest_side_car(db, st.session_state.selected_graph_guest)
+
+def render_guest_side_car(db: SQLiteStore, guest_name: str):
+    """Render a side-panel with details for the selected guest."""
+    st.markdown("---")
+    st.markdown(f"### ✦ Expert Profile: {guest_name}")
+
+    if st.button("Clear Profile"):
+        st.session_state.selected_graph_guest = None
+        st.rerun()
+    
+    # We can use our existing guest logic if available
+    guest = db.find_guest_exact(guest_name)
+    if not guest:
+        st.info("No verified profile data for this entity.")
+        return
+
+    col1, col2 = st.columns(2)
+    col1.metric("Mentions", guest.mention_count)
+    col2.metric("Type", guest.entity_type)
+
+    if guest.aliases:
+        st.write(f"**Aliases:** {', '.join(guest.aliases)}")
+
+    # Fetch appearances if possible
+    rows = db.conn.execute("""
+        SELECT v.title, v.video_id, ga.context_snippet, c.name as channel
+        FROM guest_appearances ga
+        JOIN videos v ON ga.video_id = v.video_id
+        JOIN channels c ON v.channel_id = c.channel_id
+        WHERE ga.guest_id = ?
+        ORDER BY v.upload_date DESC
+    """, (guest.guest_id,)).fetchall()
+
+    if rows:
+        st.markdown("**Notable Appearances:**")
+        for r in rows:
+            with st.expander(f"{r['title'][:60]}..."):
+                st.caption(f"Channel: {r['channel']}")
+                if r['context_snippet']:
+                    st.markdown(f"> {r['context_snippet']}")
+                if st.button("Jump to Intelligence Trace", key=f"guest_vid_{r['video_id']}"):
+                    st.session_state.selected_transcript_vid = r['video_id']
+                    st.session_state.navigate = "Transcripts"
+                    st.rerun()
 
 def render_thematic_bridges(db: SQLiteStore):
     section_header("Thematic Bridge Discovery", icon="⚿")

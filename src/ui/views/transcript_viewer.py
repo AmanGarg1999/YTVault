@@ -10,8 +10,8 @@ Enables verification workflow:
 
 import streamlit as st
 from src.storage.sqlite_store import SQLiteStore
-from src.config import get_settings
 from src.intelligence.analysis_engine import AnalysisEngine
+from src.ui.components.ui_helpers import pipeline_trace_timeline
 
 
 def render(db: SQLiteStore):
@@ -112,7 +112,7 @@ def render_single_transcript(db: SQLiteStore):
     st.divider()
     
     # Tabs for different views
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Full Transcript", "Search", "Timestamp Jump", "Audience Highlights", "Export"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Full Transcript", "Search", "Timestamp Jump", "Audience Highlights", "Intelligence Trace", "Export"])
     
     with tab1:
         st.subheader("Full Transcript")
@@ -255,6 +255,13 @@ def render_single_transcript(db: SQLiteStore):
                         st.success(f"Selected {timestamp_str}. Switch to 'Timestamp Jump' to see context.")
 
     with tab5:
+        st.subheader("Intelligence Trace")
+        st.caption("Detailed chronological telemetry of the intelligence gathering process.")
+        
+        logs = db.get_video_pipeline_history(video_id)
+        pipeline_trace_timeline(logs)
+
+    with tab6:
         st.subheader("Export Transcript")
         
         export_format = st.radio("Format", ["Text (.txt)", "Markdown (.md)"], key="export_fmt")

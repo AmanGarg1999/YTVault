@@ -279,6 +279,8 @@ class VectorStore:
 
     def search_summaries(self, query: str, top_k: int = 5) -> list[dict]:
         """Search across video summaries."""
+        if not self.summaries_collection:
+            return []
         query_vecs = self.embedding_fn([query])
         results = self.summaries_collection.query(
             query_embeddings=query_vecs,
@@ -290,6 +292,27 @@ class VectorStore:
             for i, video_id in enumerate(results["ids"][0]):
                 output.append({
                     "video_id": video_id,
+                    "text": results["documents"][0][i],
+                    "metadata": results["metadatas"][0][i],
+                    "distance": results["distances"][0][i] if results.get("distances") else 0.0,
+                })
+        return output
+
+    def search_claims(self, query: str, top_k: int = 10) -> list[dict]:
+        """Search across research claims semantic collection."""
+        if not self.claims_collection:
+            return []
+        query_vecs = self.embedding_fn([query])
+        results = self.claims_collection.query(
+            query_embeddings=query_vecs,
+            n_results=top_k,
+        )
+        
+        output = []
+        if results["ids"] and results["ids"][0]:
+            for i, claim_id in enumerate(results["ids"][0]):
+                output.append({
+                    "claim_id": claim_id,
                     "text": results["documents"][0][i],
                     "metadata": results["metadatas"][0][i],
                     "distance": results["distances"][0][i] if results.get("distances") else 0.0,

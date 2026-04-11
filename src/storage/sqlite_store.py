@@ -2387,14 +2387,22 @@ class SQLiteStore:
         stats = {}
         
         # 1. Total counts
-        stats["total_videos"] = self.conn.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
-        stats["total_channels"] = self.conn.execute("SELECT COUNT(*) FROM channels").fetchone()[0]
-        stats["total_subscribers"] = 0 # Tracking disabled
-        stats["total_summaries"] = self.conn.execute("SELECT COUNT(*) FROM video_summaries").fetchone()[0]
-        stats["summarized"] = stats["total_summaries"] # Fix for Intelligence Lab meter
-        stats["total_chunks"] = self.conn.execute("SELECT COUNT(*) FROM transcript_chunks").fetchone()[0]
+        """Fetch high-level and granular statistics for pipeline monitoring."""
+        stats = {
+            "total_videos": 0,
+            "discovered": 0,
+            "accepted": 0,
+            "rejected": 0,
+            "pending_review": 0,
+            "in_progress": 0,
+            "done": 0,
+            "stages": {}
+        }
         
-        # 2. Triage states
+        # 1. Total videos
+        stats["total_videos"] = self.conn.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
+        
+        # 2. Triage breakdown
         res = self.conn.execute(
             "SELECT triage_status, COUNT(*) as cnt FROM videos GROUP BY triage_status"
         ).fetchall()
@@ -2405,32 +2413,26 @@ class SQLiteStore:
         stats["rejected"] = triage_map.get("REJECTED", 0)
         stats["pending_review"] = triage_map.get("PENDING_REVIEW", 0)
         
-        # 3. Checkpoint stages
+        # 3. Checkpoint stages (Granular)
         res = self.conn.execute(
             "SELECT checkpoint_stage, COUNT(*) as cnt FROM videos GROUP BY checkpoint_stage"
         ).fetchall()
         stage_map = {row["checkpoint_stage"]: row["cnt"] for row in res}
+        stats["stages"] = stage_map
         
-        stats["metadata_harvested"] = stage_map.get("METADATA_HARVESTED", 0)
-        stats["triage_complete"] = stage_map.get("TRIAGE_COMPLETE", 0)
         stats["done"] = stage_map.get("DONE", 0) + stage_map.get("SUMMARIZED", 0) + stage_map.get("GRAPH_SYNCED", 0)
         
-        # 4. Derived metrics for Dashboard
-        # "Pending" in dashboard usually means videos discovered but not yet handled
-        stats["pending"] = stats["discovered"] + stats["pending_review"]
-        
-        # "In Progress" means accepted but not yet DONE
+        # 4. In Progress Metrics
         stats["in_progress"] = self.conn.execute(
             """SELECT COUNT(*) FROM videos 
                WHERE triage_status = 'ACCEPTED' 
                  AND checkpoint_stage NOT IN ('DONE', 'SUMMARIZED', 'GRAPH_SYNCED')"""
         ).fetchone()[0]
         
-        # ETA calculation (very rough: 30s per in-progress video)
-        stats["eta_minutes"] = max(1, (stats["in_progress"] * 30) // 60) if stats["in_progress"] > 0 else 0
+        # ETA calculation (30s per stage per video roughly)
+        # Find which stages are pending for accepted videos
+        stats["eta_minutes"] = max(1, (stats["in_progress"] * 45) // 60) if stats["in_progress"] > 0 else 0
         
-        return stats
-
         return stats
 
     # -------------------------------------------------------------------

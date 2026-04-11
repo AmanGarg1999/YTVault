@@ -16,30 +16,43 @@ def render(db):
     </div>
     """, unsafe_allow_html=True)
 
-    try:
-        from src.intelligence.export import ExportEngine
-        exporter = ExportEngine(db)
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.markdown("### Pipeline Statistics")
-            if st.button("Export Stats (Markdown)"):
-                content = exporter.export_pipeline_stats()
-                st.download_button("Download", content, "pipeline_stats.md")
-                st.markdown(content)
-
-        with col2:
-            st.markdown("### Guest Registry")
-            fmt = st.selectbox("Format", ["markdown", "json", "csv"], key="guest_fmt")
-            if st.button("Export Guests"):
-                content = exporter.export_guests(fmt=fmt)
-                ext = {"markdown": "md", "json": "json", "csv": "csv"}[fmt]
-                st.download_button("Download", content, f"guests.{ext}")
-                if fmt == "markdown":
-                    st.markdown(content)
-                else:
-                    st.code(content)
+        st.markdown("---")
+        st.markdown("### Bulk Research Packages")
+        st.info("Export high-fidelity intelligence packages (transcripts, summaries, and claims) for multiple videos at once.")
+        
+        # 1. Selection
+        all_accepted = db.get_videos_by_status("ACCEPTED", limit=1000)
+        selected_vids = st.multiselect(
+            "Select Videos for Export", 
+            all_accepted, 
+            format_func=lambda v: f"{v.title[:60]}...",
+            key="bulk_exp_select"
+        )
+        
+        col_fmt, col_exec = st.columns([1, 1])
+        with col_fmt:
+            bulk_fmt = st.radio("Output Format", ["markdown", "json"], horizontal=True, key="bulk_fmt")
+        
+        with col_exec:
+            if st.button("Generate Bulk ZIP", type="primary", use_container_width=True, disabled=not selected_vids):
+                # We'll simulate a zip or just offer them one by one if zip is too heavy for simple streamlit
+                # Better: offer a combined Markdown file
+                import io
+                import zipfile
+                
+                buf = io.BytesIO()
+                with zipfile.ZipFile(buf, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+                    for v in selected_vids:
+                        content = exporter.export_video_package(v.video_id, fmt=bulk_fmt)
+                        ext = "md" if bulk_fmt == "markdown" else "json"
+                        zip_file.writestr(f"{v.video_id}.{ext}", content)
+                
+                st.download_button(
+                    "Download Research Vault (.zip)",
+                    buf.getvalue(),
+                    f"vault_export_{datetime.now().strftime('%Y%m%d')}.zip",
+                    "application/zip"
+                )
         
         st.markdown("---")
         with st.expander("Obsidian Sync (Research Wiki)", expanded=True):

@@ -9,73 +9,91 @@ logger = logging.getLogger(__name__)
 
 def render_global_search(db: SQLiteStore, vs: VectorStore):
     """Unified Global Search interface with Hybrid Ranking (Keyword + Semantic) and Advanced Filtering."""
-    st.title("🌐 Unified Intelligence Search")
-    st.markdown("---")
+    st.markdown("""
+        <div class="main-header">
+            <h1>Intelligence Search</h1>
+            <p>Unified deep-search across transcripts, summaries, and claims with hybrid ranking.</p>
+        </div>
+    """, unsafe_allow_html=True)
 
-    # Sidebar: Advanced Filters
+    # -----------------------------------------------------------------------
+    # SYSTEM STATUS & CIRCUIT BREAKER
+    # -----------------------------------------------------------------------
+    vector_online = vs and vs.is_ready()
+    
     with st.sidebar:
-        st.markdown("### Search Filters")
+        st.markdown("### System Health")
+        if vector_online:
+            st.success("🟢 Vector Core: Operational")
+        else:
+            st.error("🔴 Vector Core: Offline")
+            st.info("Falling back to high-fidelity keyword search (Degraded Mode).")
+
+        st.markdown("---")
+        st.markdown("### Advanced Filters")
         
         # Channel Filter
         channels = db.get_all_channels()
         selected_channels = st.multiselect(
-            "Filter by Channel",
+            "Research Sources",
             options=channels,
             format_func=lambda c: c.name,
-            help="Restrict search results to specific research sources."
+            help="Restrict search results to specific channels."
         )
         
         # Date Filter
-        use_date_filter = st.checkbox("Filter by Date Range")
+        use_date_filter = st.checkbox("Filter by Date")
         if use_date_filter:
-            date_range = st.date_input("Capture Date Range", value=[])
+            date_range = st.date_input("Range", value=[])
         else:
             date_range = None
             
         st.markdown("---")
-        top_k = st.slider("Results to display", 5, 50, 20)
+        top_k = st.slider("Result Density", 5, 50, 20)
 
     # Main Search Input
-    query = st.text_input("Deep search across transcripts, summaries, and claims...", placeholder="e.g. 'impact of generative AI on productivity'", label_visibility="collapsed")
+    query = st.text_input(
+        "Search your intelligence vault...", 
+        placeholder="e.g. 'impact of generative AI on productivity' or 'expert debate on nutrition'", 
+        label_visibility="collapsed",
+        key="search_query_main"
+    )
 
     if query:
-        # Prepare filters for VectorStore
+        # Prepare filters
         where_filter = {}
         if selected_channels:
             ids = [c.channel_id for c in selected_channels]
             where_filter["channel_id"] = ids[0] if len(ids) == 1 else {"$in": ids}
         
         if use_date_filter and date_range and len(date_range) == 2:
-            # Note: upload_date is usually ISO string. Direct comparison might be tricky with ChromaDB 'where'.
-            # If dates are stored as YYYY-MM-DD
             where_filter["upload_date"] = {
                 "$gte": date_range[0].isoformat(),
                 "$lte": date_range[1].isoformat()
             }
 
-        with st.spinner("Executing hybrid intelligence search..."):
+        with st.spinner("Analyzing vault contents..."):
             try:
-                # 1. Keyword Search (FTS5)
+                # 1. Keyword Search (FTS5) - Always run as baseline
                 kw_results = db.fulltext_search(query, limit=top_k * 2)
                 
-                # 2. Semantic Search (resilient check for methods)
+                # 2. Semantic Search (resilient check)
                 vector_results = []
                 summary_results = []
                 claim_results = []
                 
-                if vs and vs.is_ready():
-                    vector_results = vs.search(query, top_k=top_k * 2, where=where_filter)
-                    
-                    if hasattr(vs, "search_summaries"):
-                        summary_results = vs.search_summaries(query, top_k=top_k, where=where_filter)
-                    
-                    if hasattr(vs, "search_claims"):
-                        try:
+                if vector_online:
+                    try:
+                        vector_results = vs.search(query, top_k=top_k * 2, where=where_filter)
+                        
+                        if hasattr(vs, "search_summaries"):
+                            summary_results = vs.search_summaries(query, top_k=top_k, where=where_filter)
+                        
+                        if hasattr(vs, "search_claims"):
                             claim_results = vs.search_claims(query, top_k=top_k, where=where_filter)
-                        except Exception as e:
-                            logger.warning(f"Claims search failed: {e}")
-                else:
-                    st.warning("Vector core is currently offline. Falling back to keyword-only search.")
+                    except Exception as e:
+                        logger.warning(f"Semantic search component failed: {e}")
+                        st.caption("⚠️ Semantic results temporarily unavailable. Using keyword matching.")
 
                 # 3. Hybrid Ranking (Reciprocal Rank Fusion - RRF)
                 scores = {}
@@ -83,7 +101,12 @@ def render_global_search(db: SQLiteStore, vs: VectorStore):
 
                 def update_rrf(results, weight=1.0):
                     for i, res in enumerate(results):
-                        v_id = res.get("video_id")
+                        # Handle different result types
+                        v_id = None
+                        if isinstance(res, dict):
+                            # Try multiple possible keys for video_id
+                            v_id = res.get("video_id") or res.get("metadata", {}).get("video_id")
+                        
                         if not v_id: continue
                         
                         if v_id not in scores:
@@ -91,38 +114,39 @@ def render_global_search(db: SQLiteStore, vs: VectorStore):
                         
                         scores[v_id]["rrf"] += weight * (1.0 / (k + i))
                         
-                        text = res.get("snippet") or res.get("text") or ""
-                        if text not in [m["text"] for m in scores[v_id]["matches"]]:
-                            scores[v_id]["matches"].append({
-                                "text": text,
-                                "type": "transcript" if "snippet" in res else ("summary" if "video_id" in res and "claim_id" not in res else "claim")
-                            })
+                        text = ""
+                        m_type = "transcript"
+                        if isinstance(res, dict):
+                            text = res.get("snippet") or res.get("text") or ""
+                            # Infere type from structure or presence of keys
+                            if "snippet" in res: m_type = "transcript"
+                            elif "claim_id" in str(res) or "claim" in str(res).lower(): m_type = "claim"
+                            else: m_type = "summary"
+                        
+                        if text and text not in [m["text"] for m in scores[v_id]["matches"]]:
+                            scores[v_id]["matches"].append({"text": text, "type": m_type})
 
-                update_rrf(kw_results, weight=1.2) 
-                update_rrf(vector_results, weight=1.0) 
+                # Apply weights
+                kw_weight = 1.0 if vector_online else 2.0  # Boost keyword relevance in degraded mode
+                update_rrf(kw_results, weight=kw_weight) 
                 
-                for i, res in enumerate(summary_results):
-                    v_id = res.get("video_id")
-                    if v_id:
-                        if v_id not in scores: scores[v_id] = {"rrf": 0.0, "matches": [], "type": "video"}
-                        scores[v_id]["rrf"] += 1.0 / (k + i)
-                        scores[v_id]["matches"].append({"text": res["text"][:200] + "...", "type": "summary"})
-
-                for i, res in enumerate(claim_results):
-                    v_id = res["metadata"].get("video_id")
-                    if v_id:
-                        if v_id not in scores: scores[v_id] = {"rrf": 0.0, "matches": [], "type": "video"}
-                        scores[v_id]["rrf"] += 1.0 / (k + i)
-                        scores[v_id]["matches"].append({"text": res["text"], "type": "claim"})
+                if vector_online:
+                    update_rrf(vector_results, weight=1.0) 
+                    update_rrf(summary_results, weight=0.8)
+                    update_rrf(claim_results, weight=1.2)
 
                 # Sort and Render
                 ranked_results = sorted(scores.items(), key=lambda x: x[1]["rrf"], reverse=True)[:top_k]
 
                 if not ranked_results:
-                    info_card("No Insights Found", "The intelligence algorithm could not find matching patterns for your current query and filters.")
+                    info_card(
+                        "No Intelligence Found", 
+                        "The search core could not find matching patterns for this query. "
+                        "Try using broader keywords or removing filters."
+                    )
                     return
 
-                st.write(f"Found {len(ranked_results)} relevant videos:")
+                st.write(f"Showing {len(ranked_results)} high-relevance matches:")
                 
                 for v_id, data in ranked_results:
                     video = db.get_video(v_id)
@@ -132,23 +156,42 @@ def render_global_search(db: SQLiteStore, vs: VectorStore):
                         st.markdown(f"### {video.title}")
                         st.caption(f"{video.upload_date} | Synthesis Strength: {data['rrf']:.4f}")
                         
+                        if not vector_online:
+                            st.caption("⚡ Result returned via legacy keyword index")
+
                         if data["matches"]:
                             for m in data["matches"][:3]:
-                                prefix = "📝" if m["type"] == "summary" else ("🔬" if m["type"] == "claim" else "💬")
-                                st.markdown(f"> {prefix} {m['text']}")
+                                icon = "📝" if m["type"] == "summary" else ("🔬" if m["type"] == "claim" else "💬")
+                                label = m["type"].upper()
+                                # Clean snippet
+                                clean_text = m["text"][:250] + "..." if len(m["text"]) > 250 else m["text"]
+                                st.markdown(f"**{icon} {label}**: _{clean_text}_")
                         
-                        if st.button("Drill Down", key=f"srch_drill_{v_id}"):
-                            st.session_state.selected_transcript_vid = v_id
-                            st.session_state.navigate = "Transcripts"
-                            st.rerun()
+                        col1, col2 = st.columns([1, 4])
+                        with col1:
+                            if st.button("Drill Down", key=f"srch_drill_{v_id}"):
+                                st.session_state.selected_transcript_vid = v_id
+                                st.session_state.navigate = "Transcripts"
+                                st.rerun()
 
             except Exception as e:
                 failure_confirmation_dialog(
-                    "Search Engine Interrupted",
-                    f"The global search core encountered a technical anomaly: {str(e)}",
+                    "Search Core Anomaly",
+                    f"The unified search engine encountered a non-fatal error: {str(e)}",
                     retry_callback=None
                 )
-                logger.error(f"Global search fatal: {e}", exc_info=True)
+                logger.error(f"Global search error: {e}", exc_info=True)
 
     else:
-        glass_card("Intelligence Search", "Enter a query and use the sidebar filters to narrow down themes or dates across your entire vault.")
+        # Default State: System Info
+        with glass_card():
+            st.markdown("### 🔍 Searching your Research OS")
+            st.markdown("""
+                Our hybrid engine searches through:
+                - **Transcripts**: Full conversations and lectures.
+                - **Summaries**: High-level distilled research findings.
+                - **Claims**: Evidence-based extractions from across the vault.
+                
+                *Use the sidebar to filter by specific channels or time periods.*
+            """)
+

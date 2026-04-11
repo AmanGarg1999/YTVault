@@ -261,39 +261,35 @@ def render_single_transcript(db: SQLiteStore):
         pipeline_trace_timeline(logs)
 
     with tab6:
-        st.subheader("Export Transcript")
+        st.subheader("Export Research Intelligence")
+        st.info("Generate a high-fidelity research package containing the full transcript, summary, and extracted claims.")
         
-        export_format = st.radio("Format", ["Text (.txt)", "Markdown (.md)"], key="export_fmt")
-        
-        if export_format == "Markdown (.md)":
-            export_text = f"""# {transcript['title']}
-
-**Channel:** {transcript['channel']}  
-**Date:** {transcript['upload_date']}  
-**Duration:** {transcript['duration_seconds'] // 60}m  
-**Language:** {transcript['language']}  
-**Strategy:** {transcript['transcript_strategy']}  
-
-## Full Transcript
-
-{transcript['full_cleaned_text']}
-
----
-
-*Exported from knowledgeVault-YT*
-"""
-            filename = f"transcript_{video_id}.md"
-        else:
-            export_text = transcript['full_cleaned_text']
-            filename = f"transcript_{video_id}.txt"
-        
-        st.download_button(
-            f"Download as {export_format.split('.')[0]}",
-            export_text,
-            filename,
-            "text/plain",
-            key="export_btn"
-        )
+        try:
+            from src.intelligence.export import ExportEngine
+            exporter = ExportEngine(db)
+            
+            export_format = st.radio("Output Format", ["markdown", "json"], horizontal=True, key="expert_fmt_v2")
+            
+            with st.container(border=True):
+                if st.button(f"Generate {export_format.upper()} Package", type="primary", use_container_width=True):
+                    content = exporter.export_video_package(video_id, fmt=export_format)
+                    ext = "md" if export_format == "markdown" else "json"
+                    
+                    st.download_button(
+                        f"Download Research Package",
+                        content,
+                        f"{video_id}_vault_intelligence.{ext}",
+                        "text/plain" if ext == "md" else "application/json",
+                        key="dl_btn_v_intel"
+                    )
+                    
+                    with st.expander("Preview Package Content"):
+                        if export_format == "markdown":
+                            st.markdown(content)
+                        else:
+                            st.code(content, language="json")
+        except Exception as e:
+            st.error(f"Export system anomaly: {e}")
 
 
 def render_compare_transcripts(db: SQLiteStore):

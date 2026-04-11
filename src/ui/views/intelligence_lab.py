@@ -328,14 +328,59 @@ def _render_cluster_detail(db, topic_name):
     st.divider()
     
     # 1. Synthesized Perspective
-    st.markdown("#### Consolidated Synthesis")
-    all_takeaways = []
-    for d in details: all_takeaways.extend(d["takeaways"])
-    unique_takeaways = sorted(list(set(all_takeaways)))[:15]
-    
-    takeaway_text = "\n".join([f"- {t}" for t in unique_takeaways])
-    st.markdown(takeaway_text)
-    tts_button(f"Brief for {topic_name}: {takeaway_text}", label="Listen to Synthesis")
+    col_syn, col_exp = st.columns([2, 1])
+    with col_syn:
+        st.markdown("#### Consolidated Synthesis")
+        all_takeaways = []
+        for d in details: all_takeaways.extend(d["takeaways"])
+        unique_takeaways = sorted(list(set(all_takeaways)))[:15]
+        
+        takeaway_text = "\n".join([f"- {t}" for t in unique_takeaways])
+        st.markdown(takeaway_text)
+        tts_button(f"Brief for {topic_name}: {takeaway_text}", label="Listen to Synthesis")
+
+    with col_exp:
+        st.markdown("#### Export Knowledge")
+        exp_fmt = st.radio("Format", ["markdown", "json"], key="cluster_exp_fmt", horizontal=True)
+        
+        try:
+            from src.intelligence.export import ExportEngine
+            exporter = ExportEngine(db)
+            
+            # Create a virtual RAG response or custom export for clusters
+            # For now, we'll build a synthetic markdown report for the cluster
+            if st.button("Download Research", type="primary", use_container_width=True):
+                if exp_fmt == "markdown":
+                    content = f"# Intelligence Cluster: {topic_name}\n\n"
+                    content += f"**Constituent Videos:** {len(details)}\n"
+                    content += f"**Channels Involved:** {len(channels)}\n\n"
+                    content += "## ◈ Synthesized Takeaways\n"
+                    content += takeaway_text + "\n\n"
+                    content += "## 🔬 Source Material Trace\n"
+                    for d in details:
+                        content += f"### {d['title']}\n"
+                        content += f"**Source:** {d['url']}\n"
+                        content += f"**Summary:** {d['summary_text']}\n\n"
+                else: # JSON
+                    content = json.dumps({
+                        "cluster_name": topic_name,
+                        "metrics": {"videos": len(details), "channels": len(channels)},
+                        "takeaways": unique_takeaways,
+                        "sources": [
+                            {"title": d["title"], "url": d["url"], "summary": d["summary_text"]}
+                            for d in details
+                        ]
+                    }, indent=2)
+                
+                ext = "md" if exp_fmt == "markdown" else "json"
+                st.download_button(
+                    "Download File",
+                    content,
+                    f"cluster_{topic_name.replace(' ', '_').lower()}.{ext}",
+                    key="dl_cluster_btn"
+                )
+        except Exception as e:
+            st.error(f"Export service unavailable: {e}")
 
     st.divider()
 

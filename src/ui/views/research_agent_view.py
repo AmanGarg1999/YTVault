@@ -20,14 +20,22 @@ def render(db: SQLiteStore):
             if query:
                 agent = ResearchAgent(db)
                 with st.spinner(f"Agent investigating '{query}'..."):
-                    report = agent.generate_report(query)
-                    if report:
-                        st.toast("Investigation Complete!")
-                        success_card("Investigation Complete", f"Created: {report.title}")
-                        st.balloons()
-                        st.rerun()
+                    try:
+                        report = agent.generate_report(query)
+                        if report:
+                            st.toast("Investigation Complete!")
+                            success_card("Investigation Complete", f"Created: {report.title}")
+                            st.balloons()
+                            st.rerun()
+                    except Exception as e:
+                        from src.ui.components import failure_confirmation_dialog
+                        failure_confirmation_dialog("Agent Malfunction", str(e))
             else:
-                st.warning("Please enter a query.")
+                from src.ui.components import failure_confirmation_dialog
+                failure_confirmation_dialog(
+                    "Mission Objective Required", 
+                    "The autonomous agent requires a specific research query or investigative theme to initialize its synthesis cycle."
+                )
 
     with col2:
         st.info("The agent deep-scans your vault, finds relevant topics, and synthesizes a formal white paper with citations.")

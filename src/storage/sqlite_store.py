@@ -17,6 +17,22 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+@dataclass
+class ChatSession:
+    session_id: str
+    name: str
+    created_at: str = ""
+    last_active: str = ""
+
+@dataclass
+class ChatMessage:
+    message_id: str
+    session_id: str
+    role: str # 'user' or 'assistant'
+    content: str
+    suggested_json: str = "[]"
+    citations_json: str = "[]"
+    created_at: str = ""
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -247,6 +263,8 @@ class WeeklyBrief:
     channel_ids_json: str = "[]"
     content: str = ""
     created_at: str = ""
+
+
 
 
 @dataclass
@@ -669,6 +687,25 @@ SCHEMA_MIGRATIONS = [
             content       TEXT NOT NULL,
             created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+    """),
+    # Version 26: Research Chat Hub Persistence
+    (26, """
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+            session_id  TEXT PRIMARY KEY,
+            name        TEXT NOT NULL,
+            created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_active DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            message_id  TEXT PRIMARY KEY,
+            session_id  TEXT REFERENCES chat_sessions(session_id) ON DELETE CASCADE,
+            role        TEXT NOT NULL,
+            content     TEXT NOT NULL,
+            suggested_json TEXT DEFAULT '[]',
+            citations_json TEXT DEFAULT '[]',
+            created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id);
     """),
 ]
 
@@ -2399,8 +2436,10 @@ class SQLiteStore:
             "stages": {}
         }
         
-        # 1. Total videos
+        # 1. Total videos, channels, and chunks
         stats["total_videos"] = self.conn.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
+        stats["total_channels"] = self.conn.execute("SELECT COUNT(*) FROM channels").fetchone()[0]
+        stats["total_chunks"] = self.conn.execute("SELECT COUNT(*) FROM transcript_chunks").fetchone()[0]
         
         # 2. Triage breakdown
         res = self.conn.execute(
@@ -2902,4 +2941,64 @@ class SQLiteStore:
             (limit,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    # -------------------------------------------------------------------
+    # Research Chat Methods
+    # -------------------------------------------------------------------
+
+    def create_chat_session(self, name: str) -> str:
+        """Create a new chat session and return its ID."""
+        session_id = str(uuid.uuid4())
+        self.conn.execute(
+            "INSERT INTO chat_sessions (session_id, name) VALUES (?, ?)",
+            (session_id, name)
+        )
+        self.conn.commit()
+        return session_id
+
+    def get_chat_sessions(self, limit: int = 20) -> list[ChatSession]:
+        """Get recent chat sessions."""
+        rows = self.conn.execute(
+            "SELECT * FROM chat_sessions ORDER BY last_active DESC LIMIT ?",
+            (limit,)
+        ).fetchall()
+        return [ChatSession(**dict(r)) for r in rows]
+
+    def delete_chat_session(self, session_id: str):
+        """Delete a chat session and all its messages."""
+        self.conn.execute("DELETE FROM chat_sessions WHERE session_id = ?", (session_id,))
+        self.conn.commit()
+
+    def insert_chat_message(self, session_id: str, role: str, content: str, 
+                            suggested_json: str = "[]", citations_json: str = "[]"):
+        """Save a message to the chat history."""
+        message_id = str(uuid.uuid4())
+        self.conn.execute(
+            """INSERT INTO chat_messages 
+               (message_id, session_id, role, content, suggested_json, citations_json)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (message_id, session_id, role, content, suggested_json, citations_json)
+        )
+        # Update session activity
+        self.conn.execute(
+            "UPDATE chat_sessions SET last_active = CURRENT_TIMESTAMP WHERE session_id = ?",
+            (session_id,)
+        )
+        self.conn.commit()
+
+    def get_chat_history(self, session_id: str) -> list[ChatMessage]:
+        """Retrieve full message history for a session."""
+        rows = self.conn.execute(
+            "SELECT * FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC",
+            (session_id,)
+        ).fetchall()
+        return [ChatMessage(**dict(r)) for r in rows]
+
+    def rename_chat_session(self, session_id: str, new_name: str):
+        """Update the name of a chat session."""
+        self.conn.execute(
+            "UPDATE chat_sessions SET name = ? WHERE session_id = ?",
+            (new_name, session_id)
+        )
+        self.conn.commit()
 

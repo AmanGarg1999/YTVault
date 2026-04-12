@@ -28,7 +28,7 @@ from src.ui.views import (
     logs_monitor, data_management, reject_review,
     transcript_viewer, performance_metrics, comparative_lab,
     blueprint_center, research_agent_view, monitoring_hub,
-    global_search
+    global_search, research_chat
 )
 
 from src.ui.components.ui_helpers import action_confirmation_dialog, failure_confirmation_dialog
@@ -52,7 +52,7 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
     /* =====================================================================
-       INTELLIGENCE CORE - NEBULA GLASSMORPHISM
+       INTELLIGENCE CORE - THEME DEFINITIONS
        ===================================================================== */
     
     :root {
@@ -75,6 +75,26 @@ st.markdown("""
         --text-stellar: #f8fafc;
         --text-muted: #94a3b8;
     }
+
+    [data-theme="light"] {
+        --bg-deep: #f8fafc;
+        --bg-nebula: radial-gradient(circle at 0% 0%, #f1f5f9 0%, #f8fafc 100%);
+        
+        --primary-glow: #4f46e1;
+        --primary-active: #3730a3;
+        --accent-glow: #0891b2;
+        
+        --glass-bg: rgba(255, 255, 255, 0.7);
+        --glass-border: rgba(0, 0, 0, 0.08);
+        --glass-active: rgba(79, 70, 225, 0.05);
+        
+        --text-stellar: #0f172a;
+        --text-muted: #475569;
+        
+        --success-glow: #059669;
+        --warning-glow: #d97706;
+        --error-glow: #dc2626;
+    }
     
     /* =====================================================================
        GLOBAL STYLES & TYPOGRAPHY
@@ -92,7 +112,7 @@ st.markdown("""
         letter-spacing: -0.025em;
     }
     
-    h1 { font-size: 2.75rem; font-weight: 800; color: white; margin-bottom: 0.5rem; }
+    h1 { font-size: 2.75rem; font-weight: 800; color: var(--text-stellar); margin-bottom: 0.5rem; }
     h2 { font-size: 2rem; font-weight: 700; color: var(--text-stellar); }
     h3 { font-size: 1.5rem; font-weight: 650; color: var(--text-stellar); }
     
@@ -339,7 +359,109 @@ st.markdown("""
     div[data-testid="stSidebarNav"] {
         display: none !important;
     }
+
+    /* =====================================================================
+       RESEARCH CHAL HUB - MESSAGING STYLES
+       ===================================================================== */
+    
+    /* Standardize Chat Messages */
+    div[data-testid="stChatMessage"] {
+        background: rgba(15, 23, 42, 0.3) !important;
+        border: 1px solid rgba(255, 255, 255, 0.05) !important;
+        border-radius: 20px !important;
+        padding: 1.5rem !important;
+        margin-bottom: 1.5rem !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2) !important;
+        backdrop-filter: blur(8px) !important;
+        -webkit-backdrop-filter: blur(8px) !important;
+    }
+
+    /* User Message Specifics - Force Right Alignment */
+    div[data-testid="stChatMessage"][data-testid="stChatMessageUser"] {
+        background: rgba(99, 102, 241, 0.1) !important;
+        border-color: rgba(99, 102, 241, 0.3) !important;
+        margin-left: auto !important;
+        width:  fit-content !important;
+        max-width: 80% !important;
+    }
+
+    /* Assistant Message Specifics - Width Control */
+    div[data-testid="stChatMessage"] {
+        width: fit-content !important;
+        max-width: 90% !important;
+    }
+
+    /* Avatar Icons */
+    div[data-testid="stChatMessageAvatar"] {
+        background-color: var(--primary-glow) !important;
+        border-radius: 12px !important;
+    }
+
+    /* Chat Input FIXED Aesthetic - Removal of White Footer */
+    footer {display: none !important;}
+    header {display: none !important;}
+    
+    div[data-testid="stBottom"] {
+        background-color: transparent !important;
+    }
+
+    div[data-testid="stBottomBlockContainer"] {
+        background-color: var(--bg-deep) !important;
+        border-top: 1px solid var(--glass-border) !important;
+        padding-top: 1rem !important;
+    }
+
+    div[data-testid="stChatInput"] {
+        background-color: transparent !important;
+        padding: 0 !important;
+    }
+
+    div[data-testid="stChatInput"] textarea {
+        background-color: rgba(15, 23, 42, 0.8) !important;
+        border: 1px solid var(--glass-border) !important;
+        border-radius: 14px !important;
+        color: white !important;
+    }
+
+    /* Discovery Chips */
+    .discovery-chip {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        background: rgba(99, 102, 241, 0.15);
+        color: #818cf8;
+        border: 1px solid rgba(99, 102, 241, 0.3);
+        border-radius: 30px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        margin: 0.25rem;
+        white-space: nowrap;
+    }
+
+    .discovery-chip:hover {
+        background: rgba(99, 102, 241, 0.3);
+        border-color: var(--primary-glow);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(99, 102, 241, 0.2);
+        color: white;
+    }
+
+    /* Session List Items (Sidebar) */
+    .session-item {
+        border-radius: 12px;
+        padding: 0.5rem;
+        margin-bottom: 0.5rem;
+        transition: background 0.2s ease;
+    }
+    .session-active {
+        background: var(--glass-active);
+        border-left: 3px solid var(--primary-glow);
+    }
 </style>
+<script>
+    window.parent.window.document.body.setAttribute('data-theme', '{st.session_state.get('theme', 'dark')}');
+</script>
 """, unsafe_allow_html=True)
 
 
@@ -347,7 +469,7 @@ st.markdown("""
 # App Initialization
 # ---------------------------------------------------------------------------
 
-@st.cache_resource
+# @st.cache_resource
 def init_db():
     """Initialize database connection (cached across reruns)."""
     ensure_data_dirs()
@@ -630,30 +752,89 @@ with st.sidebar:
         else:
             st.markdown("<div style='text-align:center; color:#ef4444; font-weight:700; font-size:0.7rem;'>VEC</div>", unsafe_allow_html=True)
     
-    st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
+    # Theme Switcher
+    st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+    theme_choice = st.toggle(
+        "Stellar Lab Theme", 
+        value=st.session_state.get("theme", "dark") == "light",
+        help="Toggle between Void Nebula (Dark) and Stellar Lab (Light) themes."
+    )
+    new_theme = "light" if theme_choice else "dark"
+    if new_theme != st.session_state.get("theme", "dark"):
+        st.session_state.theme = new_theme
+        st.rerun()
 
-# Categorized Navigation Structure
-NAV_STRUCTURE = {
-    "Discover": [
-        "Dashboard", 
-        "Ingestion Hub", 
-        "Monitoring Hub",
-        "Review Center",
-    ],
-    "Analyze": [
-        "Intelligence Lab",
-        "Global Search",
-        "Blueprint Center",
-        "Comparative Lab",
-        "Transcripts", 
-    ],
-    "System": [
-        "Pipeline Center",
-        "Performance",
-        "Export & Integration",
-        "Settings"
-    ]
-}
+    st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
+
+    # Categorized Navigation Structure
+    NAV_STRUCTURE = {
+        "Discover": [
+            "Dashboard", 
+            "Ingestion Hub", 
+            "Monitoring Hub",
+            "Review Center",
+        ],
+        "Analyze": [
+            "Intelligence Lab",
+            "Research Agent",
+            "Research Chat",
+            "Global Search",
+            "Blueprint Center",
+            "Comparative Lab",
+            "Transcripts", 
+        ],
+        "System": [
+            "Pipeline Center",
+            "Performance",
+            "Export & Integration",
+            "Settings"
+        ]
+    }
+
+    selected_page = st.session_state.get("current_page", "Dashboard")
+    
+    for category, items in NAV_STRUCTURE.items():
+        st.markdown(f"<p style='font-size:0.75rem; color:#475569; font-weight:800; margin-top:1.5rem; margin-bottom:0.5rem;'>{category.upper()}</p>", unsafe_allow_html=True)
+        for item in items:
+            is_active = (item == selected_page)
+            if st.sidebar.button(
+                item, 
+                key=f"nav_{item}", 
+                use_container_width=True,
+                type="primary" if is_active else "secondary"
+            ):
+                st.session_state.current_page = item
+                st.rerun()
+
+    # Research Chat History Integration (Placed after main navigation)
+    if st.session_state.get("current_page") == "Research Chat":
+        st.markdown("<p style='font-size:0.75rem; color:#475569; font-weight:800; margin-top:1.5rem; margin-bottom:0.5rem;'>INTELLIGENCE SESSIONS</p>", unsafe_allow_html=True)
+        
+        with st.expander("🧠 Active Chat Sessions", expanded=True):
+            if st.button("➕ New Session", use_container_width=True, type="primary", key="new_chat_btn_sidebar"):
+                st.session_state.chat_session_id = None
+                st.session_state.chat_messages = []
+                st.rerun()
+
+            sessions = db.get_chat_sessions(limit=15)
+            for s in sessions:
+                is_active = st.session_state.get("chat_session_id") == s.session_id
+                
+                # Use container to structure the row safely
+                col1, col2 = st.columns([0.65, 0.35])
+                with col1:
+                    if st.button(f"📄 {s.name[:12]}...", key=f"hist_{s.session_id}", use_container_width=True, type="primary" if is_active else "secondary"):
+                        st.session_state.chat_session_id = s.session_id
+                        st.rerun()
+                with col2:
+                    st.markdown("<div class='danger-btn'>", unsafe_allow_html=True)
+                    if st.button("❌ Del", key=f"del_h_{s.session_id}", use_container_width=True):
+                        db.delete_chat_session(s.session_id)
+                        if is_active:
+                            st.session_state.chat_session_id = None
+                        st.rerun()
+                    st.markdown("</div>", unsafe_allow_html=True)
+
 
 # Flatten for radio component
 nav_options = []
@@ -667,50 +848,26 @@ if "navigate" in st.session_state:
     if target_page in nav_options:
         st.session_state.current_page = target_page
 
-# Set default page
-if "current_page" not in st.session_state:
-    st.session_state.current_page = "Dashboard"
-
-# Render Sidebar with Categorized Navigation
-with st.sidebar:
-    st.markdown("<p style='font-size:0.7rem; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:1rem;'>Intelligence Control</p>", unsafe_allow_html=True)
-    
-    selected_page = st.session_state.current_page
-    
-    for category, items in NAV_STRUCTURE.items():
-        st.markdown(f"<p style='font-size:0.75rem; color:#475569; font-weight:800; margin-top:1.5rem; margin-bottom:0.5rem;'>{category.upper()}</p>", unsafe_allow_html=True)
-        for item in items:
-            # Button-based nav with conditional styling inside the button loop
-            is_active = (item == selected_page)
-            if st.sidebar.button(
-                item, 
-                key=f"nav_{item}", 
-                use_container_width=True,
-                type="primary" if is_active else "secondary"
-            ):
-                st.session_state.current_page = item
-                st.rerun()
-
-page = st.session_state.current_page
+page = st.session_state.get("current_page", "Dashboard")
 
 
 # Sidebar Footer - Active Scans Tray & Help
 st.sidebar.markdown("---")
 with st.sidebar:
     active_scans = db.get_active_scans()
+    st.markdown("<p style='font-size:0.75rem; color:#475569; font-weight:800; margin-top:1.5rem; margin-bottom:0.5rem;'>TASK QUEUE MONITOR</p>", unsafe_allow_html=True)
     if active_scans:
-        with st.container(border=True):
-            st.markdown(f"**<span class='status-pulse'></span> {len(active_scans)} Active Scans**", unsafe_allow_html=True)
+        with st.expander(f"⚙️ {len(active_scans)} Active Scans", expanded=True):
             for scan in active_scans[:3]:
                 progress = (scan.total_processed / max(scan.total_discovered, 1))
                 safe_progress = max(0.0, min(1.0, progress))
                 display_name = scan.channel_name if scan.channel_name else f"Scan {scan.scan_id[-4:]}"
-                st.caption(f"{display_name}: {safe_progress:.0%}")
-                st.progress(safe_progress)
+                st.caption(f"{display_name}")
+                st.progress(safe_progress, text=f"{safe_progress:.0%}")
             if len(active_scans) > 3:
                 st.caption(f"+ {len(active_scans) - 3} more...")
     else:
-        st.caption("No active background scans")
+        st.info("System Engine Idling. No active tasks.")
 
 st.sidebar.markdown("""
 <div style="padding: 1rem; border-top: 1px solid rgba(14, 165, 233, 0.1); margin-top: 1rem; font-size: 0.8rem; color: #888; text-align: center;">
@@ -731,44 +888,45 @@ st.sidebar.markdown("""
 # Global Command Bar & Rendering
 # ---------------------------------------------------------------------------
 
-# Command Bar Functionality (hidden until triggered or persistent)
-with st.container():
-    col_cmd, col_btn = st.columns([5, 1])
-    with col_cmd:
-        harvest_url = st.text_input(
-            "Global Harvest", 
-            placeholder="Paste a YouTube URL here to start a research harvest...",
-            label_visibility="collapsed",
-            key="global_harvest_input"
-        )
-    with col_btn:
-        if st.button("Harvest", type="primary", use_container_width=True, key="global_harvest_btn"):
-            if not harvest_url:
-                failure_confirmation_dialog(
-                    "Input Required",
-                    "The harvest engine requires a target YouTube URL to begin ingestion.",
-                    retry_callback=None
-                )
-            else:
-                with st.spinner("Analyzing target intelligence..."):
-                    try:
-                        # Basic validation or initial check
-                        if "youtube.com" not in harvest_url and "youtu.be" not in harvest_url:
-                            raise ValueError("Invalid YouTube URL provided. Must be a youtube.com or youtu.be link.")
-                            
-                        run_pipeline_background(harvest_url, db)
-                        action_confirmation_dialog(
-                            "Harvest Initialized",
-                            f"Intelligence gathering has started for {harvest_url[:40]}...",
-                            icon="✦"
-                        )
-                    except Exception as e:
-                        failure_confirmation_dialog(
-                            "Harvest Failed to Initialize",
-                            str(e),
-                            retry_callback=lambda: run_pipeline_background(harvest_url, db),
-                            queue_callback=lambda: db.add_to_user_queue("URL", harvest_url, str(e))
-                        )
+# Global Command Bar & Rendering (Contextual Visibility)
+if page in ["Dashboard", "Global Search"]:
+    with st.container():
+        col_cmd, col_btn = st.columns([5, 1])
+        with col_cmd:
+            harvest_url = st.text_input(
+                "Global Harvest", 
+                placeholder="Paste a YouTube URL here to start a research harvest...",
+                label_visibility="collapsed",
+                key="global_harvest_input"
+            )
+        with col_btn:
+            if st.button("Harvest", type="primary", use_container_width=True, key="global_harvest_btn"):
+                if not harvest_url:
+                    st.toast("Input Required: Please enter a target YouTube URL.", icon="⚠️")
+                    st.error("The harvest engine requires a target YouTube URL to begin ingestion.")
+                else:
+                    with st.spinner("Analyzing target intelligence..."):
+                        try:
+                            # Basic validation or initial check
+                            if "youtube.com" not in harvest_url and "youtu.be" not in harvest_url:
+                                raise ValueError("Invalid YouTube URL provided. Must be a youtube.com or youtu.be link.")
+                                
+                            run_pipeline_background(harvest_url, db)
+                            action_confirmation_dialog(
+                                "Harvest Initialized",
+                                f"Intelligence gathering has started for {harvest_url[:40]}...",
+                                icon="✦"
+                            )
+                        except Exception as e:
+                            failure_confirmation_dialog(
+                                "Harvest Failed to Initialize",
+                                str(e),
+                                retry_callback=lambda: run_pipeline_background(harvest_url, db),
+                                queue_callback=lambda: db.add_to_user_queue("URL", harvest_url, str(e))
+                            )
+else:
+    # Spacer to ensure consistent vertical alignment when command bar is absent
+    st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
 
 PAGE_MAP = {
     "Dashboard": lambda: dashboard.render(db),
@@ -778,6 +936,7 @@ PAGE_MAP = {
     "Performance": lambda: performance_metrics.render(),
     "Intelligence Lab": lambda: intelligence_lab.render(db, run_repair_background),
     "Research Agent": lambda: research_agent_view.render(db),
+    "Research Chat": lambda: research_chat.render_research_chat(db),
     "Global Search": lambda: global_search.render_global_search(db, vs),
     "Comparative Lab": lambda: comparative_lab.render(db, vs),
     "Blueprint Center": lambda: blueprint_center.render(db),
@@ -788,3 +947,4 @@ PAGE_MAP = {
 }
 
 PAGE_MAP[page]()
+# Reload trigger

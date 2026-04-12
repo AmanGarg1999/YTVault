@@ -61,18 +61,19 @@ def render_mind_map(db: SQLiteStore):
             help="Higher values show more robust connections shared across multiple videos."
         )
 
-    # Fetch relationships
-    rows = db.conn.execute(f"""
-        SELECT json_extract(t1.value, '$.name') as topic_a, json_extract(t2.value, '$.name') as topic_b, COUNT(*) as weight
-        FROM video_summaries vs
-        CROSS JOIN json_each(vs.topics_json) as t1
-        CROSS JOIN json_each(vs.topics_json) as t2
-        WHERE json_extract(t1.value, '$.name') < json_extract(t2.value, '$.name')
-        GROUP BY 1, 2
-        HAVING COUNT(*) >= {threshold}
-        ORDER BY 3 DESC
-        LIMIT 60
-    """).fetchall()
+    with st.spinner("Analyzing neural pathways..."):
+        # Fetch relationships
+        rows = db.conn.execute(f"""
+            SELECT json_extract(t1.value, '$.name') as topic_a, json_extract(t2.value, '$.name') as topic_b, COUNT(*) as weight
+            FROM video_summaries vs
+            CROSS JOIN json_each(vs.topics_json) as t1
+            CROSS JOIN json_each(vs.topics_json) as t2
+            WHERE json_extract(t1.value, '$.name') < json_extract(t2.value, '$.name')
+            GROUP BY 1, 2
+            HAVING COUNT(*) >= {threshold}
+            ORDER BY 3 DESC
+            LIMIT 60
+        """).fetchall()
 
     nodes = []
     edges = []
@@ -175,12 +176,15 @@ def render_guest_network(db: SQLiteStore):
         edges.append(Edge(source=r["guest_a"], target=r["guest_b"], label=r["topic"], color="#475569"))
 
     config = Config(width=800, height=500, directed=False, physics=True)
-    selected_guest = agraph(nodes=nodes, edges=edges, config=config)
-    if selected_guest:
-        st.session_state.selected_graph_guest = selected_guest
-    
-    if st.session_state.get("selected_graph_guest"):
-        render_guest_side_car(db, st.session_state.selected_graph_guest)
+    if nodes:
+        selected_guest = agraph(nodes=nodes, edges=edges, config=config)
+        if selected_guest:
+            st.session_state.selected_graph_guest = selected_guest
+        
+        if st.session_state.get("selected_graph_guest"):
+            render_guest_side_car(db, st.session_state.selected_graph_guest)
+    else:
+        info_card("Network Error", "No nodes found to build the expert network.")
 
 def render_guest_side_car(db: SQLiteStore, guest_name: str):
     """Render a side-panel with details for the selected guest."""

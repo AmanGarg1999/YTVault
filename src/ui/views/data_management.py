@@ -37,6 +37,89 @@ def render(db, run_repair=None, get_diagnostics=None):
         """)
 
         # =====================================================================
+        # SECTION 0: Intelligence Source Explorer (NEW)
+        # =====================================================================
+        st.markdown("### 🔍 Intelligence Source Explorer")
+        st.caption("Inspect, audit, and manage high-fidelity source indexes across the triple-store architecture.")
+
+        all_videos = db.get_videos_by_status(["ACCEPTED", "DONE", "PENDING_REVIEW", "REJECTED"], limit=5000)
+        if all_videos:
+            import pandas as pd
+            source_data = []
+            for v in all_videos:
+                source_data.append({
+                    "Video ID": v.video_id,
+                    "Title": v.title,
+                    "Channel": v.channel_id[:12] + "...",
+                    "Status": v.triage_status,
+                    "Stage": v.checkpoint_stage,
+                    "Confidence": f"{v.triage_confidence * 100:.0f}%" if v.triage_confidence else "N/A",
+                })
+            
+            df_sources = pd.DataFrame(source_data)
+            
+            # Use columns for search/filter
+            col_s1, col_s2 = st.columns([2, 1])
+            with col_s1:
+                search_term = st.text_input("Filter Sources", placeholder="Search by title or ID...", key="source_search")
+            with col_s2:
+                status_filter = st.multiselect("Status Filter", options=["ACCEPTED", "DONE", "PENDING_REVIEW", "REJECTED"], default=["ACCEPTED", "DONE"])
+
+            # Apply filters
+            if search_term:
+                df_sources = df_sources[df_sources["Title"].str.contains(search_term, case=False) | df_sources["Video ID"].str.contains(search_term, case=False)]
+            if status_filter:
+                df_sources = df_sources[df_sources["Status"].isin(status_filter)]
+
+            # Render clickable list using dataframe or selection
+            st.markdown(f"**Found {len(df_sources)} matching sources**")
+            
+            # Use dataframe selection for inspection
+            selected_indices = st.dataframe(
+                df_sources, 
+                use_container_width=True, 
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single_row",
+                key="source_explorer_table"
+            )
+
+            if selected_indices and selected_indices["selection"]["rows"]:
+                row_idx = selected_indices["selection"]["rows"][0]
+                selected_v_id = df_sources.iloc[row_idx]["Video ID"]
+                selected_video = db.get_video(selected_v_id)
+                
+                if selected_video:
+                    from src.ui.components.ui_helpers import glass_card, inline_status
+                    with glass_card(title="Source Audit: " + selected_video.title):
+                        col_dt1, col_dt2 = st.columns(2)
+                        with col_dt1:
+                            st.write(f"**Video ID:** `{selected_video.video_id}`")
+                            st.write(f"**Channel:** `{selected_video.channel_id}`")
+                            st.write(f"**Duration:** {selected_video.duration_seconds // 60}:{selected_video.duration_seconds % 60:02d}")
+                        with col_dt2:
+                            st.write(f"**Status:** {selected_video.triage_status}")
+                            st.write(f"**Confidence:** {selected_video.triage_confidence:.2f}")
+                            st.write(f"**Last Stage:** `{selected_video.checkpoint_stage}`")
+                        
+                        st.markdown("---")
+                        col_act1, col_act2 = st.columns(2)
+                        with col_act1:
+                            if st.button("Quick Drill Down (Transcript)", use_container_width=True, key="explorer_drill"):
+                                st.session_state.selected_transcript_vid = selected_video.video_id
+                                st.session_state.navigate = "Transcripts"
+                                st.rerun()
+                        with col_act2:
+                            if st.button("Mark for Deletion", type="secondary", use_container_width=True, key="explorer_mark_del"):
+                                # Set session state to prepopulate deletion tools below
+                                st.session_state.video_select_id = selected_video.video_id
+                                st.toast(f"Source {selected_video.video_id[:8]} selected for management.")
+        else:
+            st.info("No indexed sources found in the intelligence vault yet.")
+
+        st.markdown("---")
+
+        # =====================================================================
         # SECTION 1: Delete Single Video Data
         # =====================================================================
         st.markdown("### Delete Single Video")
@@ -50,9 +133,18 @@ def render(db, run_repair=None, get_diagnostics=None):
                 processed_videos.extend(db.get_videos_by_status(status, limit=1000))
             
             if processed_videos:
+                # Handle prepopulation from explorer
+                index = 0
+                if "video_select_id" in st.session_state:
+                    for i, pv in enumerate(processed_videos):
+                        if pv.video_id == st.session_state.video_select_id:
+                            index = i
+                            break
+                
                 selected_video = st.selectbox(
                     "Select video to delete",
                     processed_videos,
+                    index=index,
                     format_func=lambda v: f"{v.title[:50]}... | {v.video_id[:8]} | {v.triage_status}",
                     key="video_select",
                 )

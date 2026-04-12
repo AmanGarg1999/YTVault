@@ -16,26 +16,26 @@ def render(db: SQLiteStore):
         query = st.text_input("Enter a research topic (e.g. 'The future of AI ethics in medicine')", 
                              placeholder="What would you like to investigate?")
         
-        if st.button("Launch Investigation"):
+        if st.button(
+            "Launch Investigation", 
+            type="primary", 
+            use_container_width=True,
+            disabled=not query,
+            help="Enter a research topic to activate the intelligence agent." if not query else "Initialize autonomous synthesis cycle."
+        ):
             if query:
                 agent = ResearchAgent(db)
                 with st.spinner(f"Agent investigating '{query}'..."):
                     try:
                         report = agent.generate_report(query)
                         if report:
-                            st.toast("Investigation Complete!")
+                            st.toast("Investigation Complete!", icon="✦")
                             success_card("Investigation Complete", f"Created: {report.title}")
                             st.balloons()
                             st.rerun()
                     except Exception as e:
                         from src.ui.components import failure_confirmation_dialog
                         failure_confirmation_dialog("Agent Malfunction", str(e))
-            else:
-                from src.ui.components import failure_confirmation_dialog
-                failure_confirmation_dialog(
-                    "Mission Objective Required", 
-                    "The autonomous agent requires a specific research query or investigative theme to initialize its synthesis cycle."
-                )
 
     with col2:
         st.info("The agent deep-scans your vault, finds relevant topics, and synthesizes a formal white paper with citations.")

@@ -93,22 +93,23 @@ def metric_card(
 def radial_health_chart(percentage: int, label: str, description: str = "") -> None:
     """
     Render a radial progress chart using custom SVG/CSS for 'Vault Health'.
+    Enhanced with precise SVG alignment to prevent clipping and ARIA support.
     """
     # Color based on percentage
     color = "#10b981" if percentage > 80 else ("#f59e0b" if percentage > 50 else "#ef4444")
     
     st.markdown(f"""
-<div class="metric-card" style="display: flex; align-items: center; gap: 1.5rem;">
-<div style="position: relative; width: 80px; height: 80px;">
-<svg viewBox="0 0 36 36" style="width: 100%; height: 100%; transform: rotate(-90deg);">
-<path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="3" />
-<path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="{color}" stroke-width="3" stroke-dasharray="{percentage}, 100" />
+<div class="metric-card" style="display: flex; align-items: center; gap: 2rem; aria-label='{label}: {percentage}% healthy'">
+<div style="position: relative; width: 85px; height: 85px; flex-shrink: 0;">
+<svg viewBox="0 0 40 40" style="width: 100%; height: 100%; transform: rotate(-90deg);" role="img" aria-label="{percentage}% Progress Indicator">
+<path d="M20 4.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="3.5" />
+<path d="M20 4.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="{color}" stroke-width="3.5" stroke-dasharray="{percentage}, 100" stroke-linecap="round" />
 </svg>
-<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.2rem; color: white;">{percentage}%</div>
+<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.15rem; color: var(--text-stellar);">{percentage}%</div>
 </div>
-<div>
-<div class="label" style="margin-bottom: 0.25rem;">{label}</div>
-<div style="font-size: 0.85rem; color: var(--text-muted);">{description}</div>
+<div style="flex-grow: 1;">
+<div class="label" style="margin-bottom: 0.35rem; font-size: 0.8rem; letter-spacing: 0.12em;">{label}</div>
+<div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5;">{description}</div>
 </div>
 </div>
 """, unsafe_allow_html=True)
@@ -179,7 +180,7 @@ def glass_card(title: Optional[str] = None, border_accent: Optional[str] = None)
 <div style="background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 16px; padding: 1.5rem; margin: 1rem 0; {accent_style}">
 """, unsafe_allow_html=True)
     if title:
-        st.markdown(f"<strong style='color: white; display: block; margin-bottom: 1rem; font-size: 1.1rem;'>{title}</strong>", unsafe_allow_html=True)
+        st.markdown(f"<strong style='color: var(--text-stellar); display: block; margin-bottom: 1rem; font-size: 1.1rem;'>{title}</strong>", unsafe_allow_html=True)
     
     try:
         # We don't return st.container() because we want the content to be 
@@ -367,6 +368,43 @@ def video_card(
             return cols
             
     return None
+def discovery_chips(suggestions: List[str], key_prefix: str = "chip") -> Optional[str]:
+    """
+    Render interactive discovery chips in a flexbox layout.
+    Returns the selected suggestion if clicked.
+    """
+    if not suggestions:
+        return None
+        
+    st.markdown("<div style='margin-top: 1rem; margin-bottom: 0.5rem;'><p style='font-size:0.75rem; color:var(--accent-glow); font-weight:700; text-transform:uppercase; letter-spacing:0.1em;'>Refine Intelligence Discovery</p></div>", unsafe_allow_html=True)
+    
+    # We use a custom HTML container and streamlit buttons for interaction
+    # to maintain state correctly while keeping the visual "chip" style
+    cols = st.columns(len(suggestions))
+    for i, suggestion in enumerate(suggestions):
+        if cols[i].button(suggestion, key=f"{key_prefix}_{i}", use_container_width=True):
+            return suggestion
+    return None
+
+def citation_card(cit: Dict[str, Any], index: int = 1) -> None:
+    """
+    Render a premium glassmorphic evidence card for a research citation.
+    """
+    st.markdown(f"""
+<div style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 14px; padding: 1.25rem; margin-bottom: 1rem; border-left: 3px solid var(--primary-glow);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+        <span style="font-size: 0.7rem; font-weight: 800; color: var(--primary-glow); text-transform: uppercase; letter-spacing: 0.1em;">Evidence #{index} &bull; {cit['timestamp']}</span>
+        <a href="{cit['link']}" target="_blank" style="text-decoration: none; font-size: 0.7rem; color: var(--accent-glow); font-weight: 700;">SOURCE &nearrow;</a>
+    </div>
+    <div style="margin-bottom: 0.75rem;">
+        <strong style="color: white; font-size: 0.95rem; display: block;">{cit['video_title']}</strong>
+        <span style="color: var(--text-muted); font-size: 0.8rem; font-style: italic;">{cit['channel_name']}</span>
+    </div>
+    <div style="background: rgba(0, 0, 0, 0.2); padding: 1rem; border-radius: 8px; font-size: 0.9rem; color: #cbd5e1; border: 1px solid rgba(255,255,255,0.03); line-height: 1.6;">
+        {cit['excerpt']}
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 
 # ===========================================================================

@@ -117,10 +117,10 @@ def render_single_transcript(db: SQLiteStore):
     st.divider()
     
     # Tabs for different views
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Full Transcript", "Search", "Timestamp Jump", "Audience Highlights", "Intelligence Trace", "Export"])
+    tab1, tab2, tab3 = st.tabs(["Transcript View", "Search & Navigation", "Insight Telemetry & Export"])
     
     with tab1:
-        st.subheader("Full Transcript")
+        st.subheader("Transcript View")
         
         col_ctrl1, col_ctrl2 = st.columns([1, 1])
         with col_ctrl1:
@@ -169,15 +169,21 @@ def render_single_transcript(db: SQLiteStore):
             )
     
     with tab2:
-        st.subheader("Search Within Transcript")
+        col_s1, col_s2, col_s3 = st.columns([1, 1, 1])
+        with col_s1:
+            st.subheader("Search & Navigation")
+        with col_s2:
+            pass
+        with col_s3:
+            st.write(" ") # Padding
         
+        st.markdown("### 🔍 Search Within Transcript")
         search_term = st.text_input("Search term", key="search_input")
         
         if search_term:
             results = db.search_transcript(video_id, search_term)
-            st.success(f"Found {len(results)} matches")
-            
             if results:
+                st.success(f"Found {len(results)} matches")
                 for i, r in enumerate(results, 1):
                     # Format timestamp
                     mins = int(r['start_timestamp'] // 60)
@@ -190,29 +196,18 @@ def render_single_transcript(db: SQLiteStore):
                         expanded=(i == 1)
                     ):
                         col1, col2 = st.columns([1, 20])
-                        
                         with col1:
                             st.write(f"**{timestamp_str}**")
-                        
                         with col2:
-                            # Show context
                             text = r['cleaned_text']
-                            
-                            # Highlight search term
-                            highlighted = text.replace(
-                                search_term,
-                                f"**{search_term}**"
-                            )
+                            highlighted = text.replace(search_term, f"**{search_term}**")
                             st.write(highlighted)
-                            
-                            st.caption(
-                                f"Chunk: {r['chunk_id']} | "
-                                f"Range: {int(r['start_timestamp'] or 0)}s - {int(r['end_timestamp'] or 0)}s"
-                            )
-    
-    with tab3:
-        st.subheader("Jump to Timestamp")
-        
+                            st.caption(f"Chunk: {r['chunk_id']} | Range: {int(r['start_timestamp'] or 0)}s - {int(r['end_timestamp'] or 0)}s")
+            else:
+                st.info("No matches found.")
+                
+        st.divider()
+        st.markdown("### ⏱️ Jump to Timestamp")
         col1, col2 = st.columns(2)
         with col1:
             minutes = st.number_input("Minutes", min_value=0, max_value=1000, key="ts_min")
@@ -223,22 +218,17 @@ def render_single_transcript(db: SQLiteStore):
         
         if st.button("Jump to timestamp", key="jump_btn", type="primary"):
             context = db.get_transcript_at_timestamp(video_id, timestamp, context_seconds=30)
-            
             if context and context['chunks']:
                 st.info(f"Context around {minutes}:{seconds:02d}")
-                
                 for chunk in context['chunks']:
                     st.write(chunk['cleaned_text'])
-                    st.caption(
-                        f"{chunk['chunk_id']} | "
-                        f"{int(chunk['start_timestamp'])}s - {int(chunk['end_timestamp'])}s"
-                    )
+                    st.caption(f"{chunk['chunk_id']} | {int(chunk['start_timestamp'])}s - {int(chunk['end_timestamp'])}s")
                     st.divider()
             else:
                 st.warning("No transcript found at that timestamp")
-    
-    with tab4:
-        st.subheader("Audience Highlights")
+                
+        st.divider()
+        st.markdown("### 🔥 Audience Highlights")
         st.caption("Segments with the highest re-watch interest on YouTube, correlated with transcript text.")
         
         analyzer = AnalysisEngine(db)
@@ -248,23 +238,18 @@ def render_single_transcript(db: SQLiteStore):
             st.info("No heatmap data available for this video yet. Heatmaps are harvested during the 'Discovery' stage.")
         else:
             for i, h in enumerate(highlights, 1):
-                # Format timestamp
                 mins = int(h.start_time // 60)
                 secs = int(h.start_time % 60)
                 timestamp_str = f"{mins:02d}:{secs:02d}"
                 
                 with st.expander(f"**Highlight {i}** ({timestamp_str}) - Interest Score: {h.score:.1f}", expanded=(i == 1)):
                     st.markdown(f"> {h.transcript_text}")
-                    
-                    if st.button(f"Jump to {timestamp_str}", key=f"jump_h_{i}", type="primary"):
-                        st.session_state.ts_min = mins
-                        st.session_state.ts_sec = secs
-                        # We would need a more complex way to force tab change,
-                        # for now just showing the info is great.
-                        st.success(f"Selected {timestamp_str}. Switch to 'Timestamp Jump' to see context.")
-
-    with tab5:
-        st.subheader("Intelligence Trace")
+    
+    with tab3:
+        st.subheader("Insight Telemetry & Export")
+        
+        # Telemetry
+        st.markdown("### 📡 Intelligence Trace")
         st.caption("Detailed chronological telemetry of the intelligence gathering process.")
         
         if hasattr(db, "get_video_pipeline_history"):
@@ -272,9 +257,11 @@ def render_single_transcript(db: SQLiteStore):
             pipeline_trace_timeline(logs)
         else:
             st.error("Diagnostic engine mismatch. Please restart the application.")
-
-    with tab6:
-        st.subheader("Export Research Intelligence")
+            
+        st.divider()
+        
+        # Export
+        st.markdown("### 📥 Export Research Intelligence")
         st.info("Generate a high-fidelity research package containing the full transcript, summary, and extracted claims.")
         
         try:

@@ -61,11 +61,8 @@ def render_harvest_tab(db, run_pipeline_background):
         with col1:
             if st.button("Start Harvest", type="primary", use_container_width=True):
                 if not url:
-                    failure_confirmation_dialog(
-                        "Target Required",
-                        "The ingestion engine needs a valid YouTube URL to initiate the discovery phase.",
-                        retry_callback=None
-                    )
+                    st.toast("Target Required: Please enter a YouTube URL.", icon="⚠️")
+                    st.error("The ingestion engine needs a valid YouTube URL to initiate the discovery phase.")
                 else:
                     with st.spinner("Initializing research harvest..."):
                         try:

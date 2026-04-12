@@ -60,6 +60,11 @@ def render_global_search(db: SQLiteStore, vs: VectorStore):
     )
 
     if query:
+        # Check for empty query after strip
+        if not query.strip():
+            st.toast("Search Error: Please enter a valid search term.", icon="⚠️")
+            return
+            
         # Prepare filters
         where_filter = {}
         if selected_channels:
@@ -72,7 +77,8 @@ def render_global_search(db: SQLiteStore, vs: VectorStore):
                 "$lte": date_range[1].isoformat()
             }
 
-        with st.spinner("Analyzing vault contents..."):
+        st.toast(f"Searching vault for: {query[:30]}...", icon="🔍")
+        with st.spinner("Decoding semantic patterns and ranking results..."):
             try:
                 # 1. Keyword Search (FTS5) - Always run as baseline
                 kw_results = db.fulltext_search(query, limit=top_k * 2)
@@ -185,7 +191,10 @@ def render_global_search(db: SQLiteStore, vs: VectorStore):
                                 icon = "📝" if m["type"] == "summary" else ("🔬" if m["type"] == "claim" else "💬")
                                 label = m["type"].upper()
                                 # Clean snippet
-                                clean_text = m["text"][:250] + "..." if len(m["text"]) > 250 else m["text"]
+                                raw_text = m["text"]
+                                # Safely convert FTS5 bold tags to markdown
+                                raw_text = raw_text.replace("<b>", "**").replace("</b>", "**")
+                                clean_text = raw_text[:250] + "..." if len(raw_text) > 250 else raw_text
                                 st.markdown(f"**{icon} {label}**: _{clean_text}_")
                         
                         col1, col2 = st.columns([1, 4])

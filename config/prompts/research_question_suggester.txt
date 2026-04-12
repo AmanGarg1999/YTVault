@@ -1,0 +1,15 @@
+Act as a Research Discovery Engine. Based on the following research context and synthesized answer, identify 3-4 deep follow-up questions that would help the user gain more data or insights from the vault.
+
+Focus on:
+- Unexplored thematic connections.
+- Missing evidence or contrasting views.
+- Deep dives into specific speakers or topics mentioned.
+
+CONTEXT:
+{context}
+
+SYNTHESIZED ANSWER:
+{answer}
+
+OUTPUT FORMAT:
+JSON array of strings. Example: ["How does Topic A relate to Topic B?", "What was Guest X's perspective on this?"]

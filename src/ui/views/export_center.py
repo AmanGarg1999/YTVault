@@ -79,6 +79,73 @@ def render(db):
                 )
         
         st.markdown("---")
+        st.markdown("### 🗄️ Mission Briefings & Collaboration")
+        st.caption("Export research chat sessions as formal briefings or sync intelligence missions with other investigators.")
+
+        tab_brief, tab_sync = st.tabs(["Individual Briefings", "Collaboration Sync"])
+
+        with tab_brief:
+            sessions = db.get_chat_sessions(limit=100)
+            if sessions:
+                col_s1, col_s2 = st.columns([2, 1])
+                with col_s1:
+                    selected_session = st.selectbox(
+                        "Select Research Session", 
+                        sessions, 
+                        format_func=lambda s: f"{s.name} ({s.created_at[:10]})",
+                        key="brief_session_select"
+                    )
+                with col_s2:
+                    brief_fmt = st.selectbox("Format", ["markdown", "json"], key="brief_fmt")
+                
+                if st.button("Generate Briefing", type="primary", use_container_width=True):
+                    brief_content = exporter.export_chat_session(selected_session.session_id, fmt=brief_fmt)
+                    ext = "md" if brief_fmt == "markdown" else "json"
+                    file_name = f"briefing_{selected_session.name.replace(' ', '_').lower()}.{ext}"
+                    st.download_button("Download Mission Briefing", brief_content, file_name, use_container_width=True)
+                    if brief_fmt == "markdown":
+                        with st.expander("Preview Briefing"):
+                            st.markdown(brief_content)
+            else:
+                st.info("No research chat sessions found. Start a conversation in the Research Chat Hub to generate briefings.")
+
+        with tab_sync:
+            col_sync1, col_sync2 = st.columns(2)
+            
+            with col_sync1:
+                st.markdown("#### Export Mission Package")
+                if sessions:
+                    sync_vids = st.multiselect(
+                        "Select Missions to Sync", 
+                        sessions, 
+                        format_func=lambda s: s.name,
+                        key="sync_session_select"
+                    )
+                    if st.button("Generate Mission Package (.json)", type="primary", disabled=not sync_vids, use_container_width=True):
+                        pkg = exporter.export_mission_package([s.session_id for s in sync_vids])
+                        st.download_button(
+                            "Download Package", 
+                            pkg, 
+                            f"mission_package_{datetime.now().strftime('%Y%m%d')}.json",
+                            use_container_width=True
+                        )
+                else:
+                    st.caption("No missions available to sync.")
+
+            with col_sync2:
+                st.markdown("#### Import Mission Package")
+                uploaded_file = st.file_uploader("Upload .json Mission Package", type=["json"])
+                if uploaded_file:
+                    if st.button("Execute Import", type="secondary", use_container_width=True):
+                        import_data = uploaded_file.read().decode("utf-8")
+                        result = exporter.import_mission_package(import_data)
+                        if result["success"]:
+                            st.success(f"Successfully validated Mission Package! Found {result['missions_count']} missions ready for synchronization.")
+                            st.toast("Collaboration Sync: Integrity Verified.", icon="✦")
+                        else:
+                            st.error(f"Import Failed: {result['error']}")
+
+        st.markdown("---")
         with st.expander("Obsidian Sync (Research Wiki)", expanded=True):
             st.markdown("""
             **Generate a complete research vault for Obsidian.**

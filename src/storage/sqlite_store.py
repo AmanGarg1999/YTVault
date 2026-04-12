@@ -2037,7 +2037,7 @@ class SQLiteStore:
             "transcript_strategy": video.transcript_strategy,
             "full_raw_text": full_raw,
             "full_cleaned_text": full_cleaned,
-            "chunks": chunks or [],
+            "chunks": [dict(c) for c in chunks],
             "total_chunks": len(chunks) if chunks else 0
         }
     
@@ -2487,15 +2487,22 @@ class SQLiteStore:
             List of dicts with chunk_id, video_id, rank (BM25 score), snippet.
         """
         try:
+            # Stricter matching: Wrap in quotes if multi-token or has underscores to force phrase-like matching
+            sanitized_query = query.replace('"', ' ').strip()
+            if not sanitized_query: return []
+            
+            # Use phrase match if it looks like a complex id/token
+            match_query = f'"{sanitized_query}"' if ("_" in sanitized_query or " " in sanitized_query) else sanitized_query
+            
             rows = self.conn.execute(
                 """SELECT chunk_id, video_id,
                           rank AS bm25_score,
                           snippet(chunks_fts, 2, '<b>', '</b>', '...', 30) AS snippet
                    FROM chunks_fts
-                   WHERE content MATCH ?
+                   WHERE content MATCH ? AND rank < 0 -- BM25 scores are negative, lower is better
                    ORDER BY rank
                    LIMIT ?""",
-                (query, limit),
+                (match_query, limit),
             ).fetchall()
             return [dict(r) for r in rows]
         except Exception as e:

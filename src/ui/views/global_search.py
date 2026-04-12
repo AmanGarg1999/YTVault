@@ -138,9 +138,25 @@ def render_global_search(db: SQLiteStore, vs: VectorStore):
                 # Sort and Render
                 ranked_results = sorted(scores.items(), key=lambda x: x[1]["rrf"], reverse=True)[:top_k]
                 
-                # Filter out results with negligible RRF score to avoid noise
-                # Increased threshold to 0.02 to ensure meaningful relevance
-                ranked_results = [r for r in ranked_results if r[1]["rrf"] > 0.02]
+                # Keyword Presence Guard: Validate that query terms actually appear in the findings
+                # This prevents "semantic drift" or loose FTS5 matches from appearing as high-relevance
+                def has_keyword_correlation(matches, query):
+                    q_tokens = [t.lower() for t in query.split() if len(t) > 2]
+                    if not q_tokens: return True # Fallback for short queries
+                    for m in matches:
+                        m_text = m["text"].lower()
+                        if any(t in m_text for t in q_tokens):
+                            return True
+                    return False
+
+                # Filter and Rank
+                valid_results = []
+                for v_id, data in ranked_results:
+                    # Threshold check + Presence Guard
+                    if data["rrf"] > 0.02 and has_keyword_correlation(data["matches"], query):
+                        valid_results.append((v_id, data))
+                
+                ranked_results = valid_results
 
                 if not ranked_results:
                     st.markdown("---")

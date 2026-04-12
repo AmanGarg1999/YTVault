@@ -130,14 +130,18 @@ def render_single_transcript(db: SQLiteStore):
         
         if view_type == "Cleaned (normalized)" and show_highlights:
             content = ""
-            for c in transcript['chunks']:
-                text = c['cleaned_text']
-                if c.get('is_high_attention'):
-                    content += f"<span style='background: rgba(99, 102, 241, 0.25); border-bottom: 2px solid #6366f1; border-radius: 2px;' title='High Audience Retention'>{text}</span> "
-                else:
-                    content += f"{text} "
-            
-            st.markdown(f"""
+            chunks = transcript.get('chunks', [])
+            if not chunks:
+                st.info("No transcript segments currently available for this processing stage.")
+            else:
+                for c in chunks:
+                    text = c.get('cleaned_text', '')
+                    if c.get('is_high_attention'):
+                        content += f"<span style='background: rgba(99, 102, 241, 0.25); border-bottom: 2px solid #6366f1; border-radius: 2px;' title='High Audience Retention'>{text}</span> "
+                    else:
+                        content += f"{text} "
+                
+                st.markdown(f"""
             <div style="
                 background: rgba(15, 23, 42, 0.6);
                 color: #e2e8f0;
@@ -203,7 +207,7 @@ def render_single_transcript(db: SQLiteStore):
                             
                             st.caption(
                                 f"Chunk: {r['chunk_id']} | "
-                                f"Range: {int(r['start_timestamp'])}s - {int(r['end_timestamp'])}s"
+                                f"Range: {int(r['start_timestamp'] or 0)}s - {int(r['end_timestamp'] or 0)}s"
                             )
     
     with tab3:
@@ -263,8 +267,11 @@ def render_single_transcript(db: SQLiteStore):
         st.subheader("Intelligence Trace")
         st.caption("Detailed chronological telemetry of the intelligence gathering process.")
         
-        logs = db.get_video_pipeline_history(video_id)
-        pipeline_trace_timeline(logs)
+        if hasattr(db, "get_video_pipeline_history"):
+            logs = db.get_video_pipeline_history(video_id)
+            pipeline_trace_timeline(logs)
+        else:
+            st.error("Diagnostic engine mismatch. Please restart the application.")
 
     with tab6:
         st.subheader("Export Research Intelligence")

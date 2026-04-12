@@ -731,16 +731,13 @@ st.sidebar.markdown("""
 # Global Command Bar & Rendering
 # ---------------------------------------------------------------------------
 
-# Inject Global Command Bar spacing
-st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
-
 # Command Bar Functionality (hidden until triggered or persistent)
 with st.container():
     col_cmd, col_btn = st.columns([5, 1])
     with col_cmd:
         harvest_url = st.text_input(
-            "Quick Harvest URL", 
-            placeholder="Paste a YouTube URL here to start a harvest from any page...",
+            "Global Harvest", 
+            placeholder="Paste a YouTube URL here to start a research harvest...",
             label_visibility="collapsed",
             key="global_harvest_input"
         )
@@ -772,8 +769,6 @@ with st.container():
                             retry_callback=lambda: run_pipeline_background(harvest_url, db),
                             queue_callback=lambda: db.add_to_user_queue("URL", harvest_url, str(e))
                         )
-
-st.markdown("<br>", unsafe_allow_html=True)
 
 PAGE_MAP = {
     "Dashboard": lambda: dashboard.render(db),

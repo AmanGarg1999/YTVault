@@ -59,28 +59,34 @@ def render_single_transcript(db: SQLiteStore):
     if "selected_transcript_vid" not in st.session_state:
         st.session_state.selected_transcript_vid = None
 
-    # Search filter
-    search_query = st.text_input("🔍 Search videos...", placeholder="Type to filter titles or channels...", key="transcript_vid_search")
+    selected_vid_id = st.session_state.selected_transcript_vid
     
-    filtered_vids = all_videos
-    if search_query:
-        filtered_vids = [v for v in all_videos if search_query.lower() in v.title.lower() or search_query.lower() in v.channel_id.lower()]
-    
-    # Display results as a grid of selection cards
-    if filtered_vids:
-        st.write(f"Showing {len(filtered_vids[:12])} of {len(filtered_vids)} videos")
-        cols = st.columns(3)
-        for i, video in enumerate(filtered_vids[:12]):
-            with cols[i % 3]:
-                with st.container(border=True):
-                    st.caption(video.channel_id[:20])
-                    st.markdown(f"**{video.title[:60]}...**")
-                    if st.button("VIEW TRANSCRIPT", key=f"sel_vid_{video.video_id}", use_container_width=True, type="primary"):
-                        st.session_state.selected_transcript_vid = video.video_id
-                        st.rerun()
+    if selected_vid_id:
+        if st.button("← Back to Video Selection", key="back_to_vids"):
+            st.session_state.selected_transcript_vid = None
+            st.rerun()
+    else:
+        # Search filter
+        search_query = st.text_input("🔍 Search videos...", placeholder="Type to filter titles or channels...", key="transcript_vid_search")
+        
+        filtered_vids = all_videos
+        if search_query:
+            filtered_vids = [v for v in all_videos if search_query.lower() in v.title.lower() or search_query.lower() in v.channel_id.lower()]
+        
+        # Display results as a grid of selection cards
+        if filtered_vids:
+            st.write(f"Showing {len(filtered_vids[:12])} of {len(filtered_vids)} videos")
+            cols = st.columns(3)
+            for i, video in enumerate(filtered_vids[:12]):
+                with cols[i % 3]:
+                    with st.container(border=True):
+                        st.caption(video.channel_id[:20])
+                        st.markdown(f"**{video.title[:60]}...**")
+                        if st.button("VIEW TRANSCRIPT", key=f"sel_vid_{video.video_id}", use_container_width=True, type="primary"):
+                            st.session_state.selected_transcript_vid = video.video_id
+                            st.rerun()
 
     if not st.session_state.selected_transcript_vid:
-        st.info("Select a video from the grid above to view its transcript.")
         return
 
     selected_vid_id = st.session_state.selected_transcript_vid

@@ -137,12 +137,17 @@ def render_global_search(db: SQLiteStore, vs: VectorStore):
 
                 # Sort and Render
                 ranked_results = sorted(scores.items(), key=lambda x: x[1]["rrf"], reverse=True)[:top_k]
+                
+                # Filter out results with negligible RRF score to avoid noise
+                # Increased threshold to 0.02 to ensure meaningful relevance
+                ranked_results = [r for r in ranked_results if r[1]["rrf"] > 0.02]
 
                 if not ranked_results:
+                    st.markdown("---")
                     info_card(
                         "No Intelligence Found", 
-                        "The search core could not find matching patterns for this query. "
-                        "Try using broader keywords or removing filters."
+                        f"The search core could not find matching patterns for '{query}'. "
+                        "Try using broader keywords, removing filters, or ensuring the vector core is synced."
                     )
                     return
 

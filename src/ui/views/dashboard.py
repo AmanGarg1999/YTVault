@@ -92,6 +92,31 @@ def render(db):
             # KEY METRICS & VAULT HEALTH
             # =====================================================================
             
+            total_channels = stats.get("total_channels", 0)
+            
+            if total_channels == 0:
+                st.markdown("---")
+                info_card(
+                    "Welcome to your Research Intelligence OS", 
+                    "Your vault is currently empty. To begin synthesizing intelligence, follow these steps:"
+                )
+                
+                col_on1, col_on2, col_on3 = st.columns(3)
+                with col_on1:
+                    with glass_card(title="1. Harvest Sources"):
+                        st.write("Paste a YouTube URL into the Command Bar at the top to start a harvest.")
+                with col_on2:
+                    with glass_card(title="2. Automated Triage"):
+                        st.write("The engine will automatically analyze and index your content.")
+                with col_on3:
+                    with glass_card(title="3. Explore Connections"):
+                        st.write("Use the Intelligence Lab to map neural pathways across your vault.")
+                
+                if st.button("PROCEED TO INGESTION HUB", type="primary", use_container_width=True):
+                    st.session_state.navigate = "Ingestion Hub"
+                    st.rerun()
+                st.markdown("---")
+
             metrics = [
                 {
                     "value": stats.get("total_channels", 0),

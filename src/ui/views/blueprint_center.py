@@ -22,7 +22,7 @@ def render(db):
     if not blueprints:
         info_card(
             "No Blueprints Found", 
-            "Injest tutorials or educational content, or run the backfill script to see checklists here."
+            "Ingest tutorials or educational content, or run the backfill script to see checklists here."
         )
         return
 

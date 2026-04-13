@@ -41,6 +41,7 @@ from .ui_helpers import (
     # Dialogs & Confirmations
     action_confirmation_dialog,
     failure_confirmation_dialog,
+    destructive_action_dialog,
 )
 
 __all__ = [
@@ -67,4 +68,5 @@ __all__ = [
     "strip_html",
     "action_confirmation_dialog",
     "failure_confirmation_dialog",
+    "destructive_action_dialog",
 ]

@@ -914,16 +914,6 @@ class SQLiteStore:
         """No-op: Historical engagement tracking disabled."""
         pass
 
-    def get_videos_by_status(self, status: str, limit: int = 100) -> list[Video]:
-        """Get videos by triage status."""
-        rows = self.conn.execute(
-            "SELECT * FROM videos WHERE triage_status = ? ORDER BY created_at LIMIT ?",
-            (status, limit),
-        ).fetchall()
-        result = []
-        for r in rows:
-            result.append(Video.from_row(r))
-        return result
 
     def get_videos_by_status_sorted(
         self, status: str, order_by: str = "created_at DESC", limit: int = 100
@@ -1070,19 +1060,30 @@ class SQLiteStore:
             result.append(Video.from_row(r))
         return result
 
-    def get_videos_by_status(self, status: str, limit: int = 500) -> list[Video]:
-        """Get all videos with a specific triage_status."""
-        rows = self.conn.execute(
-            """SELECT * FROM videos 
-               WHERE triage_status = ? 
-               ORDER BY created_at DESC 
-               LIMIT ?""",
-            (status, limit),
-        ).fetchall()
-        result = []
-        for r in rows:
-            result.append(Video.from_row(r))
-        return result
+    def get_videos_by_status(self, status: str | list[str], limit: int = 500) -> list[Video]:
+        """
+        Get all videos with a specific triage_status or list of statuses.
+        Hardened implementation supporting list-based filters.
+        """
+        if isinstance(status, str):
+            status_list = [status]
+        else:
+            status_list = list(status)
+
+        placeholders = ",".join(["?"] * len(status_list))
+        query = f"SELECT * FROM videos WHERE triage_status IN ({placeholders}) ORDER BY created_at DESC LIMIT ?"
+        
+        # Explicit parameters to avoid driver-specific list-binding issues
+        flat_params = []
+        for s in status_list:
+            flat_params.append(str(s))
+        flat_params.append(int(limit))
+        
+        rows = self.conn.execute(query, tuple(flat_params)).fetchall()
+        return [Video.from_row(r) for r in rows]
+
+    # Alias for newer code during transition
+    get_videos_by_status_any = get_videos_by_status
 
     def get_videos_missing_summaries(self, limit: int = 200) -> list[Video]:
         """Get accepted videos that are missing summaries."""

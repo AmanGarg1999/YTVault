@@ -135,7 +135,7 @@ def render_topic_side_car(db: SQLiteStore, topic_name: str):
                 st.rerun()
 
 def render_market_trends(db: SQLiteStore):
-    section_header("Topic Momentum Analysis", icon="📈")
+    section_header("Topic Momentum Analysis", icon="◈")
     
     trends_data = db.get_topic_trends()
     if not trends_data:

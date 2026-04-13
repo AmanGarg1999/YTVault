@@ -56,44 +56,24 @@ st.markdown("""
        ===================================================================== */
     
     :root {
-        /* Palette: Void Black & Electric Indigo */
-        --bg-deep: #030712;
-        --bg-nebula: radial-gradient(circle at 0% 0%, #0f172a 0%, #030712 50%, #020617 100%);
+        /* Active Theme Variables - Injected by Intelligence Orchestrator */
+        --bg-deep: {"#030712" if st.session_state.get("theme") == "dark" else "#f8fafc"};
+        --bg-nebula: {"radial-gradient(circle at 0% 0%, #0f172a 0%, #030712 50%, #020617 100%)" if st.session_state.get("theme") == "dark" else "radial-gradient(circle at 0% 0%, #f1f5f9 0%, #f8fafc 100%)"};
         
-        --primary-glow: #6366f1;
-        --primary-active: #4f46e1;
-        --accent-glow: #22d3ee;
+        --primary-glow: {"#6366f1" if st.session_state.get("theme") == "dark" else "#4f46e1"};
+        --primary-active: {"#4f46e1" if st.session_state.get("theme") == "dark" else "#3730a3"};
+        --accent-glow: {"#22d3ee" if st.session_state.get("theme") == "dark" else "#0891b2"};
         
-        --glass-bg: rgba(15, 23, 42, 0.4);
-        --glass-border: rgba(255, 255, 255, 0.05);
-        --glass-active: rgba(99, 102, 241, 0.1);
+        --glass-bg: {"rgba(15, 23, 42, 0.4)" if st.session_state.get("theme") == "dark" else "rgba(255, 255, 255, 0.7)"};
+        --glass-border: {"rgba(255, 255, 255, 0.05)" if st.session_state.get("theme") == "dark" else "rgba(0, 0, 0, 0.08)"};
+        --glass-active: {"rgba(99, 102, 241, 0.1)" if st.session_state.get("theme") == "dark" else "rgba(79, 70, 225, 0.05)"};
         
-        --success-glow: #10b981;
-        --warning-glow: #f59e0b;
-        --error-glow: #ef4444;
+        --success-glow: {"#10b981" if st.session_state.get("theme") == "dark" else "#059669"};
+        --warning-glow: {"#f59e0b" if st.session_state.get("theme") == "dark" else "#d97706"};
+        --error-glow: {"#ef4444" if st.session_state.get("theme") == "dark" else "#dc2626"};
         
-        --text-stellar: #f8fafc;
-        --text-muted: #94a3b8;
-    }
-
-    [data-theme="light"] {
-        --bg-deep: #f8fafc;
-        --bg-nebula: radial-gradient(circle at 0% 0%, #f1f5f9 0%, #f8fafc 100%);
-        
-        --primary-glow: #4f46e1;
-        --primary-active: #3730a3;
-        --accent-glow: #0891b2;
-        
-        --glass-bg: rgba(255, 255, 255, 0.7);
-        --glass-border: rgba(0, 0, 0, 0.08);
-        --glass-active: rgba(79, 70, 225, 0.05);
-        
-        --text-stellar: #0f172a;
-        --text-muted: #475569;
-        
-        --success-glow: #059669;
-        --warning-glow: #d97706;
-        --error-glow: #dc2626;
+        --text-stellar: {"#f8fafc" if st.session_state.get("theme") == "dark" else "#0f172a"};
+        --text-muted: {"#94a3b8" if st.session_state.get("theme") == "dark" else "#475569"};
     }
     
     /* =====================================================================
@@ -163,7 +143,7 @@ st.markdown("""
         font-family: 'Outfit', sans-serif;
         font-size: 1.85rem;
         font-weight: 800;
-        color: white;
+        color: var(--text-stellar);
         margin-bottom: 0.15rem;
         letter-spacing: -0.04em;
         white-space: nowrap;
@@ -181,7 +161,7 @@ st.markdown("""
     
     /* Sidebar Navigation */
     .stSidebar {
-        background-color: #020617 !important;
+        background-color: var(--bg-deep) !important;
         border-right: 1px solid var(--glass-border) !important;
     }
     
@@ -290,10 +270,10 @@ st.markdown("""
 
     /* Inputs */
     .stTextInput input {
-        background-color: rgba(2, 6, 23, 0.8) !important;
+        background-color: var(--glass-bg) !important;
         border: 1px solid var(--glass-border) !important;
         border-radius: 12px !important;
-        color: white !important;
+        color: var(--text-stellar) !important;
         font-size: 1rem !important;
         padding: 0.75rem 1rem !important;
     }
@@ -304,8 +284,9 @@ st.markdown("""
     }
 
     /* Accessibility */
-    *:focus {
-        outline: none !important;
+    *:focus-visible {
+        outline: 2px solid var(--primary-glow) !important;
+        outline-offset: 2px !important;
     }
     
     /* Custom Scrollbar */
@@ -460,7 +441,45 @@ st.markdown("""
     }
 </style>
 <script>
-    window.parent.window.document.body.setAttribute('data-theme', '{st.session_state.get('theme', 'dark')}');
+    (function() {
+        const navItems = [
+            "Dashboard", "Ingestion Hub", "Monitoring Hub", "Review Center",
+            "Intelligence Lab", "Research Agent", "Research Chat", "Global Search", "Settings"
+        ];
+        
+        function tryNavigate(targetPage) {
+            const docs = [document];
+            try { if (window.parent && window.parent.document) docs.push(window.parent.document); } catch(e) {}
+            try { if (window.top && window.top.document) docs.push(window.top.document); } catch(e) {}
+            
+            for (const doc of docs) {
+                const buttons = Array.from(doc.querySelectorAll('button'));
+                const btn = buttons.find(b => {
+                    const text = b.innerText.replace(/\s+/g,' ').trim().toLowerCase();
+                    return text === targetPage.toLowerCase();
+                });
+                if (btn) {
+                    btn.click();
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        const handler = (e) => {
+            if (e.altKey && e.key >= '1' && e.key <= '9') {
+                const index = parseInt(e.key) - 1;
+                if (index < navItems.length) {
+                    if (tryNavigate(navItems[index])) {
+                        e.preventDefault();
+                    }
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handler);
+        try { if (window.parent) window.parent.addEventListener('keydown', handler); } catch(e) {}
+    })();
 </script>
 """, unsafe_allow_html=True)
 
@@ -469,11 +488,16 @@ st.markdown("""
 # App Initialization
 # ---------------------------------------------------------------------------
 
-# @st.cache_resource
-def init_db():
+@st.cache_resource
+def init_db(cache_key="nebula_v2_hardened_final_purge"):
     """Initialize database connection (cached across reruns)."""
+    # FORCE RELOAD: If we changed the code, the class definition in memory might be stale.
+    # We use a new cache_key and ensure the imports are fresh.
     ensure_data_dirs()
     settings = get_settings()
+    
+    from src.storage.sqlite_store import SQLiteStore
+    logger.info(f"System: Deep cache re-initialization triggered (key: {cache_key})")
     return SQLiteStore(settings["sqlite"]["path"])
 
 
@@ -712,7 +736,7 @@ def get_vault_diagnostics(db):
     }
 
 
-db = init_db()
+db = init_db(cache_key="nebula_v3_production_ready")
 vs = init_vs()
 
 # Check service health and display status
@@ -806,34 +830,32 @@ with st.sidebar:
                 st.session_state.current_page = item
                 st.rerun()
 
-    # Research Chat History Integration (Placed after main navigation)
+    # Research Chat History Integration
     if st.session_state.get("current_page") == "Research Chat":
-        st.markdown("<p style='font-size:0.75rem; color:#475569; font-weight:800; margin-top:1.5rem; margin-bottom:0.5rem;'>INTELLIGENCE SESSIONS</p>", unsafe_allow_html=True)
+        st.markdown("---")
+        st.markdown("<p style='font-size:0.75rem; color:#475569; font-weight:800; margin-bottom:0.5rem;'>INTEL SESSIONS</p>", unsafe_allow_html=True)
         
-        with st.expander("🧠 Active Chat Sessions", expanded=True):
-            if st.button("➕ New Session", use_container_width=True, type="primary", key="new_chat_btn_sidebar"):
-                st.session_state.chat_session_id = None
-                st.session_state.chat_messages = []
-                st.rerun()
+        if st.sidebar.button("➕ New Session", use_container_width=True, type="primary", key="new_chat_btn_sidebar"):
+            st.session_state.chat_session_id = None
+            st.session_state.chat_messages = []
+            st.rerun()
 
-            sessions = db.get_chat_sessions(limit=15)
-            for s in sessions:
-                is_active = st.session_state.get("chat_session_id") == s.session_id
-                
-                # Use container to structure the row safely
-                col1, col2 = st.columns([0.65, 0.35])
-                with col1:
-                    if st.button(f"📄 {s.name[:12]}...", key=f"hist_{s.session_id}", use_container_width=True, type="primary" if is_active else "secondary"):
-                        st.session_state.chat_session_id = s.session_id
-                        st.rerun()
-                with col2:
-                    st.markdown("<div class='danger-btn'>", unsafe_allow_html=True)
-                    if st.button("❌ Del", key=f"del_h_{s.session_id}", use_container_width=True):
-                        db.delete_chat_session(s.session_id)
-                        if is_active:
-                            st.session_state.chat_session_id = None
-                        st.rerun()
-                    st.markdown("</div>", unsafe_allow_html=True)
+        sessions = db.get_chat_sessions(limit=15)
+        for s in sessions:
+            is_active = st.session_state.get("chat_session_id") == s.session_id
+            col1, col2 = st.columns([0.8, 0.2])
+            with col1:
+                if st.button(f"📄 {s.name[:18]}...", key=f"hist_{s.session_id}", use_container_width=True, type="primary" if is_active else "secondary"):
+                    st.session_state.chat_session_id = s.session_id
+                    st.rerun()
+            with col2:
+                st.markdown("<div class='danger-btn'>", unsafe_allow_html=True)
+                if st.button("❌", key=f"del_h_{s.session_id}", use_container_width=True):
+                    db.delete_chat_session(s.session_id)
+                    if is_active:
+                        st.session_state.chat_session_id = None
+                    st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
 
 
 # Flatten for radio component
@@ -872,8 +894,8 @@ with st.sidebar:
 st.sidebar.markdown("""
 <div style="padding: 1rem; border-top: 1px solid rgba(14, 165, 233, 0.1); margin-top: 1rem; font-size: 0.8rem; color: #888; text-align: center;">
     <p style="margin: 0; line-height: 1.5;">
-        <a href='#' style='color: #0ea5e9; text-decoration: none;'>Documentation</a> • 
-        <a href='#' style='color: #0ea5e9; text-decoration: none;'>Support</a>
+        <a href='https://github.com/AmanGarg1999/YTVault' style='color: #0ea5e9; text-decoration: none;'>Documentation</a> • 
+        <a href='mailto:support@knowledgevault.local' style='color: #0ea5e9; text-decoration: none;'>Support</a>
     </p>
     <p style="margin: 0.5rem 0 0; opacity: 0.7;">v1.1 • Architecture Overhaul</p>
 </div>

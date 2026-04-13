@@ -7,14 +7,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+from src.ui.components import page_header, section_header, glass_card, video_card, failure_confirmation_dialog, info_card
+
 def render_global_search(db: SQLiteStore, vs: VectorStore):
     """Unified Global Search interface with Hybrid Ranking (Keyword + Semantic) and Advanced Filtering."""
-    st.markdown("""
-        <div class="main-header">
-            <h1>Intelligence Search</h1>
-            <p>Unified deep-search across transcripts, summaries, and claims with hybrid ranking.</p>
-        </div>
-    """, unsafe_allow_html=True)
+    page_header("Intelligence Search", "Unified deep-search across transcripts, summaries, and claims with hybrid ranking.")
 
     # -----------------------------------------------------------------------
     # SYSTEM STATUS & CIRCUIT BREAKER
@@ -22,14 +19,12 @@ def render_global_search(db: SQLiteStore, vs: VectorStore):
     vector_online = vs and vs.is_ready()
     
     with st.sidebar:
-        st.markdown("### System Health")
-        if vector_online:
-            st.success("🟢 Vector Core: Operational")
-        else:
-            st.error("🔴 Vector Core: Offline")
-            st.info("Falling back to high-fidelity keyword search (Degraded Mode).")
-
-        st.markdown("---")
+        with st.expander("🛡️ System Health", expanded=False):
+            if vector_online:
+                st.success("🟢 Vector Core: Operational")
+            else:
+                st.error("🔴 Vector Core: Offline")
+                st.info("Falling back to high-fidelity keyword search (Degraded Mode).")
         st.markdown("### Advanced Filters")
         
         # Channel Filter
@@ -124,7 +119,7 @@ def render_global_search(db: SQLiteStore, vs: VectorStore):
                         m_type = "transcript"
                         if isinstance(res, dict):
                             text = res.get("snippet") or res.get("text") or ""
-                            # Infere type from structure or presence of keys
+                            # Infer type from structure or presence of keys
                             if "snippet" in res: m_type = "transcript"
                             elif "claim_id" in str(res) or "claim" in str(res).lower(): m_type = "claim"
                             else: m_type = "summary"

@@ -17,14 +17,11 @@ import json
 logger = logging.getLogger(__name__)
 
 
+from src.ui.components import page_header, destructive_action_dialog
+
 def render(db, run_repair=None, get_diagnostics=None):
     """Render the Data Management Center page."""
-    st.markdown("""
-    <div class="main-header">
-        <h1>Data Management Center</h1>
-        <p>Delete video/channel data, manage storage, and track deletion history</p>
-    </div>
-    """, unsafe_allow_html=True)
+    page_header("Data Management Center", "Delete video/channel data, manage storage, and track deletion history")
 
     try:
         # Important note about reprocessing
@@ -39,7 +36,7 @@ def render(db, run_repair=None, get_diagnostics=None):
         # =====================================================================
         # SECTION 0: Intelligence Source Explorer (NEW)
         # =====================================================================
-        st.markdown("### 🔍 Intelligence Source Explorer")
+        st.markdown("### Intelligence Source Explorer")
         st.caption("Inspect, audit, and manage high-fidelity source indexes across the triple-store architecture.")
 
         all_videos = db.get_videos_by_status(["ACCEPTED", "DONE", "PENDING_REVIEW", "REJECTED"], limit=5000)
@@ -224,62 +221,45 @@ def render(db, run_repair=None, get_diagnostics=None):
                             key="delete_video_btn",
                             use_container_width=True,
                         ):
-                            if st.checkbox("I understand this cannot be undone", key="confirm_delete_video"):
-                                try:
-                                    # --- Atomic Multi-Store Deletion ---
-                                    with st.spinner("Deleting across all intelligence stores..."):
-                                        # 1. SQLite Relational Data
-                                        result = db.delete_video_data(selected_video.video_id, delete_reason)
-                                        
-                                        # 2. Vector Store (ChromaDB)
-                                        vector_deleted = False
-                                        try:
-                                            from src.storage.vector_store import VectorStore
-                                            vs = VectorStore()
-                                            vs.delete_video_chunks(selected_video.video_id)
-                                            vector_deleted = True
-                                        except Exception as e:
-                                            logger.warning(f"Vector deletion failed for {selected_video.video_id}: {e}")
-                                        
-                                        # 3. Graph Store (Neo4j)
-                                        graph_result = {"video_deleted": False, "claims_deleted": 0}
-                                        try:
-                                            from src.storage.graph_store import GraphStore
-                                            gs = GraphStore()
-                                            graph_result = gs.delete_video_nodes(selected_video.video_id)
-                                            gs.close()
-                                        except Exception as e:
-                                            logger.warning(f"Graph deletion failed for {selected_video.video_id}: {e}")
+                            def on_confirm():
+                                with st.spinner("Deleting across all intelligence stores..."):
+                                    # 1. SQLite Relational Data
+                                    result = db.delete_video_data(selected_video.video_id, delete_reason)
+                                    
+                                    # 2. Vector Store (ChromaDB)
+                                    vector_deleted = False
+                                    try:
+                                        from src.storage.vector_store import VectorStore
+                                        vs = VectorStore()
+                                        vs.delete_video_chunks(selected_video.video_id)
+                                        vector_deleted = True
+                                    except Exception as e:
+                                        logger.warning(f"Vector deletion failed for {selected_video.video_id}: {e}")
+                                    
+                                    # 3. Graph Store (Neo4j)
+                                    graph_result = {"video_deleted": False, "claims_deleted": 0}
+                                    try:
+                                        from src.storage.graph_store import GraphStore
+                                        gs = GraphStore()
+                                        graph_result = gs.delete_video_nodes(selected_video.video_id)
+                                        gs.close()
+                                    except Exception as e:
+                                        logger.warning(f"Graph deletion failed for {selected_video.video_id}: {e}")
 
-                                    st.success(f"""
-                                    **Atomic Deletion Successful!**
-                                    
-                                    **Relational Store (SQLite):**
-                                    - Chunks: {result['chunks_deleted']} | Claims: {result['claims_deleted']}
-                                    - Quotes: {result['quotes_deleted']} | Appearances: {result['appearances_removed']}
-                                    
-                                    **Vector Store (ChromaDB):**
-                                    - Status: {'✅ Synchronized' if vector_deleted else '⚠️ Failed / Offline'}
-                                    
-                                    **Knowledge Graph (Neo4j):**
-                                    - Video Node: {'✅ Removed' if graph_result['video_deleted'] else '❌ Missing or Fail'}
-                                    - Claim Nodes: {graph_result['claims_deleted']} removed
-                                    
-                                    **Video is now in DISCOVERED state and can be reprocessed safely.**
-                                    """)
-                                    
-                                    # Log to activity
-                                    db.log_pipeline_event(
-                                        level="WARNING",
-                                        message=f"Atomic deletion: {selected_video.title[:50]}...",
-                                        video_id=selected_video.video_id,
-                                        stage="DATA_MANAGEMENT",
-                                    )
-                                    
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Deletion failed: {e}")
-                                    logger.error(f"Video deletion error: {e}", exc_info=True)
+                                st.success(f"Atomic deletion successful for {selected_video.title[:40]}...")
+                                db.log_pipeline_event(
+                                    level="WARNING",
+                                    message=f"Atomic deletion: {selected_video.title[:50]}...",
+                                    video_id=selected_video.video_id,
+                                    stage="DATA_MANAGEMENT",
+                                )
+
+                            destructive_action_dialog(
+                                title="Video Data Destruction",
+                                message=f"Are you absolutely sure you want to delete all extracted intelligence for '{selected_video.title[:40]}...'? This action targets the relational, vector, and graph stores.",
+                                on_confirm=on_confirm,
+                                confirm_label="PERMANENTLY DELETE"
+                            )
             else:
                 st.info("No processed videos available to delete.")
         
@@ -330,67 +310,39 @@ def render(db, run_repair=None, get_diagnostics=None):
                         key="delete_channel_btn",
                         use_container_width=True,
                     ):
-                        if st.checkbox("I understand this will delete data for ALL videos", key="confirm_delete_channel"):
-                            try:
-                                # --- Atomic Multi-Store Channel Deletion ---
-                                with st.spinner(f"Purging all data for {len(videos)} videos..."):
-                                    # 1. SQLite Relational Data
-                                    result = db.delete_channel_data(selected_channel.channel_id, delete_reason)
-                                    
-                                    # Instantiate external stores
-                                    from src.storage.vector_store import VectorStore
-                                    from src.storage.graph_store import GraphStore
-                                    vs = VectorStore()
-                                    gs = GraphStore()
-                                    
-                                    vector_count = 0
-                                    graph_count = 0
-                                    
-                                    # 2 & 3. External Stores
-                                    progress_bar = st.progress(0, text="Cleaning external stores...")
-                                    for i, v in enumerate(videos):
-                                        # Vector
-                                        try:
-                                            vs.delete_video_chunks(v.video_id)
-                                            vector_count += 1
-                                        except: pass
-                                        
-                                        # Graph
-                                        try:
-                                            gs.delete_video_nodes(v.video_id)
-                                            graph_count += 1
-                                        except: pass
-                                        
-                                        progress_bar.progress((i + 1) / len(videos))
-                                    
-                                    gs.close()
+                        def on_confirm_channel():
+                            with st.spinner(f"Purging all data for {len(videos)} videos..."):
+                                # 1. SQLite Relational Data
+                                result = db.delete_channel_data(selected_channel.channel_id, delete_reason)
+                                
+                                # Instantiate external stores
+                                from src.storage.vector_store import VectorStore
+                                from src.storage.graph_store import GraphStore
+                                vs = VectorStore()
+                                gs = GraphStore()
+                                
+                                # 2 & 3. External Stores
+                                for i, v in enumerate(videos):
+                                    try: vs.delete_video_chunks(v.video_id)
+                                    except: pass
+                                    try: gs.delete_video_nodes(v.video_id)
+                                    except: pass
+                                gs.close()
 
-                                st.success(f"""
-                                **Atomic Channel Deletion Successful!**
-                                
-                                **Relational Store (SQLite):**
-                                - Videos Processed: {result['videos_deleted']}
-                                - Total Chunks: {result['chunks_deleted']}
-                                
-                                **External Stores synchronization:**
-                                - Vector Store: {vector_count}/{len(videos)} videos cleared
-                                - Knowledge Graph: {graph_count}/{len(videos)} videos cleared
-                                
-                                **All videos in {selected_channel.name} are now rescannable.**
-                                """)
-                                
-                                # Log to activity
-                                db.log_pipeline_event(
-                                    level="WARNING",
-                                    message=f"Atomic channel deletion: {selected_channel.name} ({len(videos)} videos)",
-                                    channel_id=selected_channel.channel_id,
-                                    stage="DATA_MANAGEMENT",
-                                )
-                                
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Deletion failed: {e}")
-                                logger.error(f"Channel deletion error: {e}", exc_info=True)
+                            st.success(f"Atomic channel deletion successful for {selected_channel.name}...")
+                            db.log_pipeline_event(
+                                level="WARNING",
+                                message=f"Atomic channel deletion: {selected_channel.name} ({len(videos)} videos)",
+                                channel_id=selected_channel.channel_id,
+                                stage="DATA_MANAGEMENT",
+                            )
+
+                        destructive_action_dialog(
+                            title="Channel Data Destruction",
+                            message=f"You are about to delete ALL extracted intelligence for {len(videos)} videos in '{selected_channel.name}'. This action is permanent and impacts the Knowledge Graph and Vector store.",
+                            on_confirm=on_confirm_channel,
+                            confirm_label="PURGE CHANNEL"
+                        )
         else:
             st.info("No channels available.")
         

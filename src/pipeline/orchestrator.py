@@ -471,7 +471,7 @@ class PipelineOrchestrator:
         counts["heatmaps"] = len(missing_heatmaps)
 
         # 4. Identify stuck in discovery (New)
-        stuck_discovery = self.db.get_videos_by_status("DISCOVERED")
+        stuck_discovery = self.db.get_videos_by_status_any("DISCOVERED")
         counts["discovery"] = len(stuck_discovery)
         
         total_to_repair = len(set(

@@ -11,6 +11,7 @@ from src.ui.components import (
     metric_grid,
     glass_card,
     status_badge,
+    info_card,
     spacer,
     action_confirmation_dialog,
 )
@@ -151,7 +152,7 @@ def render_monitor_tab(db, run_pipeline_background):
             accepted = sum(1 for v in videos if getattr(v, "triage_status", "") == "ACCEPTED")
             rejected = sum(1 for v in videos if getattr(v, "triage_status", "") == "REJECTED")
             
-            quality_score = (done / total * 0.4) + (accepted / max(1, accepted + rejected) * 0.6 if accepted + rejected > 0 else 0) * 100
+            quality_score = ((done / total * 0.4) + (accepted / max(1, accepted + rejected) * 0.6 if accepted + rejected > 0 else 0)) * 100
             
             with st.expander(f"{ch.name[:30]} | Health: {quality_score:.0f}%", expanded=False):
                 with glass_card():

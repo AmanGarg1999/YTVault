@@ -11,18 +11,11 @@ Enables verification workflow:
 import streamlit as st
 from src.storage.sqlite_store import SQLiteStore
 from src.intelligence.analysis_engine import AnalysisEngine
-from src.ui.components.ui_helpers import pipeline_trace_timeline
-
+from src.ui.components import page_header
 
 def render(db: SQLiteStore):
     """Main transcript viewer interface."""
-    
-    st.markdown("""
-    <div class="main-header">
-        <h1>Transcript Viewer</h1>
-        <p>Access all stored transcripts - no re-fetching from YouTube</p>
-    </div>
-    """, unsafe_allow_html=True)
+    page_header("Transcript Viewer", "Access all stored transcripts - no re-fetching from YouTube")
     
     # Navigation between modes
     mode = st.radio(
@@ -318,7 +311,7 @@ def render_compare_transcripts(db: SQLiteStore):
     
     col_search, col_reset = st.columns([4, 1])
     with col_search:
-        search_q = st.text_input("🔍 Search for videos to compare...", placeholder="Search vidoes...", key="compare_search")
+        search_q = st.text_input("🔍 Search for videos to compare...", placeholder="Search videos...", key="compare_search")
     with col_reset:
         if st.button("Reset List", use_container_width=True):
             st.session_state.compare_list = []

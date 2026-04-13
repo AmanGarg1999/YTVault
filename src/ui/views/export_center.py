@@ -7,14 +7,11 @@ import streamlit as st
 logger = logging.getLogger(__name__)
 
 
+from src.ui.components import page_header, section_header
+
 def render(db):
     """Render the Export Center page."""
-    st.markdown("""
-    <div class="main-header">
-        <h1>Export Center</h1>
-        <p>Export research data and pipeline statistics</p>
-    </div>
-    """, unsafe_allow_html=True)
+    page_header("Export Center", "Export research data and pipeline statistics")
 
     try:
         from src.intelligence.export import ExportEngine
@@ -23,7 +20,7 @@ def render(db):
         col1, col2 = st.columns(2)
 
         with col1:
-            st.markdown("### Pipeline Statistics")
+            section_header("Pipeline Statistics")
             if st.button("Export Stats (Markdown)"):
                 content = exporter.export_pipeline_stats()
                 st.download_button("Download", content, "pipeline_stats.md")
@@ -79,7 +76,7 @@ def render(db):
                 )
         
         st.markdown("---")
-        st.markdown("### 🗄️ Mission Briefings & Collaboration")
+        st.markdown("### Mission Briefings & Collaboration")
         st.caption("Export research chat sessions as formal briefings or sync intelligence missions with other investigators.")
 
         tab_brief, tab_sync = st.tabs(["Individual Briefings", "Collaboration Sync"])

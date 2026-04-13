@@ -15,11 +15,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
 from src.config import get_settings
 from src.pipeline.metrics import PerformanceMetricsCollector
-
+from src.ui.components import page_header, section_header, glass_card
 
 def render():
     """Render the performance metrics dashboard."""
-    st.header("Performance Metrics", anchor="performance-metrics")
+    page_header("Performance Metrics", "Real-time pipeline performance monitoring and stage-by-stage breakdowns.")
     
     # Get settings and metrics collector
     settings = get_settings()
@@ -42,9 +42,11 @@ def render():
     # Summary Cards
     # =====================================================================
     
-    st.subheader("Summary", anchor="summary")
+    # 1. Summary Section
+    section_header("Performance Summary", icon="◈")
     
-    metric_cols = st.columns(5)
+    with glass_card():
+        metric_cols = st.columns(5)
     
     with metric_cols[0]:
         st.metric(
@@ -90,9 +92,11 @@ def render():
     # =====================================================================
     
     if latest_scan:
-        st.subheader("Latest Scan", anchor="latest-scan")
+    if latest_scan:
+        section_header("Latest Scan Performance", icon="✦")
         
-        latest_cols = st.columns(4)
+        with glass_card():
+            latest_cols = st.columns(4)
         
         with latest_cols[0]:
             st.metric(
@@ -142,7 +146,8 @@ def render():
     # Stage Breakdown
     # =====================================================================
     
-    st.subheader("Stage Performance Breakdown", anchor="stage-breakdown")
+    # Stage Breakdown
+    section_header("Stage Execution Breakdown", icon="◯")
     
     stage_breakdown = metrics.get("stage_breakdown", [])
     

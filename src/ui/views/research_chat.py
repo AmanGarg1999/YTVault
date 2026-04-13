@@ -1,9 +1,12 @@
+import logging
 import streamlit as st
 import json
 from src.storage.sqlite_store import SQLiteStore
 from src.storage.vector_store import VectorStore
 from src.intelligence.research_chat_engine import ResearchChatEngine
 from src.ui.components.ui_helpers import page_header, discovery_chips, citation_card, spacer
+
+logger = logging.getLogger(__name__)
 
 def render_research_chat(db: SQLiteStore):
     """Render the high-end Research Chat Hub."""

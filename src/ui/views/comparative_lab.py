@@ -9,22 +9,18 @@ from src.config import load_prompt
 
 logger = logging.getLogger(__name__)
 
+from src.ui.components import page_header
+
 def render(db, vs):
     """Render the Comparative Lab research interface."""
-    
-    st.markdown("""
-    <div class="main-header">
-        <h1>Comparative Lab</h1>
-        <p>Synthesize and compare perspectives across multiple channels</p>
-    </div>
-    """, unsafe_allow_html=True)
+    page_header("Comparative Lab", "Synthesize and compare perspectives across multiple channels")
 
     # Sidebar parameters
     with st.sidebar:
-        st.markdown("### Analysis Parameters")
-        top_k = st.slider("Context chunks per channel", 5, 20, 10)
-        diversity_weight = st.slider("Synthesis Focus", 0.0, 1.0, 0.5, 
-                                   help="0: Detail heavy, 1: Comparison heavy")
+        with st.expander("🛠️ Analysis Parameters", expanded=False):
+            top_k = st.slider("Context chunks per channel", 5, 20, 10)
+            diversity_weight = st.slider("Synthesis Focus", 0.0, 1.0, 0.5, 
+                                       help="0: Detail heavy, 1: Comparison heavy")
         st.markdown("---")
         st.caption("Tip: Try comparing a technical topic like '3D rendering' or a conceptual one like 'Creative Freedom'.")
         st.markdown("---")

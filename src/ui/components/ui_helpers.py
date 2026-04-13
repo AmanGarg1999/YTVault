@@ -513,6 +513,29 @@ def failure_confirmation_dialog(title: str, error_message: str, retry_callback: 
             st.rerun()
 
 
+@st.dialog("⚠️ Critical Intelligence Action")
+def destructive_action_dialog(title: str, message: str, on_confirm: Any, confirm_label: str = "CONFIRM DESTRUCTION", icon: str = "💀"):
+    """
+    Render a high-end destructive action confirmation dialog.
+    """
+    st.markdown(f"""
+    <div style="text-align: center; padding: 1rem 0;">
+        <div style="font-size: 3rem; margin-bottom: 1rem; color: #ef4444;">{icon}</div>
+        <h3 style="color: white; margin-bottom: 0.5rem; font-family: 'Outfit', sans-serif;">{title}</h3>
+        <p style="color: var(--text-muted); font-size: 1rem; margin-bottom: 2rem;">{message}</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button(confirm_label, type="primary", use_container_width=True, key="destruct_confirm_btn"):
+            on_confirm()
+            st.rerun()
+    with col2:
+        if st.button("CANCEL", type="secondary", use_container_width=True, key="destruct_cancel_btn"):
+            st.rerun()
+
+
 # ===========================================================================
 # DATA DISPLAY COMPONENTS
 # ===========================================================================

@@ -89,10 +89,14 @@ def render_system_health(db: SQLiteStore):
             else:
                 c2.markdown("**Intelligence Core**\n\n🟢 Operational")
                 
-            # Vector store check
-            # We don't have direct access here easily without re-init, 
-            # so we use session state or logs.
-            c3.markdown("**Vector Store**\n\n🟢 Operational")
+            # 3. Vector store check
+            # Check initialization via session state
+            vector_ready = st.session_state.get('vector_store_initialized') == True
+
+            if vector_ready:
+                c3.markdown("**Vector Store**\n\n🟢 Operational")
+            else:
+                c3.markdown("**Vector Store**\n\n🟡 Initializing")
 
 
 def render_queue_manager(db: SQLiteStore):

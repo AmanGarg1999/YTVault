@@ -565,6 +565,7 @@ if not hasattr(st, "_global_orchestrators"):
     st._global_orchestrators = {}
 
 
+
 def run_pipeline_background(url: str, db: SQLiteStore, scan_id: Optional[str] = None, force_metadata_refresh: bool = False):
     """Run the pipeline in a background thread.
     
@@ -890,6 +891,16 @@ with st.sidebar:
                 st.caption(f"+ {len(active_scans) - 3} more...")
     else:
         st.info("System Engine Idling. No active tasks.")
+
+    # Footer links correctly pointing to help/docs
+    st.markdown(f"<div style='margin-top:2rem; border-top:1px solid rgba(255,255,255,0.05); padding-top:1rem;'>", unsafe_allow_html=True)
+    if st.button("User Documentation", key="nav_btn_docs", use_container_width=True):
+        st.session_state.navigate = "Blueprint Center"
+        st.rerun()
+    if st.button("System Performance", key="nav_btn_perf", use_container_width=True):
+        st.session_state.navigate = "Performance"
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 
 st.sidebar.markdown("""
 <div style="padding: 1rem; border-top: 1px solid rgba(14, 165, 233, 0.1); margin-top: 1rem; font-size: 0.8rem; color: #888; text-align: center;">

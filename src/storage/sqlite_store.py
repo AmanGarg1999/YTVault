@@ -2469,9 +2469,10 @@ class SQLiteStore:
                  AND checkpoint_stage NOT IN ('DONE', 'SUMMARIZED', 'GRAPH_SYNCED')"""
         ).fetchone()[0]
         
-        # ETA calculation (30s per stage per video roughly)
-        # Find which stages are pending for accepted videos
-        stats["eta_minutes"] = max(1, (stats["in_progress"] * 45) // 60) if stats["in_progress"] > 0 else 0
+        # ETA calculation: Refined to 25s per stage per video (roughly)
+        # We cap the visual ETA to prevent unrealistic many-day estimations
+        raw_eta = (stats["in_progress"] * 25) // 60
+        stats["eta_minutes"] = min(2880, raw_eta) if stats["in_progress"] > 0 else 0
         
         return stats
 

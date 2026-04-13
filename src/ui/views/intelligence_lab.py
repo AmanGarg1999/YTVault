@@ -54,6 +54,19 @@ def render(db: SQLiteStore, run_repair_background=None):
 def render_mind_map(db: SQLiteStore):
     section_header("Thematic Connectivity Map", icon="◈")
     
+    st.markdown("""
+    <div style="display: flex; gap: 1.5rem; margin-bottom: 1.5rem; font-size: 0.8rem; background: rgba(255,255,255,0.03); padding: 0.75rem; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05);">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div style="width: 12px; height: 12px; border-radius: 50%; background: #6366f1; box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);"></div>
+            <span style="color: #f8fafc; font-weight: 600;">Research Topic</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div style="width: 12px; height: 1.5px; background: #475569;"></div>
+            <span style="color: #94a3b8;">Common Video Source</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
     with glass_card():
         threshold = st.slider(
             "Connection Strength Threshold", 
@@ -154,6 +167,19 @@ def render_market_trends(db: SQLiteStore):
 
 def render_guest_network(db: SQLiteStore):
     section_header("Expert Network Graph", icon="✦")
+    
+    st.markdown("""
+    <div style="display: flex; gap: 1.5rem; margin-bottom: 1.5rem; font-size: 0.8rem; background: rgba(255,255,255,0.03); padding: 0.75rem; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05);">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div style="width: 12px; height: 12px; border-radius: 50%; background: #22d3ee; box-shadow: 0 0 10px rgba(34, 211, 238, 0.4);"></div>
+            <span style="color: #f8fafc; font-weight: 600;">Verified Expert</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div style="width: 12px; height: 12px; border-radius: 50%; background: #6366f1;"></div>
+            <span style="color: #94a3b8;">Shared Research Context</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
     network_data = db.get_guest_network()
     if not network_data:

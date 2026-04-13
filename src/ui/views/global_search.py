@@ -13,18 +13,10 @@ def render_global_search(db: SQLiteStore, vs: VectorStore):
     """Unified Global Search interface with Hybrid Ranking (Keyword + Semantic) and Advanced Filtering."""
     page_header("Intelligence Search", "Unified deep-search across transcripts, summaries, and claims with hybrid ranking.")
 
-    # -----------------------------------------------------------------------
-    # SYSTEM STATUS & CIRCUIT BREAKER
-    # -----------------------------------------------------------------------
-    vector_online = vs and vs.is_ready()
-    
+    # The sidebar health check is now centralized in the Global Navigation
+    pass
+
     with st.sidebar:
-        with st.expander("🛡️ System Health", expanded=False):
-            if vector_online:
-                st.success("🟢 Vector Core: Operational")
-            else:
-                st.error("🔴 Vector Core: Offline")
-                st.info("Falling back to high-fidelity keyword search (Degraded Mode).")
         st.markdown("### Advanced Filters")
         
         # Channel Filter

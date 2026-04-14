@@ -30,6 +30,7 @@ from src.ui.views import (
     blueprint_center, research_agent_view, monitoring_hub,
     global_search, research_chat
 )
+from src.ingestion.discovery import validate_target_availability
 
 from src.ui.components.ui_helpers import action_confirmation_dialog, failure_confirmation_dialog
 
@@ -224,10 +225,10 @@ st.markdown("""
 
     /* Secondary Buttons */
     div[data-testid="stButton"] button[kind="secondary"] {
-        background: rgba(30, 41, 59, 0.8);
-        border: 1px solid rgba(255, 255, 255, 0.25);
-        backdrop-filter: blur(10px);
-        color: #ffffff;
+        background: rgba(15, 23, 42, 0.9) !important;
+        border: 1px solid rgba(99, 102, 241, 0.4) !important;
+        backdrop-filter: blur(12px) !important;
+        color: #f8fafc !important;
     }
     
     div[data-testid="stButton"] button[kind="secondary"]:hover {
@@ -278,9 +279,16 @@ st.markdown("""
         padding: 0.75rem 1rem !important;
     }
     
-    .stTextInput input:focus {
+    .stButton > button:focus:visible {
+        border-color: var(--accent-glow) !important;
+        box-shadow: 0 0 0 2px var(--bg-deep), 0 0 0 4px var(--accent-glow) !important;
+        outline: none !important;
+    }
+
+    /* Card Focus States */
+    .metric-card:focus-within, .glass-card:focus-within {
         border-color: var(--primary-glow) !important;
-        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2) !important;
+        box-shadow: 0 0 20px rgba(99, 102, 241, 0.2) !important;
     }
 
     /* Accessibility */
@@ -793,24 +801,24 @@ with st.sidebar:
 
     # Categorized Navigation Structure
     NAV_STRUCTURE = {
-        "Discover": [
+        "Intelligence Hub": [
             "Dashboard", 
-            "Ingestion Hub", 
-            "Monitoring Hub",
-            "Review Center",
-        ],
-        "Analyze": [
-            "Intelligence Lab",
-            "Research Agent",
-            "Research Chat",
             "Global Search",
             "Blueprint Center",
+            "Ingestion Hub",
+        ],
+        "Analysis Core": [
+            "Research Agent",
+            "Research Chat",
+            "Intelligence Lab",
             "Comparative Lab",
             "Transcripts", 
         ],
-        "System": [
-            "Pipeline Center",
+        "System Health": [
+            "Monitoring Hub",
             "Performance",
+            "Review Center",
+            "Pipeline Center",
             "Export & Integration",
             "Settings"
         ]
@@ -943,6 +951,9 @@ if page in ["Dashboard", "Global Search"]:
                             # Basic validation or initial check
                             if "youtube.com" not in harvest_url and "youtu.be" not in harvest_url:
                                 raise ValueError("Invalid YouTube URL provided. Must be a youtube.com or youtu.be link.")
+                            
+                            # Pre-harvest availability check
+                            validate_target_availability(harvest_url)
                                 
                             run_pipeline_background(harvest_url, db)
                             action_confirmation_dialog(

@@ -92,7 +92,6 @@ def render():
     # =====================================================================
     
     if latest_scan:
-    if latest_scan:
         section_header("Latest Scan Performance", icon="✦")
         
         with glass_card():

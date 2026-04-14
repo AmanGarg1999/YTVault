@@ -13,8 +13,8 @@ def render_global_search(db: SQLiteStore, vs: VectorStore):
     """Unified Global Search interface with Hybrid Ranking (Keyword + Semantic) and Advanced Filtering."""
     page_header("Intelligence Search", "Unified deep-search across transcripts, summaries, and claims with hybrid ranking.")
 
-    # The sidebar health check is now centralized in the Global Navigation
-    pass
+    # Determine service health for hybrid routing
+    vector_online = vs is not None and hasattr(vs, 'is_ready') and vs.is_ready()
 
     with st.sidebar:
         st.markdown("### Advanced Filters")
@@ -120,7 +120,7 @@ def render_global_search(db: SQLiteStore, vs: VectorStore):
                             scores[v_id]["matches"].append({"text": text, "type": m_type})
 
                 # Apply weights
-                kw_weight = 1.0 if vector_online else 2.0  # Boost keyword relevance in degraded mode
+                kw_weight = 1.0 if vector_online else 2.5  # Significant boost to keyword relevance in degraded mode
                 update_rrf(kw_results, weight=kw_weight) 
                 
                 if vector_online:

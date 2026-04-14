@@ -11,6 +11,7 @@ import re
 import subprocess
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 from src.storage.sqlite_store import Channel, Video
@@ -117,6 +118,30 @@ def parse_youtube_url(url: str) -> ParsedURL:
     raise ValueError(f"Unable to parse YouTube URL: {url}")
 
 
+def validate_target_availability(url: str) -> bool:
+    """Perform a pre-harvest check to verify if the target is public and exists.
+    
+    Uses yt-dlp simulation to avoid heavy processing.
+    Returns True if reachable, raises ValueError with detail if not.
+    """
+    _apply_rate_limit()
+    try:
+        # --simulate avoids metadata processing, --playlist-end 1 for speed
+        _run_ytdlp(["--simulate", "--playlist-end", "1", "--flat-playlist", "--print", "id", url])
+        return True
+    except RuntimeError as e:
+        err_msg = str(e).lower()
+        if "404" in err_msg or "not found" in err_msg:
+            raise ValueError(f"Target not found: The URL '{url}' resulted in a 404 error.")
+        if "private" in err_msg:
+            raise ValueError(f"Private Content: The target '{url}' is private or restricted.")
+        if "sign in" in err_msg:
+            raise ValueError(f"Restriction: This content requires sign-in or is age-restricted.")
+        raise ValueError(f"Reachability Error: {str(e)[:100]}")
+    except Exception as e:
+        raise ValueError(f"Validation Error: {str(e)[:100]}")
+
+
 # ---------------------------------------------------------------------------
 # yt-dlp Metadata Extraction
 # ---------------------------------------------------------------------------
@@ -146,7 +171,8 @@ def _run_ytdlp_raw(args: list[str], timeout: int = 180) -> str:
     extra_paths = [
         "/usr/bin", "/usr/local/bin", 
         _os.path.expanduser("~/.local/bin"),
-        "/snap/bin"
+        "/snap/bin",
+        str(Path(_os.getcwd()) / ".venv" / "bin")
     ]
     env = {
         "PATH": f"{curr_path}:{':'.join(p for p in extra_paths if p not in curr_path)}".strip(":"),
@@ -196,7 +222,8 @@ def _run_ytdlp_stream(args: list[str]):
     extra_paths = [
         "/usr/bin", "/usr/local/bin", 
         _os.path.expanduser("~/.local/bin"),
-        "/snap/bin"
+        "/snap/bin",
+        str(Path(_os.getcwd()) / ".venv" / "bin")
     ]
     env = {
         "PATH": f"{curr_path}:{':'.join(p for p in extra_paths if p not in curr_path)}".strip(":"),

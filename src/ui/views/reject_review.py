@@ -55,25 +55,22 @@ def render_pending_section(db):
             with cols[0]:
                 if st.button("Accept", key=f"acc_rev_{i}_{video.video_id}", type="primary", use_container_width=True):
                     db.update_triage_status(video.video_id, "ACCEPTED", "manual_accept", 1.0)
-                    action_confirmation_dialog(
-                        "Intelligence Accepted",
-                        f"Video '{video.title[:40]}' has been admitted to the knowledge vault.",
-                        icon="✅"
-                    )
+                    st.toast(f"Intelligence Admitted: {video.title[:30]}...", icon="✅")
+                    time.sleep(0.5)
+                    st.rerun()
             with cols[1]:
                 st.markdown('<div class="danger-btn">', unsafe_allow_html=True)
                 if st.button("Reject", key=f"rej_rev_{i}_{video.video_id}", use_container_width=True):
                     db.update_triage_status(video.video_id, "REJECTED", "manual_reject", 1.0)
-                    action_confirmation_dialog(
-                        "Intelligence Rejected",
-                        f"Target '{video.title[:40]}' suppressed and moved to audit.",
-                        icon="✖"
-                    )
+                    st.toast(f"Target Suppressed: {video.title[:30]}...", icon="✖")
+                    time.sleep(0.5)
+                    st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
 
 
 def render_rejected_section(db):
     """Render the rejected videos audit section."""
+    import time
     try:
         rejected = db.get_videos_by_status_sorted("REJECTED", order_by="updated_at DESC", limit=50)
         
@@ -89,21 +86,16 @@ def render_rejected_section(db):
                 with cols[0]:
                     if st.button("Override", key=f"ov_rev_{i}_{video.video_id}", type="primary", use_container_width=True):
                         db.manual_override_rejected_video(video.video_id)
-                        action_confirmation_dialog(
-                            "Override Complete",
-                            "The automated rejection filter has been bypassed manually.",
-                            icon="🔓"
-                        )
+                        st.toast("Override Complete: Automated filter bypassed.", icon="🔓")
+                        time.sleep(0.5)
+                        st.rerun()
                 with cols[1]:
                     st.markdown('<div class="danger-btn">', unsafe_allow_html=True)
                     if st.button("Purge Intel", key=f"del_rev_{i}_{video.video_id}", use_container_width=True):
                         db.delete_video_data(video.video_id)
-                        action_confirmation_dialog(
-                            "Intelligence Purged",
-                            "All related metadata and artifacts have been permanently removed.",
-                            icon="🗑"
-                        )
-                    st.markdown('</div>', unsafe_allow_html=True)
+                        st.toast("Intelligence Purged from system.", icon="🗑")
+                        time.sleep(0.5)
+                        st.rerun()
 
     except Exception as e:
         st.error(f"Audit engine error: {e}")

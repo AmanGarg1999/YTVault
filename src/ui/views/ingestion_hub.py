@@ -4,6 +4,7 @@ import streamlit as st
 import logging
 import pandas as pd
 import time
+from src.ingestion.discovery import validate_target_availability
 
 logger = logging.getLogger(__name__)
 
@@ -68,10 +69,14 @@ def render_harvest_tab(db, run_pipeline_background):
                         try:
                             if "youtube.com" not in url and "youtu.be" not in url:
                                 raise ValueError("Invalid YouTube URL provided. Must be a youtube.com or youtu.be link.")
+                            
+                            # Validate URL availability before starting
+                            validate_target_availability(url)
+                            
                             run_pipeline_background(url, db)
                             action_confirmation_dialog(
                                 "Harvest Initialized",
-                                f"Target URL: {url[:60]}\n\nScanning and processing background tasks has started.",
+                                f"Target URL: {url[:60]}\n\nScanning and metadata discovery has started.",
                                 icon="✦"
                             )
                         except Exception as e:

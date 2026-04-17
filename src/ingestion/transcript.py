@@ -66,10 +66,9 @@ def fetch_transcript(video_id: str, retry_count: int = 0) -> TranscriptResult:
     try:
         # List transcripts with retry
         transcript_list = None
-        ytt_api = YouTubeTranscriptApi()
         for attempt in range(MAX_RETRIES):
             try:
-                transcript_list = ytt_api.list(video_id)
+                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
                 break
             except (TranscriptsDisabled, VideoUnavailable):
                 raise  # Don't retry on these errors

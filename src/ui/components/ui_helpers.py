@@ -25,7 +25,7 @@ def page_header(
     """
     st.markdown(f"""
 <div style="margin-bottom: 2.5rem; position: relative;">
-<h1 style="color: white; margin-bottom: 0.25rem; font-family: 'Outfit', sans-serif; letter-spacing: -0.04em; font-weight: 800;">{title}</h1>
+<h1 style="color: var(--text-stellar); margin-bottom: 0.25rem; font-family: 'Outfit', sans-serif; letter-spacing: -0.04em; font-weight: 800;">{title}</h1>
 {f'<p style="color: var(--text-muted); font-size: 1rem; max-width: 850px; font-weight: 500;">{subtitle}</p>' if subtitle else ''}
 <div style="position: absolute; bottom: -1rem; left: 0; width: 60px; height: 4px; background: linear-gradient(90deg, var(--primary-glow), transparent); border-radius: 2px;"></div>
 </div>
@@ -42,7 +42,7 @@ def section_header(title: str, icon: Optional[str] = None) -> None:
     icon_html = f"<span style='color: var(--accent-glow); margin-right: 0.5rem;'>{icon}</span>" if icon else ""
     st.markdown(f"""
 <div style="display: flex; align-items: center; margin: 1.5rem 0 1rem 0;">
-<h3 style="margin: 0; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.15rem; font-weight: 700; color: #cbd5e1;">{icon_html}{title}</h3>
+<h3 style="margin: 0; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.15rem; font-weight: 700; color: var(--text-stellar);">{icon_html}{title}</h3>
 </div>
 """, unsafe_allow_html=True)
 
@@ -99,17 +99,17 @@ def radial_health_chart(percentage: int, label: str, description: str = "") -> N
     color = "#10b981" if percentage > 80 else ("#f59e0b" if percentage > 50 else "#ef4444")
     
     st.markdown(f"""
-<div class="metric-card" style="display: flex; align-items: center; gap: 1.5rem; padding: 1.25rem;" aria-label="{label}: {percentage}% healthy" tabindex="0">
-<div style="position: relative; width: 75px; height: 75px; flex-shrink: 0;">
+<div class="metric-card radial-chart-container" style="display: flex; align-items: center; gap: 1.5rem; padding: 1.25rem;" aria-label="{label}: {percentage}% healthy" tabindex="0">
+<div class="radial-svg-box" style="position: relative; width: 75px; height: 75px; flex-shrink: 0;">
 <svg viewBox="0 0 40 40" style="width: 100%; height: 100%; transform: rotate(-90deg);" role="img" aria-label="{percentage}% Progress Indicator">
 <path d="M20 4.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="3.5" />
 <path d="M20 4.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="{color}" stroke-width="3.5" stroke-dasharray="{percentage}, 100" stroke-linecap="round" />
 </svg>
 <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1rem; color: var(--text-stellar);">{percentage}%</div>
 </div>
-<div style="flex-grow: 1; min-width: 0;">
-<div class="label" style="margin-bottom: 0.25rem; font-size: 0.75rem; letter-spacing: 0.1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{label}</div>
-<div style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">{description}</div>
+<div class="radial-chart-info" style="flex-grow: 1; min-width: 180px; padding-left: 1rem; display: flex; flex-direction: column; justify-content: center;">
+<div class="label" style="font-size: 0.7rem; font-weight: 800; letter-spacing: 0.1em; color: var(--text-stellar); white-space: nowrap; line-height: 1;">{label.upper()}</div>
+<div style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.2; margin-top: 0.2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{description}</div>
 </div>
 </div>
 """, unsafe_allow_html=True)
@@ -354,15 +354,16 @@ def video_card(
         confidence_color = "#818cf8" if confidence_val > 0 else "#64748b"
 
         st.markdown(f"""
-<div style="background: rgba(15, 23, 42, 0.3); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; padding: 1.75rem; margin-bottom: 1.25rem; box-shadow: 0 4px 20px rgba(0,0,0,0.1);"><div style="display: flex; gap: 1.75rem; align-items: flex-start;">
-{f'<div style="width: 180px; flex-shrink: 0;"><img src="https://img.youtube.com/vi/{video.video_id}/mqdefault.jpg" style="width: 100%; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);"></div>' if show_thumbnail else ''}
-<div style="flex-grow: 1;">
-<p style="font-size: 1.25rem; font-weight: 700; color: white; margin: 0; line-height: 1.4; letter-spacing: -0.02em;">{clean_title}</p>
-<div style="display: flex; gap: 1.25rem; align-items: center; margin-top: 1rem; font-size: 0.85rem; color: #cbd5e1; font-weight: 600;">
+<div class="video-card-container" style="background: rgba(15, 23, 42, 0.3); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; padding: 1.75rem; margin-bottom: 1.25rem; box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
+<div class="video-card-flex" style="display: flex; gap: 1.75rem; align-items: flex-start;">
+{f'<div class="video-thumbnail" style="width: 180px; flex-shrink: 0;"><img src="https://img.youtube.com/vi/{video.video_id}/mqdefault.jpg" style="width: 100%; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);"></div>' if show_thumbnail else ''}
+<div class="video-info" style="flex-grow: 1;">
+<p class="video-title" style="font-size: 1.25rem; font-weight: 700; color: white; margin: 0; line-height: 1.4; letter-spacing: -0.02em;">{clean_title}</p>
+<div class="video-meta" style="display: flex; gap: 1.25rem; align-items: center; margin-top: 1rem; font-size: 0.85rem; color: #cbd5e1; font-weight: 600;">
 <span>{badge_html}</span>
-<span style="color: rgba(255,255,255,0.1);">|</span>
+<span class="meta-sep" style="color: rgba(255,255,255,0.1);">|</span>
 <span>{dur_min}:{dur_sec:02d}</span>
-<span style="color: rgba(255,255,255,0.1);">|</span>
+<span class="meta-sep" style="color: rgba(255,255,255,0.1);">|</span>
 <span style="color: {confidence_color};">{confidence_text}</span>
 </div></div></div></div>
 """, unsafe_allow_html=True)

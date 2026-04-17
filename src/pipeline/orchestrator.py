@@ -113,7 +113,7 @@ class PipelineOrchestrator:
     @property
     def metrics(self) -> PerformanceMetricsCollector:
         """Lazy-init metrics collector."""
-        if self._metrics is None:
+        if not hasattr(self, "_metrics") or self._metrics is None:
             self._metrics = PerformanceMetricsCollector(self.db_path)
         return self._metrics
 
@@ -124,7 +124,7 @@ class PipelineOrchestrator:
     @property
     def triage(self) -> TriageEngine:
         """Lazy-init triage engine."""
-        if self._triage is None:
+        if not hasattr(self, "_triage") or self._triage is None:
             self._triage = TriageEngine()
         return self._triage
 
@@ -135,7 +135,7 @@ class PipelineOrchestrator:
     @property
     def normalizer(self) -> TextNormalizer:
         """Lazy-init text normalizer."""
-        if self._normalizer is None:
+        if not hasattr(self, "_normalizer") or self._normalizer is None:
             self._normalizer = TextNormalizer()
         return self._normalizer
 
@@ -146,7 +146,7 @@ class PipelineOrchestrator:
     @property
     def translator(self) -> TranslationEngine:
         """Lazy-init translation engine."""
-        if self._translator is None:
+        if not hasattr(self, "_translator") or self._translator is None:
             self._translator = TranslationEngine()
         return self._translator
 
@@ -233,13 +233,15 @@ class PipelineOrchestrator:
         # Create scan checkpoint
         active_scan = self.db.get_active_scan_for_url(url)
         
-        # Track counts from DB if resuming
+        # Track counts
         processed_count = 0
         discovered_count = 0
+        session_vids = set()
         
         if active_scan:
             logger.info(f"Using existing active scan {active_scan.scan_id} for {url}")
             scan_id = active_scan.scan_id
+            # Initialize with latest DB values for continuity
             processed_count = active_scan.total_processed
             discovered_count = active_scan.total_discovered
         else:
@@ -318,7 +320,17 @@ class PipelineOrchestrator:
                         continue # Wait for active futures to finish
                     
                     vid, is_new = item
+                    
                     if is_new or force_metadata_refresh:
+                        if vid not in session_vids:
+                            discovered_count += 1
+                            session_vids.add(vid)
+                            
+                        # Report DISCOVERY progress immediately to DB
+                        self.checkpoint.update_scan_progress(
+                            scan_id, total_discovered=discovered_count
+                        )
+                        
                         if self.db.claim_video(vid, scan_id):
                             self._report_status(f"Queuing video {vid}")
                             
@@ -331,12 +343,12 @@ class PipelineOrchestrator:
                         else:
                             logger.info(f"Skipping video {vid}: already locked by another scan")
                     else:
-                        # Already processed (likely skipped during discovery)
-                        processed_count += 1
-                        self.checkpoint.update_scan_progress(
-                            scan_id, total_processed=processed_count,
-                            last_video_id=vid,
-                        )
+                        # Already processed; ensure we count it toward discovery if it's new to this session
+                        if vid not in session_vids:
+                             # DO NOT increment discovered_count if it's already in the resumed baseline
+                             # Actually, we should only increment if we exceed the resumed baseline
+                             # or if we started from 0 (though we start from DB value now).
+                             session_vids.add(vid)
 
                 # Final reaper for remaining active futures
                 while active_futures:
@@ -602,15 +614,6 @@ class PipelineOrchestrator:
             else:
                 discovery_queue.put((vid, False))
 
-            if discovered_count % 2 == 0:
-                self.checkpoint.update_scan_progress(
-                    scan_id, total_discovered=discovered_count
-                )
-                self._report_status(f"Discovered {discovered_count} videos...")
-
-        self.checkpoint.update_scan_progress(
-            scan_id, total_discovered=discovered_count
-        )
         self.db.sync_channel_video_counts() # Update counts in channels table
         mode_label = f"(incremental after {after_date})" if after_date else "(full)"
         self._report_status(f"Discovery complete {mode_label}: {discovered_count} videos found")

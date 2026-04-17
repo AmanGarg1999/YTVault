@@ -23,12 +23,10 @@ from src.storage.sqlite_store import SQLiteStore
 
 # Page modules
 from src.ui.views import (
-    dashboard, ingestion_hub, pipeline_center, intelligence_lab,
-    explorer, guest_intel, export_center,
-    logs_monitor, data_management, reject_review,
-    transcript_viewer, performance_metrics, comparative_lab,
-    blueprint_center, research_agent_view, monitoring_hub,
-    global_search, research_chat
+    intelligence_center, intelligence_studio, ops_dashboard,
+    research_chat, transcript_viewer, reject_review,
+    blueprint_center, export_center, data_management,
+    performance_metrics
 )
 from src.ingestion.discovery import validate_target_availability
 
@@ -41,7 +39,7 @@ from src.ui.components.ui_helpers import action_confirmation_dialog, failure_con
 st.set_page_config(
     page_title="KnowledgeVault Intelligence",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="auto",
 )
 
 # ---------------------------------------------------------------------------
@@ -102,6 +100,15 @@ def inject_custom_css():
     h3 { font-size: 1.5rem; font-weight: 650; color: var(--text-stellar); }
     
     p { line-height: 1.7; color: var(--text-muted); font-size: 1rem; }
+
+    /* Responsive Typography */
+    @media (max-width: 768px) {
+        h1 { font-size: 1.75rem !important; }
+        h2 { font-size: 1.5rem !important; }
+        h3 { font-size: 1.25rem !important; }
+        p { font-size: 0.9rem !important; }
+        .stApp { font-size: 13px !important; }
+    }
     
     /* =====================================================================
        ENHANCED COMPONENTS - GLASSMORPHISM
@@ -120,10 +127,59 @@ def inject_custom_css():
     }
     
     .metric-card:hover, .glass-card:hover {
-        background: rgba(30, 41, 59, 0.6);
-        border-color: rgba(99, 102, 241, 0.4);
+        background: var(--glass-active);
+        border-color: var(--primary-glow);
         transform: translateY(-6px);
         box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3), 0 0 15px rgba(99, 102, 241, 0.1);
+    }
+
+    @media (max-width: 768px) {
+        .metric-card, .glass-card {
+            padding: 1.25rem !important;
+            border-radius: 12px !important;
+        }
+        .metric-card:hover, .glass-card:hover {
+            transform: translateY(-2px) !important;
+        }
+
+        /* Video Card Mobile Fix */
+        .video-card-flex {
+            flex-direction: column !important;
+            gap: 1rem !important;
+        }
+        .video-thumbnail {
+            width: 100% !important;
+            max-width: none !important;
+        }
+        .video-thumbnail img {
+            width: 100% !important;
+        }
+        .video-title {
+            font-size: 1.1rem !important;
+        }
+        .video-meta {
+            flex-wrap: wrap !important;
+            gap: 0.5rem 1rem !important;
+        }
+        .meta-sep {
+            display: none !important;
+        }
+
+        /* Radial Chart Mobile Fix */
+        .radial-chart-container {
+            flex-direction: column !important;
+            text-align: center !important;
+            gap: 1rem !important;
+        }
+        .radial-chart-info {
+            padding-left: 0 !important;
+            min-width: unset !important;
+        }
+        
+        /* Dashboard Grid Stacking */
+        [data-testid="stHorizontalBlock"] {
+            flex-direction: column !important;
+        }
     }
     
     .metric-card::after, .glass-card::after {
@@ -305,15 +361,15 @@ def inject_custom_css():
         width: 10px;
     }
     ::-webkit-scrollbar-track {
-        background: #020617;
+        background: var(--bg-deep);
     }
     ::-webkit-scrollbar-thumb {
-        background: #1e293b;
-        border: 2px solid #020617;
+        background: var(--glass-border);
+        border: 2px solid var(--bg-deep);
         border-radius: 10px;
     }
     ::-webkit-scrollbar-thumb:hover {
-        background: #334155;
+        background: var(--text-muted);
     }
     /* Standardize Streamlit Link Buttons to use Nebula Glassmorphism */
     div[data-testid="stLinkButton"] a {
@@ -359,16 +415,30 @@ def inject_custom_css():
         font-weight: 700 !important;
         border: 1px solid rgba(255, 255, 254, 0.2) !important;
     }
-
-    div[data-testid="stSidebar"] button[kind="secondary"] {
-        background-color: rgba(15, 23, 42, 0.2) !important;
-        color: var(--text-muted) !important;
-        border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    
+    /* Chat Message Legibility Fix for Light Theme */
+    [data-testid="stChatMessage"] {
+        background-color: var(--glass-bg) !important;
+        border: 1px solid var(--glass-border) !important;
+        border-radius: 12px !important;
     }
-
-    div[data-testid="stSidebar"] button:hover {
+    [data-testid="stChatMessage"] p, [data-testid="stChatMessage"] li {
+        color: var(--text-stellar) !important;
+        font-weight: 500 !important;
+    }
+    
+    /* Secondary Button Contrast in Sidebar */
+    div[data-testid="stSidebar"] button[kind="secondary"] {
+        background-color: var(--glass-bg) !important;
+        border: 1px solid var(--glass-border) !important;
+        color: var(--text-stellar) !important;
+        font-weight: 600 !important;
+        transition: all 0.2s ease;
+    }
+    div[data-testid="stSidebar"] button[kind="secondary"]:hover {
+        background-color: var(--glass-active) !important;
         border-color: var(--primary-glow) !important;
-        color: white !important;
+        color: var(--primary-glow) !important;
     }
 
     /* =====================================================================
@@ -411,9 +481,21 @@ def inject_custom_css():
         border-radius: 12px !important;
     }
 
-    /* Chat Input FIXED Aesthetic - Removal of White Footer */
+    /* Fixed Aesthetic - Handling Header/Footer Visibility */
     footer {visibility: hidden; height: 10px;}
-    header {visibility: hidden; height: 10px;}
+    
+    /* Responsive Header: Show on mobile for sidebar expansion, hide on desktop for immersion */
+    header {
+        visibility: visible !important; 
+        background: transparent !important;
+    }
+    
+    @media (min-width: 1024px) {
+        header { 
+            visibility: hidden !important; 
+            height: 0 !important; 
+        }
+    }
     
     div[data-testid="stBottom"] {
         background-color: transparent !important;
@@ -476,8 +558,9 @@ def inject_custom_css():
 <script>
     (function() {
         const navItems = [
-            "Dashboard", "Ingestion Hub", "Monitoring Hub", "Review Center",
-            "Intelligence Lab", "Research Agent", "Research Chat", "Global Search", "Settings"
+            "Intelligence Center", "Intelligence Studio", "Research Chat",
+            "Operations Dashboard", "Triage Center", "Transcripts",
+            "Settings"
         ];
         
         function tryNavigate(targetPage) {
@@ -557,7 +640,6 @@ def check_service_health():
     health_status = {
         "database": False,
         "ollama": False,
-        "vector_store": False,
         "errors": []
     }
     
@@ -583,8 +665,6 @@ def check_service_health():
     except Exception as e:
         health_status["errors"].append(f"Ollama: Service unavailable")
 
-    # Check Vector Store (Direct check if instance exists and is ready)
-    # Note: We rely on the global 'vs' instance defined later
     return health_status
 
 
@@ -784,9 +864,10 @@ health = check_service_health()
 # ---------------------------------------------------------------------------
 
 # Sidebar Header with Branding
-st.sidebar.markdown("""
+_current_theme = st.session_state.get("theme", "dark")
+st.sidebar.markdown(f"""
 <div style="padding: 1.5rem; background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(34, 211, 238, 0.05)); border-radius: 16px; border: 1px solid rgba(99, 102, 241, 0.2); margin-bottom: 2rem; text-align: left; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
-    <h1 style="margin: 0; font-size: 1.5rem; font-weight: 800; color: white; letter-spacing: -0.03em;">KnowledgeVault</h1>
+    <h1 style="margin: 0; font-size: 1.5rem; font-weight: 800; color: {"#ffffff" if _current_theme == "dark" else "#1e293b"}; letter-spacing: -0.03em;">KnowledgeVault</h1>
     <p style="margin: 0.25rem 0 0; font-size: 0.7rem; color: var(--accent-glow); text-transform: uppercase; letter-spacing: 0.15em; font-weight: 700; opacity: 0.9;">Research Intelligence OS</p>
 </div>
 """, unsafe_allow_html=True)
@@ -829,29 +910,23 @@ with st.sidebar:
     # Categorized Navigation Structure
     NAV_STRUCTURE = {
         "Intelligence Hub": [
-            "Dashboard", 
-            "Global Search",
-            "Blueprint Center",
-            "Ingestion Hub",
-        ],
-        "Analysis Core": [
-            "Research Agent",
+            "Intelligence Center", 
+            "Intelligence Studio",
             "Research Chat",
-            "Intelligence Lab",
-            "Comparative Lab",
+        ],
+        "Operations": [
+            "Operations Dashboard",
+            "Triage Center",
             "Transcripts", 
         ],
-        "System Health": [
-            "Monitoring Hub",
-            "Performance",
-            "Review Center",
-            "Pipeline Center",
+        "System": [
+            "Blueprint Center",
             "Export & Integration",
             "Settings"
         ]
     }
 
-    selected_page = st.session_state.get("current_page", "Dashboard")
+    selected_page = st.session_state.get("current_page", "Intelligence Center")
     
     for category, items in NAV_STRUCTURE.items():
         st.markdown(f"<p style='font-size:0.75rem; color:#475569; font-weight:800; margin-top:1.5rem; margin-bottom:0.5rem;'>{category.upper()}</p>", unsafe_allow_html=True)
@@ -906,7 +981,7 @@ if "navigate" in st.session_state:
     if target_page in nav_options:
         st.session_state.current_page = target_page
 
-page = st.session_state.get("current_page", "Dashboard")
+page = st.session_state.get("current_page", "Intelligence Center")
 
 
 # Sidebar Footer - Active Scans Tray & Help
@@ -956,64 +1031,18 @@ st.sidebar.markdown("""
 # Global Command Bar & Rendering
 # ---------------------------------------------------------------------------
 
-# Global Command Bar & Rendering (Contextual Visibility)
-if page in ["Dashboard", "Global Search"]:
-    with st.container():
-        col_cmd, col_btn = st.columns([5, 1])
-        with col_cmd:
-            harvest_url = st.text_input(
-                "Global Harvest", 
-                placeholder="Paste a YouTube URL here to start a research harvest...",
-                label_visibility="collapsed",
-                key="global_harvest_input"
-            )
-        with col_btn:
-            if st.button("Harvest", type="primary", use_container_width=True, key="global_harvest_btn"):
-                if not harvest_url:
-                    st.toast("Input Required: Please enter a target YouTube URL.", icon="⚠️")
-                    st.error("The harvest engine requires a target YouTube URL to begin ingestion.")
-                else:
-                    with st.spinner("Analyzing target intelligence..."):
-                        try:
-                            # Basic validation or initial check
-                            if "youtube.com" not in harvest_url and "youtu.be" not in harvest_url:
-                                raise ValueError("Invalid YouTube URL provided. Must be a youtube.com or youtu.be link.")
-                            
-                            # Pre-harvest availability check
-                            validate_target_availability(harvest_url)
-                                
-                            run_pipeline_background(harvest_url, db)
-                            action_confirmation_dialog(
-                                "Harvest Initialized",
-                                f"Intelligence gathering has started for {harvest_url[:40]}...",
-                                icon="✦"
-                            )
-                        except Exception as e:
-                            failure_confirmation_dialog(
-                                "Harvest Failed to Initialize",
-                                str(e),
-                                retry_callback=lambda: run_pipeline_background(harvest_url, db),
-                                queue_callback=lambda: db.add_to_user_queue("URL", harvest_url, str(e))
-                            )
-else:
-    # Spacer to ensure consistent vertical alignment when command bar is absent
-    st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+# Global Command Bar removed - now integrated into Intelligence Center
+st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
 
 PAGE_MAP = {
-    "Dashboard": lambda: dashboard.render(db),
-    "Ingestion Hub": lambda: ingestion_hub.render(db, run_pipeline_background, run_bulk_pipeline_background),
-    "Pipeline Center": lambda: pipeline_center.render(db, run_pipeline_background, run_repair_background, get_vault_diagnostics),
-    "Review Center": lambda: reject_review.render(db),
-    "Performance": lambda: performance_metrics.render(),
-    "Intelligence Lab": lambda: intelligence_lab.render(db, run_repair_background),
-    "Research Agent": lambda: research_agent_view.render(db),
+    "Intelligence Center": lambda: intelligence_center.render(db, vs, run_pipeline_background),
+    "Intelligence Studio": lambda: intelligence_studio.render(db, vs, run_repair_background),
     "Research Chat": lambda: research_chat.render_research_chat(db, vs),
-    "Global Search": lambda: global_search.render_global_search(db, vs),
-    "Comparative Lab": lambda: comparative_lab.render(db, vs),
-    "Blueprint Center": lambda: blueprint_center.render(db),
+    "Operations Dashboard": lambda: ops_dashboard.render(db, run_pipeline_background, run_bulk_pipeline_background, run_repair_background, get_vault_diagnostics),
+    "Triage Center": lambda: reject_review.render(db),
     "Transcripts": lambda: transcript_viewer.render(db),
+    "Blueprint Center": lambda: blueprint_center.render(db),
     "Export & Integration": lambda: export_center.render(db),
-    "Monitoring Hub": lambda: monitoring_hub.render(db),
     "Settings": lambda: data_management.render(db, run_repair_background, get_vault_diagnostics),
 }
 

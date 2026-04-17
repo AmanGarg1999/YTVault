@@ -25,14 +25,14 @@ def render(db, run_pipeline_background):
         <p>Manage active scans, pause/resume processing, and control video ingestion</p>
     </div>
     """, unsafe_allow_html=True)
-    st.write("DEBUG: Page header rendered")
+    pass
 
     try:
         # =====================================================================
         # SECTION 1: Active Scans Control
         # =====================================================================
         st.markdown("### Active Scans")
-        st.write("DEBUG: Section 1 started")
+        pass
         
         active_scans = db.get_active_scans()
         
@@ -119,7 +119,7 @@ def render(db, run_pipeline_background):
         # SECTION 2: Video-Level Queue Management
         # =====================================================================
         st.markdown("### Video Discovery Queue Management")
-        st.write("DEBUG: Section 2 started")
+        pass
         
         # Get discovered but not yet processed videos
         discovered_videos = db.get_videos_by_status("DISCOVERED", limit=100)
@@ -169,7 +169,7 @@ def render(db, run_pipeline_background):
         # SECTION 3: Processing Status by Stage
         # =====================================================================
         st.markdown("### Processing Status by Pipeline Stage")
-        st.write("DEBUG: Section 3 started")
+        pass
         
         stages = [
             ("METADATA_HARVESTED", "Metadata Harvested"),
@@ -214,7 +214,7 @@ def render(db, run_pipeline_background):
         # SECTION 4: Triage Status Summary
         # =====================================================================
         st.markdown("### Triage Decision Summary")
-        st.write("DEBUG: Section 4 started")
+        pass
         
         triage_statuses = ["ACCEPTED", "REJECTED", "PENDING_REVIEW", "DISCOVERED"]
         

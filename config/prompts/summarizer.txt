@@ -29,7 +29,14 @@ Your output MUST be a valid JSON object with the following structure:
     {"name": "Book X", "type": "BOOK", "url": "optional_link"},
     {"name": "Research Paper Y", "type": "PAPER", "url": "optional_link"}
   ],
-  "actionable_blueprint": ["Step 1: Do X", "Step 2: Do Y"],
+  "actionable_blueprint": [
+    {
+      "step": "Concise Step Title",
+      "description": "Technical instructions on how to perform this specific step.",
+      "timestamp": "MM:SS",
+      "difficulty": "Beginner/Intermediate/Advanced"
+    }
+  ],
   "expert_disagreements": [
     {"target": "Expert Name", "topic": "Topic", "speaker_claim": "...", "target_claim": "..."}
   ],

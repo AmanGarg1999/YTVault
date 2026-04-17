@@ -194,6 +194,7 @@ class Quote:
 class ActionableBlueprint:
     video_id: str
     steps_json: str = "[]"
+    progress_json: str = "{}"
     created_at: str = ""
 
 
@@ -706,6 +707,10 @@ SCHEMA_MIGRATIONS = [
             created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id);
+    """),
+    # Version 27: Blueprint Center Overhaul (Rich Steps & Progress Persistence)
+    (27, """
+        ALTER TABLE actionable_blueprints ADD COLUMN progress_json TEXT DEFAULT '{}';
     """),
 ]
 
@@ -1480,7 +1485,7 @@ class SQLiteStore:
     # Actionable Blueprints
     # -------------------------------------------------------------------
 
-    def upsert_blueprint(self, video_id: str, steps: list[str]) -> None:
+    def upsert_blueprint(self, video_id: str, steps: list) -> None:
         """Insert or update an actionable blueprint for a video."""
         self.conn.execute(
             """INSERT INTO actionable_blueprints (video_id, steps_json)
@@ -1510,6 +1515,21 @@ class SQLiteStore:
                ORDER BY b.created_at DESC"""
         ).fetchall()
         return [dict(r) for r in rows]
+
+    def update_blueprint_progress(self, video_id: str, progress: dict) -> None:
+        """
+        Persist user completion state for a blueprint's steps.
+        Automatically handles JSON serialization of the progress dictionary.
+        """
+        if not video_id:
+            return
+            
+        self.conn.execute(
+            "UPDATE actionable_blueprints SET progress_json = ? WHERE video_id = ?",
+            (json.dumps(progress), video_id)
+        )
+        self.conn.commit()
+        logger.debug(f"Updated blueprint progress for {video_id}")
 
     # -------------------------------------------------------------------
     # Expert Clashes
@@ -1750,26 +1770,69 @@ class SQLiteStore:
         return [dict(r) for r in rows]
 
     def get_guest_network(self) -> list[dict]:
-        """Get guest co-occurrence and thematic links."""
-        # ... logic as before ...
-        rows = self.conn.execute(
-            """SELECT json_extract(t1.value, '$.name') as topic, g1.canonical_name as guest_a, g2.canonical_name as guest_b
-               FROM video_summaries vs1
-               CROSS JOIN json_each(vs1.topics_json) as t1
-               JOIN guest_appearances ga1 ON vs1.video_id = ga1.video_id
-               JOIN guests g1 ON ga1.guest_id = g1.guest_id
-               
-               JOIN video_summaries vs2
-               CROSS JOIN json_each(vs2.topics_json) as t2
-               JOIN guest_appearances ga2 ON vs2.video_id = ga2.video_id
-               JOIN guests g2 ON ga2.guest_id = g2.guest_id
-               
-               WHERE json_extract(t1.value, '$.name') = json_extract(t2.value, '$.name') 
-               AND g1.guest_id < g2.guest_id
-               GROUP BY 1, 2, 3
-               ORDER BY 1"""
-        ).fetchall()
-        return [dict(r) for r in rows]
+        """Get guest co-occurrence and thematic links, aggregated by guest pair."""
+        # Use GROUP_CONCAT to aggregate all shared topics into a single edge record
+        sql = """
+            SELECT 
+                g1.canonical_name as guest_a, 
+                g2.canonical_name as guest_b,
+                GROUP_CONCAT(DISTINCT json_extract(t1.value, '$.name')) as topics,
+                COUNT(DISTINCT vs1.video_id) as co_occurrence_count
+            FROM video_summaries vs1
+            CROSS JOIN json_each(vs1.topics_json) as t1
+            JOIN guest_appearances ga1 ON vs1.video_id = ga1.video_id
+            JOIN guests g1 ON ga1.guest_id = g1.guest_id
+            
+            JOIN video_summaries vs2
+            CROSS JOIN json_each(vs2.topics_json) as t2
+            JOIN guest_appearances ga2 ON vs2.video_id = ga2.video_id
+            JOIN guests g2 ON ga2.guest_id = g2.guest_id
+            
+            WHERE json_extract(t1.value, '$.name') = json_extract(t2.value, '$.name') 
+            AND g1.guest_id < g2.guest_id
+            GROUP BY 1, 2
+            ORDER BY co_occurrence_count DESC, 1
+        """
+        rows = self.execute(sql).fetchall()
+        # Strictly ensure column names are captured correctly as keys
+        return [{k: r[k] for k in r.keys()} for r in rows]
+
+    def get_processed_ids_for_scan(self, scan_id: str) -> set[str]:
+        """Get the set of video IDs that have been processed/completed for this scan."""
+        # Check videos that are currently 'DONE' and were touched by this scan
+        rows = self.execute("""
+            SELECT video_id FROM videos 
+            WHERE locked_by_scan_id = ? OR (checkpoint_stage = 'DONE' AND updated_at > (
+                SELECT started_at FROM scan_checkpoints WHERE scan_id = ?
+            ))
+        """, (scan_id, scan_id)).fetchall()
+        
+        return {r["video_id"] for r in rows}
+
+    def get_scan_processed_video_ids(self, scan_id: str) -> set[str]:
+        """Get the set of video IDs that have been processed/linked to this scan."""
+        # Check scan_checkpoints.last_video_id or any other association logic
+        # In this system, processed videos for a scan are marked in the 'videos' table 
+        # via metadata if possible, but actually we can check which videos 
+        # were already accounted for in the scan tallies.
+        
+        # NOTE: If we don't have a direct scan_videos join table, we rely on 
+        # videos that are currently 'COMPLETED' and were last touched near the scan's start.
+        # However, for 100% precision, we should ideally have the scan_id in the videos table.
+        # For now, we'll return an empty set to avoid breaking the code, 
+        # but let's see if we can identify them by channel.
+        
+        scan = self.get_scan_checkpoint(scan_id)
+        if not scan:
+            return set()
+            
+        # Use the specific lock ID to identify videos for this precise scan
+        rows = self.execute("""
+            SELECT video_id FROM videos 
+            WHERE locked_by_scan_id = ?
+        """, (scan_id,)).fetchall()
+        
+        return {r["video_id"] for r in rows}
 
 
     def get_videos_for_summarization(self, limit: int = 50) -> list[str]:

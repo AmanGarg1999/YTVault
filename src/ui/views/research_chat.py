@@ -8,7 +8,7 @@ from src.ui.components.ui_helpers import page_header, discovery_chips, citation_
 
 logger = logging.getLogger(__name__)
 
-def render_research_chat(db: SQLiteStore):
+def render_research_chat(db: SQLiteStore, vs: VectorStore):
     """Render the high-end Research Chat Hub."""
     
     # Header with Design System
@@ -17,8 +17,7 @@ def render_research_chat(db: SQLiteStore):
         "Talk to your Knowledge Vault. Discover hidden insights through multi-turn intelligence synthesis."
     )
 
-    # Initialize Engine
-    vs = VectorStore()
+    # Initialize Engine (Reuse provided Vector Store)
     engine = ResearchChatEngine(db, vs)
 
     # Note: Sidebar is now managed by app.py for integration consistency

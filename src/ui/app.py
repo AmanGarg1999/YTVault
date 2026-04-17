@@ -48,35 +48,39 @@ st.set_page_config(
 # Custom CSS - Professional Design System (UI/UX Pro Max)
 # ---------------------------------------------------------------------------
 
-st.markdown("""
+def inject_custom_css():
+    theme = st.session_state.get("theme", "dark")
+    
+    # Dynamic Theme Variables
+    theme_vars = f"""
+    :root {{
+        --bg-deep: {"#030712" if theme == "dark" else "#f8fafc"};
+        --bg-nebula: {"radial-gradient(circle at 0% 0%, #0f172a 0%, #030712 50%, #020617 100%)" if theme == "dark" else "radial-gradient(circle at 0% 0%, #f1f5f9 0%, #f8fafc 100%)"};
+        
+        --primary-glow: {"#6366f1" if theme == "dark" else "#4f46e1"};
+        --primary-active: {"#4f46e1" if theme == "dark" else "#3730a3"};
+        --accent-glow: {"#22d3ee" if theme == "dark" else "#0891b2"};
+        
+        --glass-bg: {"rgba(15, 23, 42, 0.4)" if theme == "dark" else "rgba(255, 255, 255, 0.7)"};
+        --glass-border: {"rgba(255, 255, 255, 0.05)" if theme == "dark" else "rgba(0, 0, 0, 0.08)"};
+        --glass-active: {"rgba(99, 102, 241, 0.1)" if theme == "dark" else "rgba(79, 70, 225, 0.05)"};
+        
+        --success-glow: {"#10b981" if theme == "dark" else "#059669"};
+        --warning-glow: {"#f59e0b" if theme == "dark" else "#d97706"};
+        --error-glow: {"#ef4444" if theme == "dark" else "#dc2626"};
+        
+        --text-stellar: {"#f8fafc" if theme == "dark" else "#0f172a"};
+        --text-muted: {"#94a3b8" if theme == "dark" else "#475569"};
+    }}
+    """
+    
+    # Static Global Styles
+    st.markdown(f"<style>{theme_vars}</style>", unsafe_allow_html=True)
+    
+    st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-    /* =====================================================================
-       INTELLIGENCE CORE - THEME DEFINITIONS
-       ===================================================================== */
-    
-    :root {
-        /* Active Theme Variables - Injected by Intelligence Orchestrator */
-        --bg-deep: {"#030712" if st.session_state.get("theme") == "dark" else "#f8fafc"};
-        --bg-nebula: {"radial-gradient(circle at 0% 0%, #0f172a 0%, #030712 50%, #020617 100%)" if st.session_state.get("theme") == "dark" else "radial-gradient(circle at 0% 0%, #f1f5f9 0%, #f8fafc 100%)"};
-        
-        --primary-glow: {"#6366f1" if st.session_state.get("theme") == "dark" else "#4f46e1"};
-        --primary-active: {"#4f46e1" if st.session_state.get("theme") == "dark" else "#3730a3"};
-        --accent-glow: {"#22d3ee" if st.session_state.get("theme") == "dark" else "#0891b2"};
-        
-        --glass-bg: {"rgba(15, 23, 42, 0.4)" if st.session_state.get("theme") == "dark" else "rgba(255, 255, 255, 0.7)"};
-        --glass-border: {"rgba(255, 255, 255, 0.05)" if st.session_state.get("theme") == "dark" else "rgba(0, 0, 0, 0.08)"};
-        --glass-active: {"rgba(99, 102, 241, 0.1)" if st.session_state.get("theme") == "dark" else "rgba(79, 70, 225, 0.05)"};
-        
-        --success-glow: {"#10b981" if st.session_state.get("theme") == "dark" else "#059669"};
-        --warning-glow: {"#f59e0b" if st.session_state.get("theme") == "dark" else "#d97706"};
-        --error-glow: {"#ef4444" if st.session_state.get("theme") == "dark" else "#dc2626"};
-        
-        --text-stellar: {"#f8fafc" if st.session_state.get("theme") == "dark" else "#0f172a"};
-        --text-muted: {"#94a3b8" if st.session_state.get("theme") == "dark" else "#475569"};
-    }
-    
     /* =====================================================================
        GLOBAL STYLES & TYPOGRAPHY
        ===================================================================== */
@@ -103,8 +107,7 @@ st.markdown("""
        ENHANCED COMPONENTS - GLASSMORPHISM
        ===================================================================== */
     
-    /* Metric Cards */
-    .metric-card {
+    .metric-card, .glass-card {
         background: var(--glass-bg);
         backdrop-filter: blur(16px);
         -webkit-backdrop-filter: blur(16px);
@@ -116,14 +119,14 @@ st.markdown("""
         overflow: hidden;
     }
     
-    .metric-card:hover {
+    .metric-card:hover, .glass-card:hover {
         background: rgba(30, 41, 59, 0.6);
         border-color: rgba(99, 102, 241, 0.4);
         transform: translateY(-6px);
         box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3), 0 0 15px rgba(99, 102, 241, 0.1);
     }
     
-    .metric-card::after {
+    .metric-card::after, .glass-card::after {
         content: '';
         position: absolute;
         top: -50%;
@@ -136,7 +139,7 @@ st.markdown("""
         pointer-events: none;
     }
     
-    .metric-card:hover::after {
+    .metric-card:hover::after, .glass-card:hover::after {
         opacity: 1;
     }
     
@@ -152,7 +155,7 @@ st.markdown("""
         text-overflow: ellipsis;
     }
     
-    .metric-card .label {
+    .metric-card .label, .glass-card .label {
         font-size: 0.75rem;
         color: var(--text-muted);
         text-transform: uppercase;
@@ -349,6 +352,25 @@ st.markdown("""
         display: none !important;
     }
 
+    /* Sidebar Navigation Button Contrast Fix */
+    div[data-testid="stSidebar"] button[kind="primary"] {
+        background-color: var(--primary-glow) !important;
+        color: white !important;
+        font-weight: 700 !important;
+        border: 1px solid rgba(255, 255, 254, 0.2) !important;
+    }
+
+    div[data-testid="stSidebar"] button[kind="secondary"] {
+        background-color: rgba(15, 23, 42, 0.2) !important;
+        color: var(--text-muted) !important;
+        border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    }
+
+    div[data-testid="stSidebar"] button:hover {
+        border-color: var(--primary-glow) !important;
+        color: white !important;
+    }
+
     /* =====================================================================
        RESEARCH CHAL HUB - MESSAGING STYLES
        ===================================================================== */
@@ -357,6 +379,9 @@ st.markdown("""
     div[data-testid="stChatMessage"] {
         background: rgba(15, 23, 42, 0.3) !important;
         border: 1px solid rgba(255, 255, 255, 0.05) !important;
+        color: white !important;
+        font-weight: 700 !important;
+        box-shadow: 0 0 15px rgba(99, 102, 241, 0.3);
         border-radius: 20px !important;
         padding: 1.5rem !important;
         margin-bottom: 1.5rem !important;
@@ -387,8 +412,8 @@ st.markdown("""
     }
 
     /* Chat Input FIXED Aesthetic - Removal of White Footer */
-    footer {display: none !important;}
-    header {display: none !important;}
+    footer {visibility: hidden; height: 10px;}
+    header {visibility: hidden; height: 10px;}
     
     div[data-testid="stBottom"] {
         background-color: transparent !important;
@@ -490,6 +515,8 @@ st.markdown("""
     })();
 </script>
 """, unsafe_allow_html=True)
+
+inject_custom_css()
 
 
 # ---------------------------------------------------------------------------
@@ -980,7 +1007,7 @@ PAGE_MAP = {
     "Performance": lambda: performance_metrics.render(),
     "Intelligence Lab": lambda: intelligence_lab.render(db, run_repair_background),
     "Research Agent": lambda: research_agent_view.render(db),
-    "Research Chat": lambda: research_chat.render_research_chat(db),
+    "Research Chat": lambda: research_chat.render_research_chat(db, vs),
     "Global Search": lambda: global_search.render_global_search(db, vs),
     "Comparative Lab": lambda: comparative_lab.render(db, vs),
     "Blueprint Center": lambda: blueprint_center.render(db),

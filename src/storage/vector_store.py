@@ -195,9 +195,24 @@ def _estimate_timestamp(
 # ---------------------------------------------------------------------------
 
 class VectorStore:
-    """ChromaDB-backed vector store for semantic transcript search."""
+    """ChromaDB-backed vector store for semantic transcript search.
+    
+    Implements a Singleton pattern to prevent concurrent file-lock issues.
+    """
+    _instance = None
+    _initialized = False
+
+    def __new__(cls):
+        """Singleton pattern: return existing instance if available."""
+        if cls._instance is None:
+            cls._instance = super(VectorStore, cls).__new__(cls)
+        return cls._instance
 
     def __init__(self):
+        """Initialize ChromaDB client and collections (once)."""
+        if VectorStore._initialized:
+            return
+
         settings = get_settings()
         cfg = settings["chromadb"]
         ollama_cfg = settings["ollama"]
@@ -248,7 +263,8 @@ class VectorStore:
             self.health["collections"]["video_summaries"] = True
             
             self.health["ready"] = True
-            logger.info("VectorStore initialized successfully (resilient mode)")
+            VectorStore._initialized = True
+            logger.info("VectorStore initialized successfully (Singleton mode)")
             
         except Exception as e:
             self.health["ready"] = False
@@ -262,11 +278,15 @@ class VectorStore:
     def upsert_summary(self, video_id: str, summary_text: str, channel_id: str = "",
                        topics: list[str] = None) -> None:
         """Embed and upsert a video summary into ChromaDB."""
-        if not summary_text:
+        if not summary_text or not self.summaries_collection:
             return
+
+        # Manual dispatch: generate embeddings explicitly to resolve ChromaDB dispatcher conflicts
+        embeddings = self.embedding_fn([summary_text])
 
         self.summaries_collection.upsert(
             ids=[video_id],
+            embeddings=embeddings,
             documents=[summary_text],
             metadatas=[{
                 "video_id": video_id,
@@ -383,14 +403,14 @@ class VectorStore:
             for i in range(0, len(deduplicated_chunks), batch_size):
                 batch = deduplicated_chunks[i:i + batch_size]
                 try:
-                    # Verify embedding function is callable
-                    if not callable(self.embedding_fn):
-                        logger.error(f"embedding_fn is not callable: {type(self.embedding_fn)}")
-                        raise TypeError(f"embedding_fn must be callable, got {type(self.embedding_fn)}")
-                    
+                    # Manual dispatch: generate embeddings explicitly
+                    batch_texts = [c.cleaned_text for c in batch]
+                    embeddings = self.embedding_fn(batch_texts)
+
                     self.collection.upsert(
                         ids=[c.chunk_id for c in batch],
-                        documents=[c.cleaned_text for c in batch],
+                        embeddings=embeddings,
+                        documents=batch_texts,
                         metadatas=[{
                             "video_id": c.video_id,
                             "channel_id": channel_id,

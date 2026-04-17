@@ -77,7 +77,7 @@ def render(db, run_repair=None, get_diagnostics=None):
                 use_container_width=True, 
                 hide_index=True,
                 on_select="rerun",
-                selection_mode="single_row",
+                selection_mode="single-row",
                 key="source_explorer_table"
             )
 

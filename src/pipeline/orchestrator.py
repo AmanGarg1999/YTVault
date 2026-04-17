@@ -51,68 +51,69 @@ class PipelineOrchestrator:
     """
 
     def __init__(self):
+        """Initialize orchestrator core services and internal state."""
         ensure_data_dirs()
         self.settings = get_settings()
         self.ollama_cfg = self.settings["ollama"]
         self._db_path = self.settings["sqlite"]["path"]
-        
-        self._db_path = self.settings["sqlite"]["path"]
         self.current_scan_id = None
+
+        # Thread-local storage for DB and CheckpointManager
+        self._tl = threading.local()
 
         # Callbacks for UI progress updates
         self._on_progress = None
         self._on_status = None
 
-        # Vector store (lazy init — may fail if Ollama isn't running)
+        # Service lazy-load markers
         self._vector_store: Optional[VectorStore] = None
-
-        # Graph store (lazy init — may fail if Neo4j isn't running)
         self._graph_store = None
+        self._metrics = None
+        self._triage = None
+        self._normalizer = None
+        self._translator = None
+        self._corroborator = None
 
     @property
     def _thread_local(self) -> threading.local:
-        """Lazy-init thread local storage (handles cases where __init__ is mocked)."""
+        """Access thread-local storage."""
         if not hasattr(self, "_tl"):
             self._tl = threading.local()
         return self._tl
 
     @property
     def db_path(self) -> str:
-        """Lazy-init DB path from settings if missing."""
-        if not hasattr(self, "_db_path"):
+        """Get the SQLite database path."""
+        if not hasattr(self, "_db_path") or self._db_path is None:
             self._db_path = get_settings()["sqlite"]["path"]
         return self._db_path
 
     @property
     def db(self) -> SQLiteStore:
         """Get or create a thread-local SQLiteStore instance."""
-        if not hasattr(self._thread_local, "db"):
+        if not hasattr(self._thread_local, "db") or self._thread_local.db is None:
             self._thread_local.db = SQLiteStore(self.db_path)
         return self._thread_local.db
 
     @db.setter
     def db(self, value: SQLiteStore):
-        """Allow setting a specific DB instance (useful for testing)."""
         self._thread_local.db = value
 
     @property
     def checkpoint(self) -> CheckpointManager:
         """Get or create a thread-local CheckpointManager instance."""
-        if not hasattr(self._thread_local, "checkpoint"):
+        if not hasattr(self._thread_local, "checkpoint") or self._thread_local.checkpoint is None:
             self._thread_local.checkpoint = CheckpointManager(self.db)
         return self._thread_local.checkpoint
 
     @checkpoint.setter
     def checkpoint(self, value: CheckpointManager):
-        """Allow setting a specific CheckpointManager instance (useful for testing)."""
         self._thread_local.checkpoint = value
-
-    # Callbacks for UI progress updates
 
     @property
     def metrics(self) -> PerformanceMetricsCollector:
         """Lazy-init metrics collector."""
-        if not hasattr(self, "_metrics"):
+        if self._metrics is None:
             self._metrics = PerformanceMetricsCollector(self.db_path)
         return self._metrics
 
@@ -123,7 +124,7 @@ class PipelineOrchestrator:
     @property
     def triage(self) -> TriageEngine:
         """Lazy-init triage engine."""
-        if not hasattr(self, "_triage"):
+        if self._triage is None:
             self._triage = TriageEngine()
         return self._triage
 
@@ -134,7 +135,7 @@ class PipelineOrchestrator:
     @property
     def normalizer(self) -> TextNormalizer:
         """Lazy-init text normalizer."""
-        if not hasattr(self, "_normalizer"):
+        if self._normalizer is None:
             self._normalizer = TextNormalizer()
         return self._normalizer
 
@@ -145,21 +146,30 @@ class PipelineOrchestrator:
     @property
     def translator(self) -> TranslationEngine:
         """Lazy-init translation engine."""
-        if not hasattr(self, "_translator"):
+        if self._translator is None:
             self._translator = TranslationEngine()
         return self._translator
 
     @translator.setter
     def translator(self, value: TranslationEngine):
         self._translator = value
+
+    @property
+    def vector_store(self) -> VectorStore:
+        """Lazy-init the vector store."""
         if self._vector_store is None:
+            from src.storage.vector_store import VectorStore
             self._vector_store = VectorStore()
         return self._vector_store
+
+    @vector_store.setter
+    def vector_store(self, value: VectorStore):
+        self._vector_store = value
 
     @property
     def corroborator(self):
         """Lazy-init claim corroborator."""
-        if not hasattr(self, "_corroborator"):
+        if self._corroborator is None:
             from src.intelligence.claim_corroborator import ClaimCorroborator
             self._corroborator = ClaimCorroborator(self.db, self.vector_store)
         return self._corroborator

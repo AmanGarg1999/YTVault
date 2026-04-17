@@ -201,7 +201,15 @@ def render_guest_network(db: SQLiteStore):
             
         edges.append(Edge(source=r["guest_a"], target=r["guest_b"], label=r["topic"], color="#475569"))
 
-    config = Config(width=800, height=500, directed=False, physics=True)
+    config = Config(
+        width='100%', 
+        height=600, 
+        directed=False, 
+        physics=True, 
+        hierarchical=False,
+        node_label_position="bottom",
+        collapsible=True
+    )
     if nodes:
         selected_guest = agraph(nodes=nodes, edges=edges, config=config)
         if selected_guest:
@@ -289,8 +297,18 @@ def render_thematic_bridges(db: SQLiteStore, run_repair_background=None):
     for bridge in bridges:
         with glass_card(border_accent="#6366f1"):
             cols = st.columns([1, 1, 3])
-            cols[0].markdown(f"**{bridge.topic_a}**")
-            cols[1].markdown(f"**{bridge.topic_b}**")
+            
+            # P1: Unpack JSON Topic Objects
+            def unpack_topic(topic_raw):
+                try:
+                    import json
+                    data = json.loads(topic_raw)
+                    return data.get("name", topic_raw)
+                except:
+                    return topic_raw
+
+            cols[0].markdown(f"**{unpack_topic(bridge.topic_a)}**")
+            cols[1].markdown(f"**{unpack_topic(bridge.topic_b)}**")
             with cols[2]:
                 st.markdown(f"_{bridge.insight}_")
             st.caption(f"Synthesized via {bridge.llm_model} | {bridge.created_at}")

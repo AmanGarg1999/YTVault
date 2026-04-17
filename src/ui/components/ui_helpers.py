@@ -82,7 +82,7 @@ def metric_card(
     glow_style = "box-shadow: 0 0 20px rgba(99, 102, 241, 0.15); border-color: rgba(99, 102, 241, 0.3);" if glow else ""
     
     st.markdown(f"""
-<div class="metric-card" style="{glow_style}">
+<div class="metric-card" style="{glow_style}" tabindex="0">
 <div class="label">{label}</div>
 <div class="value">{value}</div>
 {delta_html}
@@ -99,17 +99,17 @@ def radial_health_chart(percentage: int, label: str, description: str = "") -> N
     color = "#10b981" if percentage > 80 else ("#f59e0b" if percentage > 50 else "#ef4444")
     
     st.markdown(f"""
-<div class="metric-card" style="display: flex; align-items: center; gap: 2rem; aria-label='{label}: {percentage}% healthy'">
-<div style="position: relative; width: 85px; height: 85px; flex-shrink: 0;">
+<div class="metric-card" style="display: flex; align-items: center; gap: 1.5rem; padding: 1.25rem;" aria-label="{label}: {percentage}% healthy" tabindex="0">
+<div style="position: relative; width: 75px; height: 75px; flex-shrink: 0;">
 <svg viewBox="0 0 40 40" style="width: 100%; height: 100%; transform: rotate(-90deg);" role="img" aria-label="{percentage}% Progress Indicator">
 <path d="M20 4.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="3.5" />
 <path d="M20 4.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="{color}" stroke-width="3.5" stroke-dasharray="{percentage}, 100" stroke-linecap="round" />
 </svg>
-<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.15rem; color: var(--text-stellar);">{percentage}%</div>
+<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1rem; color: var(--text-stellar);">{percentage}%</div>
 </div>
-<div style="flex-grow: 1;">
-<div class="label" style="margin-bottom: 0.35rem; font-size: 0.8rem; letter-spacing: 0.12em;">{label}</div>
-<div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5;">{description}</div>
+<div style="flex-grow: 1; min-width: 0;">
+<div class="label" style="margin-bottom: 0.25rem; font-size: 0.75rem; letter-spacing: 0.1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{label}</div>
+<div style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">{description}</div>
 </div>
 </div>
 """, unsafe_allow_html=True)
@@ -177,7 +177,7 @@ def glass_card(title: Optional[str] = None, border_accent: Optional[str] = None)
     """
     accent_style = f"border-left: 4px solid {border_accent};" if border_accent else ""
     st.markdown(f"""
-<div style="background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 16px; padding: 1.5rem; margin: 1rem 0; {accent_style}">
+<div class="glass-card" style="background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 16px; padding: 1.5rem; margin: 1rem 0; {accent_style}" tabindex="0">
 """, unsafe_allow_html=True)
     if title:
         st.markdown(f"<strong style='color: var(--text-stellar); display: block; margin-bottom: 1rem; font-size: 1.1rem;'>{title}</strong>", unsafe_allow_html=True)
@@ -349,6 +349,10 @@ def video_card(
         confidence = getattr(video, 'triage_confidence', 0)
         views = getattr(video, 'view_count', 0)
 
+        confidence_val = min(1.0, confidence)
+        confidence_text = f"{confidence_val:.0%} CONFIDENCE" if confidence_val > 0 else "UNSCORED"
+        confidence_color = "#818cf8" if confidence_val > 0 else "#64748b"
+
         st.markdown(f"""
 <div style="background: rgba(15, 23, 42, 0.3); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; padding: 1.75rem; margin-bottom: 1.25rem; box-shadow: 0 4px 20px rgba(0,0,0,0.1);"><div style="display: flex; gap: 1.75rem; align-items: flex-start;">
 {f'<div style="width: 180px; flex-shrink: 0;"><img src="https://img.youtube.com/vi/{video.video_id}/mqdefault.jpg" style="width: 100%; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);"></div>' if show_thumbnail else ''}
@@ -359,7 +363,7 @@ def video_card(
 <span style="color: rgba(255,255,255,0.1);">|</span>
 <span>{dur_min}:{dur_sec:02d}</span>
 <span style="color: rgba(255,255,255,0.1);">|</span>
-<span style="color: #818cf8;">{min(1.0, confidence):.0%} CONFIDENCE</span>
+<span style="color: {confidence_color};">{confidence_text}</span>
 </div></div></div></div>
 """, unsafe_allow_html=True)
         
@@ -505,11 +509,11 @@ def failure_confirmation_dialog(title: str, error_message: str, retry_callback: 
             if retry_callback: retry_callback()
             st.rerun()
     with col2:
-        if st.button("Add to Queue", use_container_width=True, key="fail_queue_btn"):
+        if st.button("Add to Queue", type="secondary", use_container_width=True, key="fail_queue_btn"):
             if queue_callback: queue_callback()
             st.rerun()
     with col3:
-        if st.button("Dismiss", use_container_width=True, key="fail_dismiss_btn"):
+        if st.button("Dismiss", type="secondary", use_container_width=True, key="fail_dismiss_btn"):
             st.rerun()
 
 

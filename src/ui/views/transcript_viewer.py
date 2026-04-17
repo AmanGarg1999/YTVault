@@ -64,7 +64,7 @@ def render_single_transcript(db: SQLiteStore):
         
         filtered_vids = all_videos
         if search_query:
-            filtered_vids = [v for v in all_videos if search_query.lower() in v.title.lower() or search_query.lower() in v.channel_id.lower()]
+            filtered_vids = [v for v in all_videos if search_query.lower() in v.title.lower() or (hasattr(v, 'channel_name') and v.channel_name and search_query.lower() in v.channel_name.lower())]
         
         # Display results as a grid of selection cards
         if filtered_vids:
@@ -73,7 +73,7 @@ def render_single_transcript(db: SQLiteStore):
             for i, video in enumerate(filtered_vids[:12]):
                 with cols[i % 3]:
                     with st.container(border=True):
-                        st.caption(video.channel_id[:20])
+                        st.caption(getattr(video, 'channel_name', 'Unknown Source')[:25])
                         st.markdown(f"**{video.title[:60]}...**")
                         if st.button("VIEW TRANSCRIPT", key=f"sel_vid_{video.video_id}", use_container_width=True, type="primary"):
                             st.session_state.selected_transcript_vid = video.video_id

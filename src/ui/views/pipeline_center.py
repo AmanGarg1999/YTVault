@@ -14,6 +14,7 @@ from src.ui.components import (
     info_card,
     spacer,
     action_confirmation_dialog,
+    failure_confirmation_dialog,
 )
 
 logger = logging.getLogger(__name__)

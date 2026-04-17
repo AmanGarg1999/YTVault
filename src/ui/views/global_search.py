@@ -50,6 +50,7 @@ def render_global_search(db: SQLiteStore, vs: VectorStore):
         # Check for empty query after strip
         if not query.strip():
             st.toast("Search Error: Please enter a valid search term.", icon="⚠️")
+            info_card("Search Input Required", "The intelligence engine requires a specific term or phrase to perform a semantic analysis. Please refine your query.")
             return
             
         # Prepare filters

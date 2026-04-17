@@ -118,6 +118,17 @@ def render_knowledge_clusters(db):
 
 def render_guest_network(db: SQLiteStore):
     section_header("Expert Network", icon="✦")
+    
+    # Maintenance Toolbar
+    m1, m2 = st.columns([3, 1])
+    with m2:
+        if st.button("Resolve Entities", use_container_width=True, help="Deduplicate guests and purge noise."):
+            from src.intelligence.entity_resolver import EntityResolver
+            resolver = EntityResolver(db)
+            stats = resolver.sanitize_expert_network()
+            st.toast(f"Network Hardened: Purged {stats['purged']}, Merged {stats['merged']}", icon="🛡")
+            st.rerun()
+
     network_data = db.get_guest_network()
     if not network_data:
         info_card("No experts", "Synthesize more content.")
@@ -127,20 +138,30 @@ def render_guest_network(db: SQLiteStore):
     for r in network_data[:30]:
         for g in [r['guest_a'], r['guest_b']]:
             if g not in seen:
-                # Smaller nodes and consistent sizing for better density
-                nodes.append(Node(id=g, label=g, size=12, color="#22d3ee", font={'size': 14, 'color': 'white'}))
+                # Optimized node styling for legibility
+                nodes.append(Node(
+                    id=g, 
+                    label=g, 
+                    size=20, 
+                    color="#22d3ee", 
+                    font={'size': 24, 'color': 'white', 'face': 'Inter, sans-serif'}
+                ))
                 seen.add(g)
         edges.append(Edge(source=r['guest_a'], target=r['guest_b'], color="rgba(71, 85, 105, 0.4)"))
     
-    # Physics stabilization for better density
+    # Use validated config from explorer.py with improved scaling for readability
     config = Config(
-        width='100%', 
-        height=600, 
-        physics=True, 
+        width=1000,
+        height=700,
         directed=False,
+        physics=True,
+        hierarchical=False,
         collapsible=True,
         nodeHighlightBehavior=True,
-        staticGraph=False
+        highlightColor="#22d3ee",
+        staticGraph=False,
+        # Enhance label visibility
+        scaling={'enabled': True, 'label': {'enabled': True, 'min': 14, 'max': 30}}
     )
     st.markdown("<div style='background: rgba(15, 23, 42, 0.2); border-radius: 16px; padding: 1rem;'>", unsafe_allow_html=True)
     agraph(nodes=nodes, edges=edges, config=config)

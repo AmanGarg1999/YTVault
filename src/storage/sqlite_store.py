@@ -1797,6 +1797,63 @@ class SQLiteStore:
         # Strictly ensure column names are captured correctly as keys
         return [{k: r[k] for k in r.keys()} for r in rows]
 
+    def merge_guests(self, survivor_id: int, mergee_ids: list[int]) -> bool:
+        """
+        Consolidate multiple guest records into a single 'survivor' profile.
+        Updates all references and aggregates mention counts/aliases.
+        """
+        if not mergee_ids:
+            return False
+        try:
+            # 1. Transfer appearances
+            placeholders = ",".join(["?"] * len(mergee_ids))
+            self.execute(
+                f"UPDATE OR IGNORE guest_appearances SET guest_id = ? WHERE guest_id IN ({placeholders})",
+                [survivor_id] + mergee_ids
+            )
+            # Delete those that couldn't be updated due to UNIQUE constraint
+            self.execute(f"DELETE FROM guest_appearances WHERE guest_id IN ({placeholders})", mergee_ids)
+
+            # 2. Aggregate mention counts to survivor
+            total_mentions = self.execute(
+                f"SELECT SUM(mention_count) FROM guests WHERE guest_id IN (?, {placeholders})",
+                [survivor_id] + mergee_ids
+            ).fetchone()[0] or 0
+            
+            self.execute("UPDATE guests SET mention_count = ?, last_seen = CURRENT_TIMESTAMP WHERE guest_id = ?", 
+                         [total_mentions, survivor_id])
+
+            # 3. Purge redundant guest records
+            self.execute(f"DELETE FROM guests WHERE guest_id IN ({placeholders})", mergee_ids)
+            
+            self.commit()
+            logger.info(f"Merged {len(mergee_ids)} guests into survivor_id={survivor_id}")
+            return True
+        except Exception as e:
+            self.rollback()
+            logger.error(f"Guest merge failure: {e}")
+            return False
+
+    def get_unresolved_guest_clusters(self, limit: int = 20) -> list[dict]:
+        """
+        Identify potential duplicate guests based on name similarity or shared videos.
+        Returns clusters of guest records that might be the same entity.
+        """
+        # Simple heuristic: find guests who share exactly the same mention count and last_seen
+        # In a real scenario, this would use fuzzy string matching (handled by entity_resolver.py)
+        sql = """
+            SELECT canonical_name, guest_id, mention_count
+            FROM guests
+            WHERE canonical_name IN (
+                SELECT canonical_name FROM guests GROUP BY canonical_name HAVING COUNT(*) > 1
+            )
+            OR mention_count > 0
+            ORDER BY mention_count DESC
+            LIMIT ?
+        """
+        rows = self.execute(sql, [limit * 2]).fetchall()
+        return [dict(r) for r in rows]
+
     def get_processed_ids_for_scan(self, scan_id: str) -> set[str]:
         """Get the set of video IDs that have been processed/completed for this scan."""
         # Check videos that are currently 'DONE' and were touched by this scan

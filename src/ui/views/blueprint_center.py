@@ -173,11 +173,21 @@ def render_step(db, video_id, idx, step_data, progress_state):
             new_val = st.checkbox("", value=is_checked, key=f"check_{video_id}_{idx}", label_visibility="collapsed")
             if new_val != is_checked:
                 progress_state[step_key] = new_val
-                # Defensive check for DB method existence (handles stale instance issues)
-                if hasattr(db, "update_blueprint_progress"):
-                    db.update_blueprint_progress(video_id, progress_state)
-                else:
-                    st.error("Storage Error: Blueprint update method missing. Please refresh.")
+                # Force module reload to bypass deep caching issues
+                try:
+                    import importlib
+                    import src.storage.sqlite_store as storage_mod
+                    importlib.reload(storage_mod)
+                    from src.storage.sqlite_store import SQLiteStore as LocalDB
+                    
+                    if hasattr(db, "update_blueprint_progress"):
+                        db.update_blueprint_progress(video_id, progress_state)
+                    elif hasattr(LocalDB, "update_blueprint_progress"):
+                         LocalDB.update_blueprint_progress(db, video_id, progress_state)
+                    else:
+                        st.error(f"Storage Error: Method '{'update_blueprint_progress'}' still missing after reload. Please restart container.")
+                except Exception as e:
+                    st.error(f"Internal Reload Error: {e}")
                 st.rerun()
 
         with c2:

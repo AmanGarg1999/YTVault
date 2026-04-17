@@ -640,12 +640,15 @@ def check_service_health():
     health_status = {
         "database": False,
         "ollama": False,
+        "vector_store": False,
+        "graph_engine": False,
         "errors": []
     }
     
+    settings = get_settings()
+
     # Check Database
     try:
-        settings = get_settings()
         import sqlite3
         conn = sqlite3.connect(settings["sqlite"]["path"], timeout=5)
         conn.execute("SELECT 1")
@@ -657,13 +660,33 @@ def check_service_health():
     # Check Ollama Service
     try:
         import requests
-        settings = get_settings()
         ollama_host = settings["ollama"]["host"]
         resp = requests.get(f"{ollama_host}/api/tags", timeout=3)
         if resp.status_code == 200:
             health_status["ollama"] = True
     except Exception as e:
         health_status["errors"].append(f"Ollama: Service unavailable")
+
+    # Check Vector Store (ChromaDB)
+    try:
+        from src.storage.vector_store import VectorStore
+        vs = VectorStore()
+        if vs.is_ready():
+            health_status["vector_store"] = True
+    except Exception as e:
+        health_status["errors"].append(f"Vector Store: {str(e)[:50]}")
+
+    # Check Graph Engine (Neo4j)
+    try:
+        from neo4j import GraphDatabase
+        cfg = settings["neo4j"]
+        driver = GraphDatabase.driver(cfg["uri"], auth=(cfg["user"], cfg["password"]))
+        with driver.session() as session:
+            session.run("MATCH (n) RETURN count(n) LIMIT 1")
+        driver.close()
+        health_status["graph_engine"] = True
+    except Exception as e:
+        health_status["errors"].append(f"Graph Engine: {str(e)[:50]}")
 
     return health_status
 

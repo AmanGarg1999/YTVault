@@ -164,9 +164,10 @@ def _render_pending_review_tab(db):
                     )
                     dur_min = video.duration_seconds // 60
                     dur_sec = video.duration_seconds % 60
+                    conf_text = f"{video.triage_confidence:.0%}" if (video.triage_confidence or 0) > 0 else "Pending Analysis"
                     st.caption(
                         f"Duration: {dur_min}m {dur_sec}s │ "
-                        f"Confidence: {video.triage_confidence:.0%}"
+                        f"Confidence: {conf_text}"
                     )
                     if video.triage_reason:
                         st.caption(f"Reason: {video.triage_reason}")

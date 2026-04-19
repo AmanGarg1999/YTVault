@@ -125,8 +125,11 @@ def render_guest_network(db: SQLiteStore):
         if st.button("Resolve Entities", use_container_width=True, help="Deduplicate guests and purge noise."):
             from src.intelligence.entity_resolver import EntityResolver
             resolver = EntityResolver(db)
-            stats = resolver.sanitize_expert_network()
-            st.toast(f"Network Hardened: Purged {stats['purged']}, Merged {stats['merged']}", icon="🛡")
+            if hasattr(resolver, "sanitize_expert_network"):
+                stats = resolver.sanitize_expert_network()
+                st.toast(f"Network Hardened: Purged {stats['purged']}, Merged {stats['merged']}", icon="🛡")
+            else:
+                st.error("Intelligence Error: Sanitization engine out of sync. Please refresh.")
             st.rerun()
 
     network_data = db.get_guest_network()

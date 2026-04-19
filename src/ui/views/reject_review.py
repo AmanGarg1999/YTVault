@@ -89,7 +89,7 @@ def render_pending_section(db):
                     selected_vids.clear()
                     st.rerun()
             with b_col3:
-                if st.button("Reset Selection", kind="secondary", use_container_width=True):
+                if st.button("Reset Selection", type="secondary", use_container_width=True):
                     selected_vids.clear()
                     st.rerun()
             spacer("1rem")
@@ -119,8 +119,11 @@ def render_pending_section(db):
                     if st.button("Reject", key=f"rej_rev_{i}_{video.video_id}", use_container_width=True):
                         db.update_triage_status(video.video_id, "REJECTED", "manual_reject", 1.0)
                         st.toast(f"Target Suppressed: {video.title[:30]}...", icon="✖")
-                        st.rerun()
+                        st.session_state.needs_rerun = True
                     st.markdown('</div>', unsafe_allow_html=True)
+                    if st.session_state.get("needs_rerun"):
+                        st.session_state.needs_rerun = False
+                        st.rerun()
 
 
 def render_rejected_section(db):

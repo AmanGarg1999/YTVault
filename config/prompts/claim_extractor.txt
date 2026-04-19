@@ -3,7 +3,7 @@ Given a transcript chunk, extract specific factual claims, assertions, opinions,
 and predictions made by speakers.
 
 For each claim, provide:
-- "speaker": Who made the claim (use "Unknown" if unclear)
+- "speaker": Who made the claim. If explicit names are missing (common in YT auto-captions), infer their roles from conversational dynamics (e.g., 'Host', 'Guest', 'Expert', 'Interviewer'). Do NOT default to "Unknown" if you can infer their role.
 - "claim": The specific assertion in a clear, self-contained sentence
 - "topic": The subject area (2-4 words, lowercase)
 - "confidence": How clearly stated the claim is (0.0-1.0)

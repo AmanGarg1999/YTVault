@@ -68,7 +68,7 @@ def fetch_transcript(video_id: str, retry_count: int = 0) -> TranscriptResult:
         transcript_list = None
         for attempt in range(MAX_RETRIES):
             try:
-                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+                transcript_list = YouTubeTranscriptApi().list(video_id)
                 break
             except (TranscriptsDisabled, VideoUnavailable):
                 raise  # Don't retry on these errors
@@ -171,7 +171,11 @@ def _try_fetch(
         if not segments:
             return None
 
-        full_text = " ".join(seg.text for seg in segments)
+        def format_ts(seconds):
+            mins, secs = divmod(int(seconds), 60)
+            return f"[{mins:02d}:{secs:02d}]"
+
+        full_text = " ".join(f"{format_ts(seg.start)} {seg.text}" for seg in segments)
         strategy_type = "manual" if manual else "auto"
         logger.info(
             f"Fetched {strategy_type}_{language} transcript for {video_id}: "
@@ -216,7 +220,11 @@ def _try_fetch_any(
             )
             for seg in raw_segments
         ]
-        full_text = " ".join(seg.text for seg in segments)
+        def format_ts(seconds):
+            mins, secs = divmod(int(seconds), 60)
+            return f"[{mins:02d}:{secs:02d}]"
+
+        full_text = " ".join(f"{format_ts(seg.start)} {seg.text}" for seg in segments)
         strategy_type = "manual" if manual else "auto"
         logger.info(
             f"Fetched {strategy_type}_{language_iso} transcript for {video_id}: "

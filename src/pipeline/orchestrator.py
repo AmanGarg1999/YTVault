@@ -255,14 +255,17 @@ class PipelineOrchestrator:
 
             discovery_queue = queue.Queue()
             
+            discovery_failed_event = threading.Event()
+            
             def discovery_worker():
                 try:
                     self._stage_discover_stream(url, parsed, scan_id, discovery_queue, force_metadata_refresh)
                 except Exception as e:
                     logger.error(f"Discovery thread failed: {e}")
+                    discovery_failed_event.set()
                     self.db.log_pipeline_event(
                         level="ERROR",
-                        message=f"Discovery failed: {str(e)}",
+                        message=f"Discovery critical failure: {str(e)}",
                         scan_id=scan_id,
                         stage="DISCOVERY",
                         error_detail=str(e)
@@ -370,7 +373,18 @@ class PipelineOrchestrator:
                             last_video_id=vid,
                         )
 
-            self.checkpoint.complete_scan(scan_id)
+            if discovery_failed_event.is_set():
+                logger.error(f"Scan {scan_id} aborted: discovery worker crashed.")
+                self.checkpoint.fail_scan(scan_id)
+                self.db.log_pipeline_event(
+                    level="ERROR",
+                    message="Scan failed due to discovery crash.",
+                    scan_id=scan_id,
+                    stage="DISCOVERY"
+                )
+            else:
+                self.checkpoint.complete_scan(scan_id)
+            
             self.db.release_all_locks(scan_id)
             self.db.set_control_state(scan_id, "RUNNING")
 

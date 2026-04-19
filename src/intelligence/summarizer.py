@@ -33,6 +33,8 @@ class SummarizerEngine:
         self.deep_model = self.ollama_cfg.get("deep_model", self.ollama_cfg["triage_model"])
         self.map_prompt = load_prompt("map_reduce_summarizer")
         self.reduce_prompt = load_prompt("summarizer")
+        self.blueprint_prompt = load_prompt("blueprint_extractor")
+        self.reference_prompt = load_prompt("reference_extractor")
 
     def get_or_generate_summary(self, video_id: str, force: bool = False) -> Optional[VideoSummary]:
         """Get cached summary or generate a new one if missing or forced."""
@@ -162,7 +164,7 @@ class SummarizerEngine:
         """Map phase: summarize a group of chunks into bullet points."""
         group_text = " ".join(c.cleaned_text or c.raw_text for c in group)
         # Truncate to fit context window
-        group_text = group_text[:8000]
+        group_text = group_text[:12000]
 
         response = ollama.chat(
             model=self.deep_model,
@@ -177,13 +179,15 @@ class SummarizerEngine:
     def _reduce_synthesize(self, combined_bullets: str) -> Optional[dict]:
         """Reduce phase: synthesize all bullet summaries into structured JSON."""
         # Truncate if too long for context window
-        if len(combined_bullets) > 15000:
-            combined_bullets = combined_bullets[:15000] + "\n[... truncated ...]"
+        if len(combined_bullets) > 25000:
+            combined_bullets = combined_bullets[:25000] + "\n[... truncated ...]"
 
         from src.utils.llm_pool import LLMPool, LLMTask, LLMPriority
         pool = LLMPool()
-        task = LLMTask(
-            task_id=f"reduce_{int(time.time())}",
+        t_id = int(time.time())
+        
+        task_sum = LLMTask(
+            task_id=f"reduce_{t_id}",
             fn=ollama.chat,
             kwargs={
                 "model": self.deep_model,
@@ -191,26 +195,93 @@ class SummarizerEngine:
                     {"role": "system", "content": self.reduce_prompt},
                     {"role": "user", "content": combined_bullets},
                 ],
-                "options": {"num_predict": 1500, "temperature": 0.1},
+                "options": {"num_predict": 1000, "temperature": 0.1},
             },
             priority=LLMPriority.LOW
         )
+        task_blue = LLMTask(
+            task_id=f"blueprint_{t_id}",
+            fn=ollama.chat,
+            kwargs={
+                "model": self.deep_model,
+                "messages": [
+                    {"role": "system", "content": self.blueprint_prompt},
+                    {"role": "user", "content": combined_bullets},
+                ],
+                "options": {"num_predict": 1000, "temperature": 0.1},
+            },
+            priority=LLMPriority.LOW
+        )
+        task_ref = LLMTask(
+            task_id=f"reference_{t_id}",
+            fn=ollama.chat,
+            kwargs={
+                "model": self.deep_model,
+                "messages": [
+                    {"role": "system", "content": self.reference_prompt},
+                    {"role": "user", "content": combined_bullets},
+                ],
+                "options": {"num_predict": 500, "temperature": 0.1},
+            },
+            priority=LLMPriority.LOW
+        )
+
         try:
-            future = pool.submit(task)
-            response = future.result()
-            return self._parse_json_response(response["message"]["content"].strip())
+            results = pool.submit_batch([task_sum, task_blue, task_ref])
+            
+            # Map back to specific tasks
+            res_dict = {r.task_id: r.result for r in filter(lambda x: x.success, results)}
+            
+            raw_sum = res_dict.get(f"reduce_{t_id}", {}).get("message", {}).get("content", "")
+            raw_blue = res_dict.get(f"blueprint_{t_id}", {}).get("message", {}).get("content", "")
+            raw_ref = res_dict.get(f"reference_{t_id}", {}).get("message", {}).get("content", "")
+            
+            data = self._parse_json_response(raw_sum)
+            if not isinstance(data, dict):
+                data = {}
+                
+            blue_data = self._parse_json_response(raw_blue)
+            data["actionable_blueprint"] = blue_data if isinstance(blue_data, list) else []
+            
+            ref_data = self._parse_json_response(raw_ref)
+            data["references"] = ref_data if isinstance(ref_data, list) else []
+            
+            return data
         except Exception as e:
-            logger.error(f"Reduce phase failed via pool: {e}")
+            logger.error(f"Reduce phase (fan-out) failed via pool: {e}")
             return None
 
-    def _parse_json_response(self, content: str) -> Optional[dict]:
-        """Extract and parse JSON from LLM response."""
+    def _parse_json_response(self, content: str):
+        """Extract and parse JSON from LLM response using strict bounding."""
+        if not content:
+            return None
         try:
+            # Clean generic markdown fences first
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0].strip()
             elif "```" in content:
                 content = content.split("```")[1].split("```")[0].strip()
+            
+            content = content.strip()
+            
+            # Find the boundaries of the JSON object or array
+            start_idx = -1
+            end_idx = -1
+            
+            dict_start = content.find("{")
+            array_start = content.find("[")
+            
+            if dict_start != -1 and (array_start == -1 or dict_start < array_start):
+                start_idx = dict_start
+                end_idx = content.rfind("}")
+            elif array_start != -1:
+                start_idx = array_start
+                end_idx = content.rfind("]")
+                
+            if start_idx != -1 and end_idx != -1 and end_idx >= start_idx:
+                content = content[start_idx:end_idx+1]
+                
             return json.loads(content)
-        except (json.JSONDecodeError, IndexError) as e:
+        except (json.JSONDecodeError, IndexError, ValueError) as e:
             logger.debug(f"JSON parsing failed: {e}. Raw content: {content[:100]}...")
             return None

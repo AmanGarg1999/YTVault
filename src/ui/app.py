@@ -68,7 +68,8 @@ def inject_custom_css():
         --error-glow: {"#ef4444" if theme == "dark" else "#dc2626"};
         
         --text-stellar: {"#f8fafc" if theme == "dark" else "#0f172a"};
-        --text-muted: {"#94a3b8" if theme == "dark" else "#475569"};
+        --text-muted: {"#64748b" if theme == "dark" else "#475569"};
+        --text-contrast: {"#ffffff" if theme == "dark" else "#f8fafc"};
     }}
     """
     
@@ -209,6 +210,7 @@ def inject_custom_css():
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        line-height: 1.2;
     }
     
     .metric-card .label, .glass-card .label {
@@ -247,12 +249,13 @@ def inject_custom_css():
     }
     
     /* Buttons */
-    .stButton > button {
+    .stButton > button, .stButton > button div p, .stButton > button p {
         border-radius: 14px;
         background: linear-gradient(135deg, var(--primary-glow) 0%, var(--primary-active) 100%);
         border: 1px solid rgba(255, 255, 255, 0.1);
-        color: white;
-        font-weight: 700;
+        color: #ffffff !important;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        font-weight: 700 !important;
         font-size: 1rem;
         padding: 0.75rem 1.75rem;
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -409,11 +412,26 @@ def inject_custom_css():
     }
 
     /* Sidebar Navigation Button Contrast Fix */
-    div[data-testid="stSidebar"] button[kind="primary"] {
+    div[data-testid="stSidebar"] button, 
+    div[data-testid="stSidebar"] button div p,
+    div[data-testid="stSidebar"] button p {
+        color: #ffffff !important;
+        font-weight: 600 !important;
+    }
+
+    div[data-testid="stSidebar"] button[kind="primary"],
+    div[data-testid="stSidebar"] button[kind="primary"] div p {
         background-color: var(--primary-glow) !important;
-        color: white !important;
+        color: #ffffff !important;
         font-weight: 700 !important;
         border: 1px solid rgba(255, 255, 254, 0.2) !important;
+    }
+
+    div[data-testid="stSidebar"] button[kind="secondary"],
+    div[data-testid="stSidebar"] button[kind="secondary"] div p {
+        background-color: var(--glass-bg) !important;
+        color: rgba(255, 255, 255, 0.8) !important;
+        border: 1px solid var(--glass-border) !important;
     }
     
     /* Chat Message Legibility Fix for Light Theme */
@@ -439,6 +457,7 @@ def inject_custom_css():
         background-color: var(--glass-active) !important;
         border-color: var(--primary-glow) !important;
         color: var(--primary-glow) !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
     }
 
     /* =====================================================================

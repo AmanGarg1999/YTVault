@@ -27,7 +27,7 @@ def page_header(
 <div style="margin-bottom: 2.5rem; position: relative;">
 <h1 style="color: var(--text-stellar); margin-bottom: 0.25rem; font-family: 'Outfit', sans-serif; letter-spacing: -0.04em; font-weight: 800;">{title}</h1>
 {f'<p style="color: var(--text-muted); font-size: 1rem; max-width: 850px; font-weight: 500;">{subtitle}</p>' if subtitle else ''}
-<div style="position: absolute; bottom: -1rem; left: 0; width: 60px; height: 4px; background: linear-gradient(90deg, var(--primary-glow), transparent); border-radius: 2px;"></div>
+<div style="position: absolute; bottom: -0.5rem; left: 0; width: 40px; height: 3px; background: var(--primary-glow); border-radius: 2px; opacity: 0.6;"></div>
 </div>
 """, unsafe_allow_html=True)
     
@@ -383,11 +383,9 @@ def discovery_chips(suggestions: List[str], key_prefix: str = "chip") -> Optiona
         
     st.markdown("<div style='margin-top: 1rem; margin-bottom: 0.5rem;'><p style='font-size:0.75rem; color:var(--accent-glow); font-weight:700; text-transform:uppercase; letter-spacing:0.1em;'>Refine Intelligence Discovery</p></div>", unsafe_allow_html=True)
     
-    # We use a custom HTML container and streamlit buttons for interaction
-    # to maintain state correctly while keeping the visual "chip" style
-    cols = st.columns(len(suggestions))
+    # Render in a single column for maximum readability of complex research questions
     for i, suggestion in enumerate(suggestions):
-        if cols[i].button(suggestion, key=f"{key_prefix}_{i}", use_container_width=True):
+        if st.button(suggestion, key=f"{key_prefix}_{i}", use_container_width=True):
             return suggestion
     return None
 

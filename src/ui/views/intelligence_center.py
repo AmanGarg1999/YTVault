@@ -111,7 +111,7 @@ def render_overview(db):
         {"value": stats.get("total_channels", 0), "label": "Channels", "glow": True},
         {"value": stats.get("total_videos", 0), "label": "Videos"},
         {"value": stats.get("accepted", 0), "label": "Indexed"},
-        {"percentage": int((stats.get('done', 0) / max(stats.get('accepted', 1), 1) * 100)), "label": "Vault Health"}
+        {"percentage": min(100, int((stats.get('done', 0) / max(stats.get('accepted', 1), 1) * 100))), "label": "Vault Health"}
     ]
     metric_grid(metrics, cols=4)
     

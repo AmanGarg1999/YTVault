@@ -2575,7 +2575,7 @@ class SQLiteStore:
         
         # 3. Checkpoint stages (Granular)
         res = self.conn.execute(
-            "SELECT checkpoint_stage, COUNT(*) as cnt FROM videos GROUP BY checkpoint_stage"
+            "SELECT checkpoint_stage, COUNT(*) as cnt FROM videos WHERE triage_status = 'ACCEPTED' GROUP BY checkpoint_stage"
         ).fetchall()
         stage_map = {row["checkpoint_stage"]: row["cnt"] for row in res}
         stats["stages"] = stage_map

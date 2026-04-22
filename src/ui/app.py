@@ -86,7 +86,7 @@ def inject_custom_css():
     
     .stApp {
         font-family: 'Inter', -apple-system, sans-serif;
-        font-size: 14px;
+        font-size: 15px;
         color: var(--text-stellar);
         background: var(--bg-nebula) !important;
     }
@@ -122,7 +122,7 @@ def inject_custom_css():
         border: 1px solid var(--glass-border);
         border-radius: 20px;
         padding: 1.75rem;
-        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: all 0.3s ease;
         position: relative;
         overflow: hidden;
     }
@@ -130,8 +130,8 @@ def inject_custom_css():
     .metric-card:hover, .glass-card:hover {
         background: var(--glass-active);
         border-color: var(--primary-glow);
-        transform: translateY(-6px);
-        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3), 0 0 15px rgba(99, 102, 241, 0.1);
+        transform: translateY(-2px);
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
     }
 
     @media (max-width: 768px) {
@@ -183,22 +183,7 @@ def inject_custom_css():
         }
     }
     
-    .metric-card::after, .glass-card::after {
-        content: '';
-        position: absolute;
-        top: -50%;
-        left: -50%;
-        width: 200%;
-        height: 200%;
-        background: radial-gradient(circle, rgba(99, 102, 241, 0.05) 0%, transparent 70%);
-        opacity: 0;
-        transition: opacity 0.4s ease;
-        pointer-events: none;
-    }
-    
-    .metric-card:hover::after, .glass-card:hover::after {
-        opacity: 1;
-    }
+
     
     .metric-card .value {
         font-family: 'Outfit', sans-serif;
@@ -262,7 +247,11 @@ def inject_custom_css():
         text-transform: none;
         letter-spacing: 0.02em;
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-        white-space: nowrap;
+        white-space: normal !important;
+        height: auto !important;
+        min-height: 44px;
+        padding: 0.75rem 1.25rem !important;
+        line-height: 1.4 !important;
         min-width: 120px;
     }
     
@@ -466,7 +455,7 @@ def inject_custom_css():
     
     /* Standardize Chat Messages */
     div[data-testid="stChatMessage"] {
-        background: rgba(15, 23, 42, 0.3) !important;
+        background: rgba(15, 23, 42, 0.6) !important;
         border: 1px solid rgba(255, 255, 255, 0.05) !important;
         color: white !important;
         font-weight: 700 !important;
@@ -971,7 +960,7 @@ with st.sidebar:
     selected_page = st.session_state.get("current_page", "Intelligence Center")
     
     for category, items in NAV_STRUCTURE.items():
-        st.markdown(f"<p style='font-size:0.75rem; color:#475569; font-weight:800; margin-top:1.5rem; margin-bottom:0.5rem;'>{category.upper()}</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='font-size:0.75rem; color:#475569; font-weight:800; margin-top:2rem; margin-bottom:0.5rem;'>{category.upper()}</p>", unsafe_allow_html=True)
         for item in items:
             is_active = (item == selected_page)
             if st.sidebar.button(

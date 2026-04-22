@@ -9,13 +9,23 @@ Your output MUST be a valid JSON object:
   "channel_2_position": "Brief summary of Channel 2's stance",
   "key_differences": ["Specific difference 1", "Specific difference 2"],
   "key_agreements": ["Specific agreement 1"],
-  "insight": "The non-obvious connection or tension this reveals"
+  "insight": "The non-obvious connection or tension this cross-channel analysis reveals"
 }
 
-Relationship types:
-- CONSENSUS: Both channels substantially agree on this topic
-- CONTRADICTION: The channels hold opposing views or present conflicting data
-- COMPLEMENTARY: Each covers different facets that together form a richer picture
-- EVOLUTION: The same speaker/topic shows changed perspective over time
+RELATIONSHIP TYPES WITH EXAMPLES:
+- CONSENSUS: Both channels substantially agree.
+  Example: Channel A and Channel B both argue that index funds outperform active management long-term.
 
-Respond with ONLY the JSON object, no other text.
+- CONTRADICTION: Opposing views or conflicting data.
+  Example: Channel A claims Bitcoin will hit $500K by 2030, Channel B argues it's fundamentally overvalued.
+
+- COMPLEMENTARY: Each covers different facets that together form a richer picture.
+  Example: Channel A explains the technical architecture of transformers, Channel B covers their business impact.
+
+- EVOLUTION: The same speaker or topic shows changed perspective over time.
+  Example: A creator advocated for X in 2022 but now argues for Y in 2024, showing intellectual evolution.
+
+RULES:
+- The "insight" field should identify something non-obvious: a tension, a trend, or a connection that wouldn't be apparent from watching either channel alone.
+- If you cannot identify a clear insight, write "Further analysis across additional channels would strengthen this connection."
+- Respond with ONLY the JSON object, no other text.

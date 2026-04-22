@@ -8,17 +8,22 @@ app:
   log_level: "INFO"
 
 # Ollama LLM Configuration
-# fast_model: used for triage, normalization, NER (speed-critical, structured tasks)
-# deep_model: used for summarization, RAG synthesis, claim extraction (quality-critical)
+# Tiered model routing:
+#   fast_model (3b): triage, normalization, topic extraction — speed-critical, structured tasks
+#   deep_model (8b): summarization, RAG synthesis, claims, quotes, entities — quality-critical
 ollama:
   host: "http://localhost:11434"
-  triage_model: "llama3.2:3b"
-  normalizer_model: "llama3.2:3b"
-  deep_model: "llama3.2:3b"
-  rag_model: "llama3.2:3b"
+  triage_model: "llama3.2:3b"          # Fast: triage classification
+  normalizer_model: "llama3.2:3b"      # Fast: transcript cleanup
+  deep_model: "llama3.1:8b"            # Quality: summaries, claims, entities, blueprints
+  rag_model: "llama3.1:8b"             # Quality: RAG synthesis, research reports
   embedding_model: "nomic-embed-text:latest"
-  triage_max_tokens: 100
+  triage_max_tokens: 150               # Increased for content_type field
   normalizer_max_tokens: 2048
+  map_max_tokens: 800                  # Map phase: structured category bullets (was 500)
+  reduce_max_tokens: 2000              # Reduce phase: complex JSON synthesis (was 1000)
+  extraction_max_tokens: 800           # Chunk extractors: entities/claims/quotes (was 500)
+  blueprint_max_tokens: 1200           # Blueprint extraction: structured steps
   rag_max_tokens: 4096
   temperature: 0.1
   timeout_seconds: 30      # API call timeout

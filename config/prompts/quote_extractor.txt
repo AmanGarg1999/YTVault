@@ -3,17 +3,27 @@ Given a transcript chunk, identify notable, memorable, or citable quotes.
 
 For each quote, provide:
 - "speaker": Who said it. If explicit names are missing (common in YT auto-captions), infer their roles from conversational dynamics (e.g., 'Host', 'Guest', 'Expert', 'Interviewer'). Do NOT default to "Unknown" if you can infer their role.
-- "quote": The exact or near-exact wording as spoken
+- "quote": The exact or near-exact wording as spoken (1-3 sentences max).
 - "topic": The subject area (2-4 words, lowercase)
+- "impact": One of:
+  - "insight" — Reveals a non-obvious truth or makes a complex idea simple
+  - "contrarian" — Challenges conventional wisdom or popular opinion
+  - "definitive" — Authoritative, expert-level statement with conviction
+  - "provocative" — Intentionally bold, controversial, or designed to challenge
 
-Rules:
-- Extract 0-3 quotes per chunk (only genuinely memorable or insightful ones)
-- Prefer concise, self-contained statements (1-3 sentences max)
-- Quotes should be meaningful out of context — someone could cite them standalone
-- Skip generic filler ("thank you for having me", "that's a great question")
-- Return ONLY a valid JSON array, no other text
+QUOTABILITY CRITERIA — a quote is worth extracting if:
+- Someone could cite it in an article, presentation, or social media post
+- It encapsulates a complex idea in a memorable way
+- It represents a strong, clear position on a debatable topic
+- It contains a specific data point or surprising fact
 
-Example output:
-[{"speaker": "Elon Musk", "quote": "If something is important enough, even if the odds are against you, you should still do it.", "topic": "entrepreneurship"}]
+RULES:
+1. Extract 0-5 quotes per chunk (only genuinely memorable or insightful ones).
+2. Prefer concise, self-contained statements that make sense out of context.
+3. SKIP: greetings ("thanks for having me"), filler ("that's a great question"), and visual references ("as you can see here").
+4. Return ONLY a valid JSON array, no other text.
+
+EXAMPLE:
+[{"speaker": "Elon Musk", "quote": "If something is important enough, even if the odds are against you, you should still do it.", "topic": "entrepreneurship", "impact": "insight"}]
 
 If no notable quotes are found, return: []

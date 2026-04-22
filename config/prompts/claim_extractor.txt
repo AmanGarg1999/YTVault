@@ -3,19 +3,29 @@ Given a transcript chunk, extract specific factual claims, assertions, opinions,
 and predictions made by speakers.
 
 For each claim, provide:
-- "speaker": Who made the claim. If explicit names are missing (common in YT auto-captions), infer their roles from conversational dynamics (e.g., 'Host', 'Guest', 'Expert', 'Interviewer'). Do NOT default to "Unknown" if you can infer their role.
-- "claim": The specific assertion in a clear, self-contained sentence
+- "speaker": Who made the claim. If explicit names are missing (common in YT auto-captions), infer their roles from conversational dynamics (e.g., 'Host', 'Guest A', 'Guest B', 'Expert', 'Interviewer'). Do NOT default to "Unknown" if you can infer their role.
+- "claim": The specific assertion as a clear, self-contained sentence. A reader should understand the claim without seeing the surrounding transcript.
+- "claim_type": One of:
+  - "FACTUAL" — Verifiable statement of fact (e.g., "GPT-4 was released in March 2023")
+  - "OPINION" — Subjective belief or value judgment (e.g., "I think React is better than Vue")
+  - "PREDICTION" — Forward-looking claim (e.g., "AI will replace 40% of jobs by 2030")
+  - "RECOMMENDATION" — Advice or prescribed action (e.g., "You should learn Rust")
 - "topic": The subject area (2-4 words, lowercase)
-- "confidence": How clearly stated the claim is (0.0-1.0)
+- "confidence": How clearly and assertively the claim was stated (0.0-1.0)
 
-Rules:
-- Extract 0-5 claims per chunk (only meaningful, specific assertions)
-- Paraphrase into clear, standalone sentences — don't copy verbatim filler
-- Distinguish opinions ("believes", "argues") from factual claims ("states", "reports")
-- Skip vague or trivial statements ("it's interesting", "that's a good point")
-- Return ONLY a valid JSON array, no other text
+RULES:
+1. Extract 0-10 claims per chunk (only meaningful, specific assertions).
+2. Paraphrase into clear, standalone sentences — don't copy verbatim filler.
+3. SKIP vague or trivial statements: "it's interesting", "that's a good point", "things are changing".
+4. For PREDICTIONS, capture the timeframe if mentioned.
+5. For RECOMMENDATIONS, capture the target audience if mentioned.
+6. Return ONLY a valid JSON array, no other text.
 
-Example output:
-[{"speaker": "Naval Ravikant", "claim": "Specific knowledge cannot be taught in a classroom", "topic": "wealth creation", "confidence": 0.9}]
+EXAMPLE:
+[
+  {"speaker": "Naval Ravikant", "claim": "Specific knowledge cannot be taught in a classroom", "claim_type": "OPINION", "topic": "wealth creation", "confidence": 0.9},
+  {"speaker": "Host", "claim": "Naval's podcast has been downloaded over 100 million times", "claim_type": "FACTUAL", "topic": "media reach", "confidence": 0.85},
+  {"speaker": "Naval Ravikant", "claim": "In 10 years, most routine coding will be done by AI", "claim_type": "PREDICTION", "topic": "artificial intelligence", "confidence": 0.7}
+]
 
 If no meaningful claims are found, return: []

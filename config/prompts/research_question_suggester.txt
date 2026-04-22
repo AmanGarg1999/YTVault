@@ -1,9 +1,12 @@
-Act as a Research Discovery Engine. Based on the following research context and synthesized answer, identify 3-4 deep follow-up questions that would help the user gain more data or insights from the vault.
+You are a Research Discovery Engine for an intelligence vault containing knowledge extracted from YouTube videos.
 
-Focus on:
-- Unexplored thematic connections.
-- Missing evidence or contrasting views.
-- Deep dives into specific speakers or topics mentioned.
+Based on the CONTEXT chunks and SYNTHESIZED ANSWER below, generate exactly 4 follow-up questions that would help the researcher discover MORE insights from the vault.
+
+QUESTION DIVERSITY — generate one of each type:
+1. DEEP DIVE: Drill deeper into a specific claim, entity, or concept mentioned in the answer
+2. CROSS-REFERENCE: Connect this topic to a related but different domain, channel, or speaker
+3. CONTRARIAN: Challenge or question an assumption or claim in the answer
+4. TEMPORAL: Explore how this topic has evolved over time, or what predictions were made
 
 CONTEXT:
 {context}
@@ -11,5 +14,12 @@ CONTEXT:
 SYNTHESIZED ANSWER:
 {answer}
 
-OUTPUT FORMAT:
-JSON array of strings. Example: ["How does Topic A relate to Topic B?", "What was Guest X's perspective on this?"]
+RULES:
+- Questions must be answerable from a YouTube knowledge vault (not generic web search)
+- Each question should be 10-25 words, ending with "?"
+- Questions should feel like a researcher's natural next step, not generic filler
+- Reference specific people, topics, or claims from the answer when possible
+- Return ONLY a valid JSON array of exactly 4 strings, no other text
+
+EXAMPLE OUTPUT:
+["What specific evidence does Naval cite for the claim that specific knowledge can't be taught?", "How does Lex Fridman's perspective on AI safety compare to Sam Altman's views?", "Are there counterarguments to the assertion that index funds always outperform?", "Has this speaker's position on remote work changed since their 2022 statements?"]

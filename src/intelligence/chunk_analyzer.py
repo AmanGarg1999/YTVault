@@ -38,6 +38,7 @@ class ChunkAnalyzer:
         self.entity_prompt = load_prompt("entity_extractor")
         self.claim_prompt = load_prompt("claim_extractor")
         self.quote_prompt = load_prompt("quote_extractor")
+        self.reference_prompt = load_prompt("reference_extractor")
 
     def analyze_video_chunks(self, video_id: str) -> dict:
         """Run full analysis on all chunks for a video.
@@ -48,7 +49,7 @@ class ChunkAnalyzer:
         chunks = self.db.get_chunks_for_video(video_id)
         if not chunks:
             logger.warning(f"No chunks found for video {video_id}")
-            return {"topics": 0, "entities": 0, "claims": 0, "quotes": 0}
+            return {"topics": 0, "entities": 0, "claims": 0, "quotes": 0, "references": 0}
 
         logger.info(f"Analyzing {len(chunks)} chunks for video {video_id}")
 
@@ -66,7 +67,7 @@ class ChunkAnalyzer:
 
         results = pool.submit_batch(tasks)
 
-        totals = {"topics": 0, "entities": 0, "claims": 0, "quotes": 0}
+        totals = {"topics": 0, "entities": 0, "claims": 0, "quotes": 0, "references": 0}
         for lr in results:
             if lr.success and lr.result:
                 for key in totals:
@@ -75,21 +76,23 @@ class ChunkAnalyzer:
         logger.info(
             f"Chunk analysis complete for {video_id}: "
             f"{totals['topics']} topics, {totals['entities']} entities, "
-            f"{totals['claims']} claims, {totals['quotes']} quotes"
+            f"{totals['claims']} claims, {totals['quotes']} quotes, "
+            f"{totals['references']} references"
         )
         return totals
 
     def _analyze_single_chunk(self, chunk: TranscriptChunk) -> dict:
-        """Analyze a single chunk: extract topics, entities, claims, quotes."""
+        """Analyze a single chunk: extract topics, entities, claims, quotes, and references."""
         text = chunk.cleaned_text or chunk.raw_text
         if not text or len(text.split()) < 20:
-            return {"topics": 0, "entities": 0, "claims": 0, "quotes": 0}
+            return {"topics": 0, "entities": 0, "claims": 0, "quotes": 0, "references": 0}
 
-        # Run all four extractions
+        # Run all five extractions
         topics = self._extract_topics(text)
         entities = self._extract_entities(text)
         claims = self._extract_claims(text, chunk)
         quotes = self._extract_quotes(text, chunk)
+        references = self._extract_references(text)
 
         # Save analysis to chunk record
         self.db.update_chunk_analysis(
@@ -122,11 +125,22 @@ class ChunkAnalyzer:
                 timestamp=chunk.start_timestamp,
             ))
 
+        # Persist references/citations to their dedicated table
+        for r in references:
+            if isinstance(r, dict) and r.get("name"):
+                self.db.insert_citation(
+                    video_id=chunk.video_id,
+                    name=r.get("name", ""),
+                    url="",  # URL reconstructed from spoken text if available
+                    c_type=r.get("type", "OTHER"),
+                )
+
         return {
             "topics": len(topics),
             "entities": len(entities),
             "claims": len(claims),
             "quotes": len(quotes),
+            "references": len(references),
         }
 
     def _extract_topics(self, text: str) -> list[dict]:
@@ -136,9 +150,9 @@ class ChunkAnalyzer:
         )
 
     def _extract_entities(self, text: str) -> list[dict]:
-        """Extract person entities from chunk text."""
+        """Extract named entities from chunk text using the deep model."""
         return self._call_llm_json_list(
-            self.fast_model, self.entity_prompt, text[:2000], "entity"
+            self.deep_model, self.entity_prompt, text[:3000], "entity"
         )
 
     def _extract_claims(self, text: str, chunk: TranscriptChunk) -> list[dict]:
@@ -153,18 +167,25 @@ class ChunkAnalyzer:
             self.deep_model, self.quote_prompt, text[:3000], "quote"
         )
 
+    def _extract_references(self, text: str) -> list[dict]:
+        """Extract external references (books, papers, tools) from chunk text."""
+        return self._call_llm_json_list(
+            self.deep_model, self.reference_prompt, text[:3000], "reference"
+        )
+
     def _call_llm_json_list(
         self, model: str, system_prompt: str, text: str, label: str
     ) -> list[dict]:
         """Call Ollama and parse a JSON array response. Returns [] on failure."""
         try:
+            token_budget = self.ollama_cfg.get("extraction_max_tokens", 800)
             response = ollama.chat(
                 model=model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": text},
                 ],
-                options={"num_predict": 500, "temperature": 0.1},
+                options={"num_predict": token_budget, "temperature": 0.1},
             )
             raw = response["message"]["content"].strip()
             return self._parse_json_array(raw)

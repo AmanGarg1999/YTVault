@@ -8,7 +8,7 @@ from pathlib import Path
 from src.storage.sqlite_store import SQLiteStore, ResearchReport
 from src.storage.vector_store import VectorStore
 from src.intelligence.rag_engine import RAGEngine, Citation
-from src.config import get_settings, DATA_DIR
+from src.config import get_settings, load_prompt, DATA_DIR
 import ollama
 
 logger = logging.getLogger(__name__)
@@ -23,6 +23,9 @@ class ResearchAgent:
         self.rag = RAGEngine(self.db, self.vs)
         self.output_dir = DATA_DIR / "reports"
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        # Load externalized prompts
+        self.synthesis_prompt = load_prompt("research_synthesizer")
+        self.review_prompt = load_prompt("peer_reviewer")
 
     def generate_report(self, query: str) -> Optional[ResearchReport]:
         """
@@ -132,28 +135,7 @@ class ResearchAgent:
 
     def _synthesize_paper(self, query: str, context: str) -> Optional[str]:
         """Synthesize the collected context into a structured white paper."""
-        prompt = f"""
-        Act as a Senior Research Analyst. You are writing a "Deep Intelligence Brief" based on a private knowledge vault.
-        
-        RESEARCH TOPIC: {query}
-        
-        Context from Vault Content (includes sentiment analysis):
-        {context}
-        
-        Requirements for the White Paper:
-        1. Use a formal, professional tone.
-        2. STRUCTURE: 
-           - EXECUTIVE SUMMARY
-           - KEY THEMES & INSIGHTS
-           - CONTRASTING PERSPECTIVES (If any)
-           - ACTIONABLE RECOMMENDATIONS
-           - CONCLUSION
-        3. CITE YOUR SOURCES: Whenever mentioning an insight, use Markdown footnotes [^1], [^2], etc.
-           These must correspond to the sources provided in the context blocks.
-        4. Focus on SYNTHESIS: Connect the dots between qualitative insights and the broader research topic.
-        
-        OUTPUT FORMAT: Markdown.
-        """
+        prompt = self.synthesis_prompt.format(query=query, context=context)
         
         from src.utils.llm_pool import get_llm_semaphore
         try:
@@ -170,27 +152,7 @@ class ResearchAgent:
     def _peer_review(self, query: str, report: str, context: str) -> Optional[str]:
         """Validate report against context to detect hallucinations."""
         logger.info("Starting Peer Review phase...")
-        prompt = f"""
-        Act as a Critical Reviewer. Your task is to verify if the following Research Report accurately reflects the provided Context.
-        
-        RESEARCH TOPIC: {query}
-        
-        REPORT:
-        {report}
-        
-        ---
-        CONTEXT:
-        {context}
-        
-        ---
-        Instructions:
-        1. Identify any claims in the report that are NOT supported by the context.
-        2. Check if citations [^1], [^2], etc. point to the correct sources for the claims made.
-        3. If issues are found, list them concisely as bullet points. 
-        4. If the report is accurate, respond with "VERIFIED".
-        
-        Only respond with bullet points of issues OR the word "VERIFIED".
-        """
+        prompt = self.review_prompt.format(query=query, report=report, context=context)
         
         from src.utils.llm_pool import get_llm_semaphore
         try:

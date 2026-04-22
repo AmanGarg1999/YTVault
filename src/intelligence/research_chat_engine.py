@@ -90,10 +90,14 @@ class ResearchChatEngine:
         
         def call_ollama(p):
             try:
-                # Use a slightly more lenient approach for suggestions
+                # Use system prompt for role definition, user prompt for context
                 resp = ollama.chat(
-                    model=self.settings["ollama"].get("triage_model", self.settings["ollama"].get("deep_model")),
-                    messages=[{"role": "user", "content": p}]
+                    model=self.settings["ollama"].get("deep_model", self.settings["ollama"].get("triage_model")),
+                    messages=[
+                        {"role": "system", "content": self.suggestion_prompt.split("CONTEXT:")[0].strip()},
+                        {"role": "user", "content": p}
+                    ],
+                    options={"num_predict": 500, "temperature": 0.3},
                 )
                 text = resp["message"]["content"]
                 

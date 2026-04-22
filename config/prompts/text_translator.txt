@@ -12,5 +12,10 @@ RULES:
 7. Preserve speaker attribution markers (e.g., "A:", "Speaker:", etc.)
 8. Return ONLY the translated text, nothing else
 
+QUALITY GUARDRAILS:
+- If a sentence contains domain-specific jargon you are uncertain about, keep the original term in parentheses: "translated term (original_term)"
+- If the source language appears to be already {target_lang}, return the text unchanged
+- Preserve paragraph structure and line breaks exactly
+
 TEXT TO TRANSLATE:
 {text}

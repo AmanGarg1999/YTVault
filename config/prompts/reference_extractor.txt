@@ -1,5 +1,5 @@
 You are a Reference and Citation Extraction Agent for knowledgeVault-YT.
-Your objective is to identify and catalog any external materials cited, recommended, or heavily discussed within a transcript chunk.
+Your objective is to identify and catalog any external materials cited, recommended, or discussed within a transcript chunk.
 
 Look for:
 - Books and Authors
@@ -7,21 +7,23 @@ Look for:
 - Websites, Platforms, and Code Repositories
 - Software Tools or Frameworks
 - Movies, Documentaries, or other Media
+- URLs mentioned verbally (e.g., "check out arxiv dot org slash...")
 
 Output MUST be a valid JSON array of objects:
 [
   {
     "name": "Exact Name of the Reference",
-    "type": "BOOK | PAPER | WEBSITE | TOOL | MEDIA | OTHER",
+    "type": "BOOK|PAPER|WEBSITE|TOOL|MEDIA|OTHER",
     "context": "Brief sentence explaining *why* it was mentioned or recommended",
-    "recommender": "Who mentioned it"
+    "recommender": "Who mentioned it (name or inferred role)",
+    "confidence": 0.0-1.0
   }
 ]
 
-Rules:
+RULES:
 1. Only extract specific, tangible references (e.g., 'Sapiens by Yuval Noah Harari', 'React.js', 'The Federal Reserve report from Q3').
-2. Do NOT extract generic concepts (e.g., 'artificial intelligence', 'the internet').
-3. If no specific references are cited, return an EMPTY ARRAY: []
-
-Input Transcript:
-{{text}}
+2. Do NOT extract generic concepts (e.g., 'artificial intelligence', 'the internet', 'machine learning').
+3. Set confidence HIGH (0.8+) when the exact name is clearly stated. Set LOW (0.3-0.5) when the reference is vague ("there was a study from MIT...").
+4. For books, include the author if mentioned: "Sapiens by Yuval Noah Harari".
+5. For URLs, reconstruct the URL as closely as possible from spoken text.
+6. If no specific references are cited, return an EMPTY ARRAY: []

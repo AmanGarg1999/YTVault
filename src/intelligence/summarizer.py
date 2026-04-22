@@ -123,10 +123,10 @@ class SummarizerEngine:
                 from src.storage.sqlite_store import ExpertClash
                 self.db.insert_clash(ExpertClash(
                     topic=d.get("topic", "General"),
-                    expert_a=channel_name,
-                    expert_b=d.get("target", "Unknown"),
-                    claim_a=d.get("speaker_claim", ""),
-                    claim_b=d.get("target_claim", ""),
+                    expert_a=d.get("expert_a", channel_name),
+                    expert_b=d.get("expert_b", "Unknown"),
+                    claim_a=d.get("claim_a", ""),
+                    claim_b=d.get("claim_b", ""),
                     source_a=video_id
                 ))
 
@@ -172,7 +172,10 @@ class SummarizerEngine:
                 {"role": "system", "content": self.map_prompt},
                 {"role": "user", "content": group_text},
             ],
-            options={"num_predict": 500, "temperature": 0.1},
+            options={
+                "num_predict": self.ollama_cfg.get("map_max_tokens", 800),
+                "temperature": 0.1,
+            },
         )
         return response["message"]["content"].strip()
 
@@ -195,7 +198,7 @@ class SummarizerEngine:
                     {"role": "system", "content": self.reduce_prompt},
                     {"role": "user", "content": combined_bullets},
                 ],
-                "options": {"num_predict": 1000, "temperature": 0.1},
+                "options": {"num_predict": self.ollama_cfg.get("reduce_max_tokens", 2000), "temperature": 0.1},
             },
             priority=LLMPriority.LOW
         )
@@ -208,7 +211,7 @@ class SummarizerEngine:
                     {"role": "system", "content": self.blueprint_prompt},
                     {"role": "user", "content": combined_bullets},
                 ],
-                "options": {"num_predict": 1000, "temperature": 0.1},
+                "options": {"num_predict": self.ollama_cfg.get("blueprint_max_tokens", 1200), "temperature": 0.1},
             },
             priority=LLMPriority.LOW
         )
@@ -221,7 +224,7 @@ class SummarizerEngine:
                     {"role": "system", "content": self.reference_prompt},
                     {"role": "user", "content": combined_bullets},
                 ],
-                "options": {"num_predict": 500, "temperature": 0.1},
+                "options": {"num_predict": self.ollama_cfg.get("extraction_max_tokens", 800), "temperature": 0.1},
             },
             priority=LLMPriority.LOW
         )

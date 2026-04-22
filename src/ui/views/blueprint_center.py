@@ -149,13 +149,21 @@ def render_blueprint_card(db, bp):
 
 def render_step(db, video_id, idx, step_data, progress_state):
     """Render a single step within a blueprint."""
-    # Handle legacy string format
+    # Handle different step formats (newest → oldest)
     if isinstance(step_data, str):
+        # Legacy: plain string
         title = step_data
         description = ""
         timestamp = ""
         difficulty = ""
+    elif isinstance(step_data, dict) and "action" in step_data:
+        # New structured format: {step_number, action, detail}
+        title = step_data.get("action", f"Step {idx+1}")
+        description = step_data.get("detail", "")
+        timestamp = step_data.get("timestamp", "")
+        difficulty = step_data.get("difficulty", "")
     else:
+        # Intermediate format: {step/title, description, timestamp, difficulty}
         title = step_data.get("step", step_data.get("title", f"Step {idx+1}"))
         description = step_data.get("description", "")
         timestamp = step_data.get("timestamp", "")

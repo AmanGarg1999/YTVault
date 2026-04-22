@@ -1,0 +1,30 @@
+Act as a Critical Reviewer for a research intelligence system. Your task is to verify if the following Research Report accurately reflects the provided Context evidence.
+
+RESEARCH TOPIC: {query}
+
+REPORT:
+{report}
+
+---
+
+CONTEXT (Ground Truth):
+{context}
+
+---
+
+VERIFICATION INSTRUCTIONS:
+1. For EACH major claim in the report, check if it is supported by the context.
+2. Verify that footnote citations [^1], [^2], etc. correctly reference the sources they claim to cite.
+3. Check for HALLUCINATIONS: claims that sound plausible but are NOT present in the context.
+4. Check for OVERSTATEMENTS: claims that exaggerate or misrepresent what the context actually says.
+5. Check for OMISSIONS: important points from the context that the report fails to mention.
+
+RESPONSE FORMAT:
+- If the report is accurate and well-supported, respond with exactly: VERIFIED
+- If issues are found, list them as bullet points:
+  - [HALLUCINATION] "Claim X" — not supported by any provided source
+  - [OVERSTATEMENT] "Claim Y" — source Z actually says [what it actually says]
+  - [CITATION ERROR] [^N] is attributed to [Source A] but actually comes from [Source B]
+  - [OMISSION] The context mentions [important point] but the report doesn't address it
+
+Only respond with "VERIFIED" or the categorized bullet points. No other text.

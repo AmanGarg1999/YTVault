@@ -18,6 +18,7 @@ from src.ui.components import (
 )
 from src.storage.sqlite_store import SQLiteStore
 from src.storage.vector_store import VectorStore
+from src.storage.graph_store import GraphStore
 from src.intelligence.research_agent import ResearchAgent
 from src.intelligence.rag_engine import RAGEngine
 from src.config import load_prompt
@@ -124,10 +125,10 @@ def render_guest_network(db: SQLiteStore):
     with m2:
         if st.button("Resolve Entities", use_container_width=True, help="Deduplicate guests and purge noise."):
             from src.intelligence.entity_resolver import EntityResolver
-            resolver = EntityResolver(db)
+            resolver = EntityResolver(db, GraphStore())
             if hasattr(resolver, "sanitize_expert_network"):
                 stats = resolver.sanitize_expert_network()
-                st.toast(f"Network Hardened: Purged {stats['purged']}, Merged {stats['merged']}", icon="🛡")
+                st.toast(f"Network Hardened: Purged {stats['purged']}, Merged {stats['merged']} (Synced to Graph)", icon="🛡")
             else:
                 st.error("Intelligence Error: Sanitization engine out of sync. Please refresh.")
             st.rerun()

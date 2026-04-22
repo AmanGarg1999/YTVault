@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import chromadb
+import threading
 import ollama as ollama_client
 
 from src.config import get_settings
@@ -201,17 +202,20 @@ class VectorStore:
     """
     _instance = None
     _initialized = False
+    _lock = threading.Lock()
 
     def __new__(cls):
-        """Singleton pattern: return existing instance if available."""
-        if cls._instance is None:
-            cls._instance = super(VectorStore, cls).__new__(cls)
-        return cls._instance
+        """Singleton pattern: return existing instance if available (thread-safe)."""
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super(VectorStore, cls).__new__(cls)
+            return cls._instance
 
     def __init__(self):
-        """Initialize ChromaDB client and collections (once)."""
-        if VectorStore._initialized:
-            return
+        """Initialize ChromaDB client and collections (once, thread-safe)."""
+        with self._lock:
+            if VectorStore._initialized:
+                return
 
         settings = get_settings()
         cfg = settings["chromadb"]
@@ -512,18 +516,28 @@ class VectorStore:
             return set()
 
     def count_unique_videos(self) -> int:
-        """P0-D: Count distinct video_ids indexed in ChromaDB.
-
-        Used by the Graph Health dashboard to compare ChromaDB coverage
-        against SQLite and Neo4j.
+        """P0-D: Count distinct video_ids indexed in ChromaDB (Optimized).
+        
+        Fetches only IDs to minimize memory footprint. Parses video_id 
+        from the formatted chunk IDs ({video_id}__chunk_{index}).
         """
         try:
-            # ChromaDB does not have a GROUP BY—fetch all metadatas with just video_id
-            results = self.collection.get(include=["metadatas"])
-            if not results or not results.get("metadatas"):
+            # Fetch only IDs, excluding metadatas and documents for memory efficiency
+            results = self.collection.get(include=[])
+            if not results or not results.get("ids"):
                 return 0
-            unique_vids = {m.get("video_id", "") for m in results["metadatas"]}
-            unique_vids.discard("")  # remove blanks
+            
+            # Extract video_id prefix from formatted chunk IDs
+            # Pattern: video_id__chunk_0001
+            unique_vids = set()
+            for cid in results["ids"]:
+                if "__chunk_" in cid:
+                    unique_vids.add(cid.split("__chunk_")[0])
+                else:
+                    # Fallback for non-standard IDs (if any)
+                    unique_vids.add(cid)
+            
+            unique_vids.discard("")
             return len(unique_vids)
         except Exception as e:
             logger.warning(f"count_unique_videos failed: {e}")

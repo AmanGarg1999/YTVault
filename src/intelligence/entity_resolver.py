@@ -6,8 +6,9 @@ Handles guest deduplication, fuzzy record merging, and noise suppression.
 import logging
 import json
 import difflib
-from typing import List, Dict, Set
+from typing import List, Dict, Set, Optional
 from src.storage.sqlite_store import SQLiteStore
+from src.storage.graph_store import GraphStore
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +23,9 @@ NOISE_GUEST_BLACKLIST = {
 class EntityResolver:
     """Orchestrates the cleanup and deduplication of the research graph."""
 
-    def __init__(self, db: SQLiteStore):
+    def __init__(self, db: SQLiteStore, graph: Optional[GraphStore] = None):
         self.db = db
+        self.graph = graph
 
     def sanitize_expert_network(self) -> Dict[str, int]:
         """
@@ -48,13 +50,21 @@ class EntityResolver:
         
         for guest_id, name in all_guests:
             if name in NOISE_GUEST_BLACKLIST or len(name) < 2:
-                # Delete the guest and its appearances
+                # Delete the guest and its appearances in SQLite
                 self.db.execute("DELETE FROM guest_appearances WHERE guest_id = ?", [guest_id])
                 self.db.execute("DELETE FROM guests WHERE guest_id = ?", [guest_id])
+                
+                # Sync: Delete from Graph (Neo4j)
+                if self.graph:
+                    try:
+                        self.graph.delete_guest(name)
+                    except Exception as e:
+                        logger.warning(f"Could not purge guest '{name}' from graph: {e}")
+                
                 count += 1
         
         self.db.commit()
-        logger.info(f"Purged {count} noise entities from the Expert Network")
+        logger.info(f"Purged {count} noise entities from the Expert Network (Sync: {True if self.graph else False})")
         return count
 
     def resolve_fuzzy_duplicates(self, threshold: float = 0.85) -> int:
@@ -95,9 +105,23 @@ class EntityResolver:
                     processed_ids.add(mid)
             
             if mergee_ids:
+                # Get names for Neo4j sync before they are deleted from SQLite
+                mergee_names = []
+                for mid in mergee_ids:
+                    row = self.db.execute("SELECT canonical_name FROM guests WHERE guest_id = ?", [mid]).fetchone()
+                    if row:
+                        mergee_names.append(row[0])
+
                 success = self.db.merge_guests(gid, mergee_ids)
                 if success:
                     merged_count += len(mergee_ids)
+                    
+                    # Sync: Merge in Graph (Neo4j)
+                    if self.graph and mergee_names:
+                        try:
+                            self.graph.merge_guests(name, mergee_names)
+                        except Exception as e:
+                            logger.error(f"Graph merge sync failed for '{name}': {e}")
             
             processed_ids.add(gid)
 

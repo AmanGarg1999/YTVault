@@ -6,6 +6,7 @@ as nodes with typed relationships for cross-channel intelligence.
 """
 
 import logging
+import threading
 from typing import Optional
 
 from neo4j import GraphDatabase
@@ -18,6 +19,9 @@ logger = logging.getLogger(__name__)
 
 class GraphStore:
     """Neo4j-backed knowledge graph for entity relationships.
+    
+    Implements a thread-safe Singleton pattern to avoid redundant 
+    driver initialization and heavy schema checks.
 
     Graph Schema:
         Nodes:  (:Video), (:Channel), (:Guest), (:Topic)
@@ -27,16 +31,32 @@ class GraphStore:
                 (Guest)-[:EXPERT_ON {mentions}]->(Topic)
                 (Topic)-[:RELATED_TO {co_occurrence}]->(Topic)
     """
+    _instance = None
+    _initialized = False
+    _lock = threading.Lock()
+
+    def __new__(cls):
+        """Singleton pattern: return existing instance if available (thread-safe)."""
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super(GraphStore, cls).__new__(cls)
+            return cls._instance
 
     def __init__(self):
-        settings = get_settings()
-        cfg = settings["neo4j"]
-        self.driver = GraphDatabase.driver(
-            cfg["uri"],
-            auth=(cfg["user"], cfg["password"]),
-        )
-        self._init_schema()
-        logger.info(f"GraphStore connected: {cfg['uri']}")
+        """Initialize Neo4j driver and schema if not already done."""
+        with self._lock:
+            if GraphStore._initialized:
+                return
+
+            settings = get_settings()
+            cfg = settings["neo4j"]
+            self.driver = GraphDatabase.driver(
+                cfg["uri"],
+                auth=(cfg["user"], cfg["password"]),
+            )
+            self._init_schema()
+            GraphStore._initialized = True
+            logger.info(f"GraphStore connected: {cfg['uri']}")
 
     def _init_schema(self):
         """Create constraints and indexes."""
@@ -261,6 +281,58 @@ class GraphStore:
                 "video_deleted": summary["video_deleted"] > 0,
                 "claims_deleted": summary["claims_deleted"]
             }
+
+    @with_retry("neo4j_query")
+    def delete_guest(self, canonical_name: str) -> bool:
+        """Fully remove a guest and their private relationships from the graph.
+        
+        Used for purging noise entities detected during sanitization.
+        """
+        with self.driver.session() as session:
+            result = session.run(
+                "MATCH (g:Guest {canonical_name: $name}) DETACH DELETE g RETURN count(g) as count",
+                name=canonical_name
+            )
+            return result.single()["count"] > 0
+
+    @with_retry("neo4j_query")
+    def merge_guests(self, survivor_name: str, mergee_names: list[str]) -> bool:
+        """Consolidate multiple Guest nodes into one using APOC.
+        
+        Redirects all relationships (APPEARED_IN, EXPERT_ON, ASSERTED) 
+        and merges properties like mention_count.
+        """
+        if not mergee_names:
+            return False
+        with self.driver.session() as session:
+            # 1. Ensure survival node exists
+            session.run("MERGE (g:Guest {canonical_name: $name})", name=survivor_name)
+            
+            # 2. Use APOC to merge nodes and relationships
+            # properties: 'overwrite' means take from the last node in the list (the survivor)
+            # mention_count: 'combine' sums them up
+            session.run(
+                """
+                MATCH (s:Guest {canonical_name: $survivor})
+                MATCH (m:Guest) WHERE m.canonical_name IN $mergees AND m <> s
+                WITH s, collect(m) as nodes
+                WHERE size(nodes) > 0
+                CALL apoc.refactor.mergeNodes(nodes + s, {
+                    properties: {
+                        canonical_name: 'overwrite',
+                        mention_count: 'combine',
+                        last_seen: 'max',
+                        first_seen: 'min',
+                        entity_type: 'discard'
+                    },
+                    mergeRels: true
+                }) YIELD node
+                RETURN count(node) as count
+                """,
+                survivor=survivor_name,
+                mergees=mergee_names
+            )
+            return True
 
     # -------------------------------------------------------------------
     # Query Operations

@@ -182,6 +182,29 @@ class PipelineOrchestrator:
             self._graph_store = GraphStore()
         return self._graph_store
 
+    def check_services(self) -> dict:
+        """Verify health of critical upstream services (Ollama, Neo4j)."""
+        health = {"ollama": False, "neo4j": False, "errors": []}
+        
+        # 1. Check Ollama
+        try:
+            import ollama
+            ollama.list()  # Simple ping
+            health["ollama"] = True
+        except Exception as e:
+            health["errors"].append(f"Ollama Unreachable: {e}")
+            logger.warning(f"Resilience Check: Ollama offline: {e}")
+
+        # 2. Check Neo4j
+        try:
+            self.graph_store.driver.verify_connectivity()
+            health["neo4j"] = True
+        except Exception as e:
+            health["errors"].append(f"Neo4j Unreachable: {e}")
+            logger.warning(f"Resilience Check: Neo4j offline: {e}")
+            
+        return health
+
     def close(self):
         """Release all resources."""
         self.db.close()
@@ -227,6 +250,13 @@ class PipelineOrchestrator:
 
     def run(self, url: str, force_metadata_refresh: bool = False) -> str:
         """Run the full pipeline for a given YouTube URL."""
+        # P1: Resilience Heartbeat
+        health = self.check_services()
+        if not all([health["ollama"], health["neo4j"]]):
+            error_msg = " | ".join(health["errors"])
+            self._report_status(f"Pipeline Aborted: Service Failure -> {error_msg}")
+            raise ConnectionError(f"Critical services offline: {error_msg}")
+
         parsed = parse_youtube_url(url)
         self._report_status(f"Parsed URL: {parsed.url_type} — {url}")
 
@@ -281,6 +311,7 @@ class PipelineOrchestrator:
             
             self._report_status(f"Starting parallel processing with max_workers={max_workers}")
 
+            last_health_check = time.time()
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 while True:
                     # 1. Check for stop requests
@@ -293,6 +324,14 @@ class PipelineOrchestrator:
                     # 2. Wait while paused
                     while self._check_pause_state(scan_id):
                         time.sleep(1)
+                    
+                    # 2.2 Periodic Service Heartbeat (Every 60s)
+                    if time.time() - last_health_check > 60:
+                        health = self.check_services()
+                        if not all([health["ollama"], health["neo4j"]]):
+                            self._report_status("⚠️  Service Downtime Detected: Pausing pipeline...")
+                            self.db.set_control_state(scan_id, "PAUSED", pause_reason="Upstream service offline")
+                        last_health_check = time.time()
                     
                     # 3. Reaper: clean up completed futures and update progress
                     done_vids = [vid for vid, f in active_futures.items() if f.done()]
@@ -1194,7 +1233,7 @@ class PipelineOrchestrator:
 
                 # Resolve entities and create Guest nodes
                 from src.intelligence.entity_resolver import EntityResolver
-                resolver = EntityResolver(self.db)
+                resolver = EntityResolver(self.db, getattr(self, "graph_store", None))
                 guests = []
                 for name in entity_names:
                     guest = resolver.resolve(name)

@@ -30,25 +30,30 @@ def render(db: SQLiteStore, run_pipeline_background, run_bulk_pipeline_backgroun
         "Orchestrate research harvests, monitor fleet performance, and maintain system health."
     )
 
-    # 1. TABS: CONTROL, FLEET, DIAGNOSTICS, TELEMETRY
-    tab_control, tab_fleet, tab_diagnostics, tab_telemetry = st.tabs([
-        "Command Center",
-        "Fleet Monitor",
-        "System Diagnostics",
-        "Live Telemetry"
-    ])
+    try:
+        # 1. TABS: Orchestration, Fleet, Health, Logs
+        tab_control, tab_fleet, tab_health, tab_logs = st.tabs([
+            "Orchestration Control",
+            "Active Fleet",
+            "Vault Health",
+            "Live Logs"
+        ])
 
-    with tab_control:
-        render_command_center(db, run_pipeline_background, run_bulk_pipeline_background)
+        with tab_control:
+            render_command_center(db, run_pipeline_background, run_bulk_pipeline_background)
 
-    with tab_fleet:
-        render_fleet_monitor(db, run_pipeline_background)
+        with tab_fleet:
+            render_fleet_monitor(db, run_pipeline_background)
 
-    with tab_diagnostics:
-        render_diagnostics(db, run_repair, get_diagnostics)
+        with tab_health:
+            render_diagnostics(db, run_repair, get_diagnostics)
 
-    with tab_telemetry:
-        render_telemetry(db)
+        with tab_logs:
+            render_telemetry(db)
+            
+    except Exception as e:
+        error_card("Operations Hub Failure", f"A critical error occurred while rendering the dashboard: {e}")
+        logger.error(f"Ops Dashboard Render Error: {e}", exc_info=True)
 
 
 def render_command_center(db, run_pipeline_background, run_bulk_pipeline_background):

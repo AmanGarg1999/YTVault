@@ -48,58 +48,80 @@ def render_insights(db, video_id):
 def render(db: SQLiteStore, vs: VectorStore, run_pipeline_background):
     """Render the unified Intelligence Center."""
     
-    # Side-car logic
-    main_col, side_col = side_car_layout()
-    
-    with main_col:
-        page_header(
-            "Intelligence Center",
-            "Command center for discovery, ingestion, and knowledge synthesis."
-        )
+    try:
+        # Side-car logic
+        main_col, side_col = side_car_layout()
+        
+        with main_col:
+            page_header(
+                "Intelligence Center",
+                "Command center for discovery, ingestion, and knowledge synthesis."
+            )
 
-        # 1. COMMAND BAR (Search + Harvest)
-        with glass_card():
-            col_in, col_btn = st.columns([5, 1])
-            with col_in:
-                query = st.text_input(
-                    "Command Search...", 
-                    placeholder="Search vault or paste YouTube URL to harvest...",
-                    label_visibility="collapsed",
-                    key="intel_center_command"
-                )
-            with col_btn:
-                # Contextual Button
-                is_url = "youtube.com" in query or "youtu.be" in query
-                if st.button("Harvest" if is_url else "Search", type="primary", use_container_width=True):
-                    if is_url:
-                        run_pipeline_background(query, db)
-                        st.toast("Harvest Started", icon="✦")
-                    elif query:
-                        if "." in query:
-                            # Use session state to ensure toast persists through re-render
-                            st.session_state.harvest_fallback_hint = True
-                    elif not query.strip():
-                        st.toast("Input Required", icon="⚠️")
+            # 1. COMMAND BAR (Search + Harvest)
+            with glass_card():
+                col_in, col_btn = st.columns([5, 1])
+                with col_in:
+                    query = st.text_input(
+                        "Command Search...", 
+                        placeholder="Search vault or paste YouTube URL to harvest...",
+                        label_visibility="collapsed",
+                        key="intel_center_command"
+                    )
+                with col_btn:
+                    # Contextual Button
+                    is_url = "youtube.com" in query or "youtu.be" in query
+                    if st.button("Harvest" if is_url else "Search", type="primary", use_container_width=True):
+                        if is_url:
+                            run_pipeline_background(query, db)
+                            st.toast("Harvest Started", icon="✦")
+                        elif query:
+                            if "." in query:
+                                # Use session state to ensure toast persists through re-render
+                                st.session_state.harvest_fallback_hint = True
+                        elif not query.strip():
+                            st.toast("Input Required", icon="⚠️")
 
-        if st.session_state.get("harvest_fallback_hint"):
-            st.toast("Note: YouTube only supported for Harvest. Searching instead.", icon="🔍")
-            st.session_state.harvest_fallback_hint = False
+            if st.session_state.get("harvest_fallback_hint"):
+                st.toast("Note: YouTube only supported for Harvest. Searching instead.", icon="🔍")
+                st.session_state.harvest_fallback_hint = False
 
-        spacer("2rem")
+            # 1.5 Pinned Searches (Quick access)
+            pins = db.get_pinned_searches()
+            if pins:
+                st.markdown("<div style='display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem;'>", unsafe_allow_html=True)
+                for p in pins:
+                    if st.button(f"📌 {p['query'][:20]}", key=f"pin_{p['id']}", help=p['query']):
+                        # Set query and trigger search logic by rerunning with the query set
+                        st.session_state.intel_center_command = p['query']
+                        st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
 
-        if query and not is_url:
-            # Render Search Results
-            render_search_results(db, vs, query)
-        else:
-            # Render Dashboard Overview
-            render_overview(db)
+            if query and not is_url:
+                if st.button("Pin this Search Query", key="pin_current_query"):
+                    db.pin_search(query)
+                    st.toast("Query Pinned to Command Bar", icon="📌")
+                    st.rerun()
 
-    # Side-car Rendering
-    if side_col and st.session_state.get("active_video_id"):
-        with side_col:
-            video_id = st.session_state.active_video_id
-            v_title = db.conn.execute("SELECT title FROM videos WHERE video_id = ?", (video_id,)).fetchone()
-            render_side_car(v_title[0][:40]+"..." if v_title else "Intel Detail", lambda: render_insights(db, video_id))
+            spacer("2rem")
+
+            if query and not is_url:
+                # Render Search Results
+                render_search_results(db, vs, query)
+            else:
+                # Render Dashboard Overview
+                render_overview(db)
+
+        # Side-car Rendering
+        if side_col and st.session_state.get("active_video_id"):
+            with side_col:
+                video_id = st.session_state.active_video_id
+                v_title = db.conn.execute("SELECT title FROM videos WHERE video_id = ?", (video_id,)).fetchone()
+                render_side_car(v_title[0][:40]+"..." if v_title else "Intel Detail", lambda: render_insights(db, video_id))
+    except Exception as e:
+        from src.ui.components.ui_helpers import error_card
+        error_card("Intelligence Discovery Failure", f"A component error occurred: {e}")
+        logger.error(f"Intelligence Center Error: {e}", exc_info=True)
 
 
 def render_overview(db):
@@ -115,6 +137,27 @@ def render_overview(db):
     ]
     metric_grid(metrics, cols=4)
     
+    # 2. Saved Discoveries
+    saved = db.get_saved_discoveries(limit=3)
+    if saved:
+        spacer("2rem")
+        section_header("Saved Discoveries", icon="🛡")
+        for s in saved:
+            with glass_card():
+                c1, c2 = st.columns([4, 1])
+                with c1:
+                    st.markdown(f"**{s['query']}**")
+                    st.caption(f"Source: {s['title']} | Saved {s['created_at'][:10]}")
+                    st.write(f"_{s['snippet'][:150]}..._")
+                with c2:
+                    if st.button("Details", key=f"saved_det_{s['id']}", use_container_width=True):
+                        st.session_state.side_car_active = True
+                        st.session_state.active_video_id = s['video_id']
+                        st.rerun()
+                    if st.button("Delete", key=f"saved_del_{s['id']}", use_container_width=True):
+                        db.delete_saved_discovery(s['id'])
+                        st.rerun()
+
     spacer("2rem")
     section_header("High-Density Intel", icon="◈")
     leaderboard = db.get_knowledge_density_leaderboard(limit=5)
@@ -177,9 +220,15 @@ def render_search_results(db, vs, query):
                 st.markdown(f"### {video.title}")
                 st.caption(f"{r_type} Match | {video.upload_date}")
                 st.markdown(f"_{snippet}_")
-                if st.button("Analyze Details", key=f"src_det_{v_id}"):
-                    st.session_state.side_car_active = True
-                    st.session_state.active_video_id = v_id
-                    st.rerun()
+                c_act1, c_act2 = st.columns(2)
+                with c_act1:
+                    if st.button("Analyze Details", key=f"src_det_{v_id}", use_container_width=True):
+                        st.session_state.side_car_active = True
+                        st.session_state.active_video_id = v_id
+                        st.rerun()
+                with c_act2:
+                    if st.button("Save Discovery", key=f"src_save_{v_id}", use_container_width=True):
+                        db.save_discovery(query, v_id, snippet, r_type)
+                        st.toast("Intelligence Saved to Vault", icon="🛡")
     except Exception as e:
         st.error(f"Search failed: {e}")

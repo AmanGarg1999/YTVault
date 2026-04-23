@@ -22,11 +22,11 @@ def render(db, run_pipeline_background):
         # =====================================================================
         # TABS: Start Scan, Pending Review, Rejected, Force-Accepted
         # =====================================================================
-        tab_start, tab_pending, tab_rejected, tab_overrides = st.tabs([
-            "Start Scan",
-            "Pending Review",
-            "Rejected Videos",
-            "Force-Accepted"
+        tab_intake, tab_pending, tab_rejected, tab_forced = st.tabs([
+            "New Harvest",
+            "Triage Queue",
+            "Rejection Audit",
+            "Force Admitted"
         ])
 
         # =====================================================================

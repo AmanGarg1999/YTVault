@@ -71,13 +71,13 @@ def metric_card(
     delta_html = ""
     if delta:
         color_map = {
-            "positive": "#10b981",
-            "negative": "#ef4444",
-            "info": "#22d3ee",
-            "neutral": "#64748b"
+            "positive": "var(--success-glow)",
+            "negative": "var(--error-glow)",
+            "info": "var(--accent-glow)",
+            "neutral": "var(--text-muted)"
         }
-        delta_color_hex = color_map.get(delta_color, "#64748b")
-        delta_html = f'<div style="color: {delta_color_hex}; font-size: 0.8rem; margin-top: 0.25rem; font-weight: 700;">{delta}</div>'
+        delta_color_css = color_map.get(delta_color, "var(--text-muted)")
+        delta_html = f'<div style="color: {delta_color_css}; font-size: 0.8rem; margin-top: 0.25rem; font-weight: 700;">{delta}</div>'
     
     glow_style = "box-shadow: 0 0 20px rgba(99, 102, 241, 0.15); border-color: rgba(99, 102, 241, 0.3);" if glow else ""
     

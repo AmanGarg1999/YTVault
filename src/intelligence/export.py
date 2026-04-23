@@ -8,6 +8,10 @@ import csv
 import io
 import json
 import logging
+import shutil
+import tempfile
+import zipfile
+from pathlib import Path
 from dataclasses import asdict
 from datetime import datetime
 from typing import Optional
@@ -23,6 +27,40 @@ class ExportEngine:
 
     def __init__(self, db: SQLiteStore):
         self.db = db
+
+    def create_vault_snapshot(self) -> str:
+        """
+        Create a full intelligence snapshot (.kvvault ZIP).
+        Contains the SQLite database and a summary report.
+        Returns path to the generated ZIP.
+        """
+        temp_dir = Path(tempfile.mkdtemp())
+        snapshot_path = temp_dir / f"knowledge_vault_snapshot_{datetime.now().strftime('%Y%m%d_%H%M')}.kvvault"
+        
+        try:
+            with zipfile.ZipFile(snapshot_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                # 1. Database Backup
+                db_backup_path = temp_dir / "vault.sqlite"
+                # Use SQLite's backup capability if possible, or just copy (since we have WAL)
+                shutil.copy2(self.db.db_path, db_backup_path)
+                zipf.write(db_backup_path, "vault.sqlite")
+                
+                # 2. Summary Report
+                summary = self.export_pipeline_stats()
+                summary_path = temp_dir / "manifest.md"
+                summary_path.write_text(summary)
+                zipf.write(summary_path, "manifest.md")
+                
+                # 3. Export all Chat Missions
+                missions = self.export_mission_package([s.session_id for s in self.db.get_chat_sessions()])
+                mission_path = temp_dir / "missions.json"
+                mission_path.write_text(missions)
+                zipf.write(mission_path, "missions.json")
+                
+            return str(snapshot_path)
+        except Exception as e:
+            logger.error(f"Snapshot creation failed: {e}")
+            return ""
 
     def export_rag_response(self, response: RAGResponse, fmt: str = "markdown") -> str:
         """Export a RAG response in the requested format.

@@ -25,7 +25,7 @@ from src.storage.sqlite_store import SQLiteStore
 # Page modules
 from src.ui.views import (
     intelligence_center, intelligence_studio, ops_dashboard,
-    research_chat, transcript_viewer, reject_review,
+    research_chat, transcript_viewer, harvest,
     blueprint_center, export_center, data_management,
     performance_metrics
 )
@@ -1020,7 +1020,7 @@ with st.sidebar:
         ],
         "Operations": [
             "Operations Dashboard",
-            "Triage Center",
+            "Ingestion Hub",
             "Transcripts", 
         ],
         "System": [
@@ -1126,8 +1126,20 @@ with st.sidebar:
     else:
         st.info("System Engine Idling. No active tasks.")
 
+    # Atmospheric Control (Theme Toggle)
+    current_theme = st.session_state.get("theme", "dark")
+    theme_label = "🌙 DARK MODE" if current_theme == "dark" else "☀️ LIGHT MODE"
+    if st.toggle(theme_label, value=(current_theme == "dark"), key="theme_toggle_btn"):
+        if current_theme != "dark":
+            st.session_state.theme = "dark"
+            st.rerun()
+    else:
+        if current_theme != "light":
+            st.session_state.theme = "light"
+            st.rerun()
+
     # Footer links correctly pointing to help/docs
-    st.markdown(f"<div style='margin-top:2rem; border-top:1px solid rgba(255,255,255,0.05); padding-top:1rem;'>", unsafe_allow_html=True)
+    st.markdown(f"<div style='margin-top:1rem; border-top:1px solid rgba(255,255,255,0.05); padding-top:1rem;'>", unsafe_allow_html=True)
     if st.button("User Documentation", key="nav_btn_docs", use_container_width=True):
         st.session_state.navigate = "Blueprint Center"
         st.rerun()
@@ -1163,7 +1175,7 @@ PAGE_MAP = {
     "Intelligence Studio": lambda: intelligence_studio.render(db, vs, run_repair_background),
     "Research Chat": lambda: research_chat.render_research_chat(db, vs),
     "Operations Dashboard": lambda: ops_dashboard.render(db, run_pipeline_background, run_bulk_pipeline_background, run_repair_background, get_vault_diagnostics),
-    "Triage Center": lambda: reject_review.render(db),
+    "Ingestion Hub": lambda: harvest.render(db, run_pipeline_background),
     "Transcripts": lambda: transcript_viewer.render(db),
     "Blueprint Center": lambda: blueprint_center.render(db),
     "Export & Integration": lambda: export_center.render(db),

@@ -20,12 +20,12 @@ def render(db, run_repair=None, get_diagnostics=None):
     """Render the Data Management Center page."""
     page_header("Data Management Center", "Manage storage, audit sources, and restore deleted intelligence")
 
-    tab_explorer, tab_recycle, tab_channel, tab_history, tab_health = st.tabs([
-        "Source Explorer",
+    tab_explorer, tab_recycle, tab_bulk, tab_history, tab_sync = st.tabs([
+        "Vault Explorer",
         "Recycle Bin",
-        "Channel Actions",
-        "Audit Log",
-        "Triple-Store Health"
+        "Bulk Management",
+        "Deletion History",
+        "Sync Monitor"
     ])
 
     with tab_explorer:

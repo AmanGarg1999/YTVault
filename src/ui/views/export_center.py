@@ -149,7 +149,40 @@ def render(db):
                             st.error(f"Import Failed: {result['error']}")
 
         st.markdown("---")
-        with st.expander("Obsidian Sync (Research Wiki)", expanded=True):
+        section_header("Vault Maintenance & Portability", icon="📦")
+        
+        tab_snapshot, tab_obsidian = st.tabs(["Vault Snapshot", "Obsidian Wiki Sync"])
+        
+        with tab_snapshot:
+            with glass_card():
+                st.markdown("""
+                **Create a full intelligence snapshot (.kvvault).**
+                This includes your entire research database, chat missions, and intelligence logs.
+                Ideal for migrating between devices or creating long-term archives.
+                """)
+                if st.button("Generate Full Intelligence Snapshot", type="primary", use_container_width=True):
+                    with st.status("✦ Bundling Intelligence Vault...", expanded=True) as status:
+                        st.write("✦ Backing up research database...")
+                        st.write("✦ Packaging chat missions and briefings...")
+                        snapshot_file = exporter.create_vault_snapshot()
+                        if snapshot_file:
+                            st.write("✦ Finalizing encrypted bundle...")
+                            status.update(label="✦ Snapshot Ready", state="complete", expanded=False)
+                            
+                            with open(snapshot_file, "rb") as f:
+                                st.download_button(
+                                    "Download Snapshot (.kvvault)",
+                                    f,
+                                    file_name=Path(snapshot_file).name,
+                                    mime="application/zip",
+                                    use_container_width=True
+                                )
+                            st.success("Vault snapshot generated successfully.")
+                        else:
+                            status.update(label="✦ Snapshot Failed", state="error")
+                            st.error("Failed to generate snapshot. Check logs for details.")
+
+        with tab_obsidian:
             st.markdown("""
             **Generate a complete research vault for Obsidian.**
             - Converts Claims, Bridges, and Clashes into linked notes.
@@ -159,9 +192,9 @@ def render(db):
             
             from pathlib import Path
             default_obsidian_path = str(Path(db.db_path).parent / "obsidian_vault")
-            obsidian_path = st.text_input("Output Directory", default_obsidian_path)
+            obsidian_path = st.text_input("Output Directory", default_obsidian_path, key="obs_path_in")
             
-            if st.button("Sync to Obsidian Vault", type="primary"):
+            if st.button("Sync to Obsidian Vault", type="primary", use_container_width=True):
                 try:
                     from src.utils.obsidian_exporter import ObsidianExporter
                     writer = ObsidianExporter(db, obsidian_path)
@@ -177,5 +210,6 @@ def render(db):
                     logger.error(f"Obsidian sync failed: {e}", exc_info=True)
 
     except Exception as e:
-        st.error(f"Failed to load Export Center: {e}")
+        from src.ui.components.ui_helpers import error_card
+        error_card("Export Hub Failure", f"A component error occurred: {e}")
         logger.error(f"Export Center error: {e}", exc_info=True)

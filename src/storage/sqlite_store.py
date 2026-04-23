@@ -719,6 +719,26 @@ SCHEMA_MIGRATIONS = [
         ALTER TABLE videos ADD COLUMN is_deleted BOOLEAN DEFAULT 0;
         CREATE INDEX IF NOT EXISTS idx_videos_deleted ON videos(is_deleted);
     """),
+    # Version 29: Saved Discoveries & Search Persistence
+    (29, """
+        CREATE TABLE IF NOT EXISTS saved_discoveries (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            query       TEXT NOT NULL,
+            video_id    TEXT REFERENCES videos(video_id),
+            snippet     TEXT,
+            r_type      TEXT DEFAULT 'Semantic',
+            created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_saved_discoveries_query ON saved_discoveries(query);
+    """),
+    # Version 30: Pinned Searches for Quick Access
+    (30, """
+        CREATE TABLE IF NOT EXISTS pinned_searches (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            query       TEXT NOT NULL UNIQUE,
+            created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+    """),
 ]
 
 
@@ -924,6 +944,46 @@ class SQLiteStore:
         if row is None:
             return None
         return Video.from_row(row)
+
+    # --- Saved Discoveries ---
+
+    def save_discovery(self, query: str, video_id: str, snippet: str, r_type: str = "Semantic"):
+        """Save a search discovery to the vault."""
+        self.conn.execute("""
+            INSERT INTO saved_discoveries (query, video_id, snippet, r_type)
+            VALUES (?, ?, ?, ?)
+        """, (query, video_id, snippet, r_type))
+        self.conn.commit()
+
+    def get_saved_discoveries(self, limit: int = 50):
+        """Fetch all saved discoveries."""
+        return self.conn.execute("""
+            SELECT sd.*, v.title, v.upload_date 
+            FROM saved_discoveries sd
+            JOIN videos v ON sd.video_id = v.video_id
+            ORDER BY sd.created_at DESC LIMIT ?
+        """, (limit,)).fetchall()
+    
+    def delete_saved_discovery(self, discovery_id: int):
+        """Remove a saved discovery."""
+        self.conn.execute("DELETE FROM saved_discoveries WHERE id = ?", (discovery_id,))
+        self.conn.commit()
+
+    # --- Pinned Searches ---
+
+    def pin_search(self, query: str):
+        """Pin a frequent query."""
+        self.conn.execute("INSERT OR IGNORE INTO pinned_searches (query) VALUES (?)", (query,))
+        self.conn.commit()
+
+    def get_pinned_searches(self):
+        """Fetch all pinned queries."""
+        return self.conn.execute("SELECT * FROM pinned_searches ORDER BY created_at DESC").fetchall()
+
+    def unpin_search(self, query_id: int):
+        """Remove a pinned query."""
+        self.conn.execute("DELETE FROM pinned_searches WHERE id = ?", (query_id,))
+        self.conn.commit()
 
     def record_stats_snapshot(
         self, video_id: str, view_count: int, like_count: int, comment_count: int

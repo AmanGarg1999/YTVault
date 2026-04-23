@@ -14,7 +14,6 @@ from src.ui.components import (
     radial_health_chart,
     status_badge,
     action_confirmation_dialog,
-    failure_confirmation_dialog,
     spacer
 )
 from src.intelligence.live_monitor import LiveMonitor

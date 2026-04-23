@@ -137,6 +137,21 @@ def render_rejected_section(db):
 
         section_header(f"{len(rejected)} Suppressed Entries in Audit", icon="⚠")
         
+        # Undo Action Bar
+        if st.session_state.get("last_deleted_id"):
+            last_id = st.session_state.last_deleted_id
+            with glass_card():
+                col_u1, col_u2 = st.columns([3, 1])
+                col_u1.markdown(f"**Recently trashed intelligence can be recovered.**")
+                if col_u2.button("UNDO DELETION", type="primary", use_container_width=True):
+                    db.restore_video(last_id)
+                    st.session_state.last_deleted_id = None
+                    st.toast("Intelligence Restored", icon="↩")
+                    st.rerun()
+                if st.button("Dismiss", key="dismiss_undo"):
+                    st.session_state.last_deleted_id = None
+                    st.rerun()
+        
         for i, video in enumerate(rejected):
             cols = video_card(video, key_prefix=f"rej_rev_{i}")
             if cols:
@@ -146,9 +161,13 @@ def render_rejected_section(db):
                         st.toast("Override Complete: Automated filter bypassed.", icon="🔓")
                         st.rerun()
                 with cols[1]:
-                    if st.button("Purge Intel", key=f"del_rev_{i}_{video.video_id}", use_container_width=True):
-                        db.delete_video_data(video.video_id)
-                        st.toast("Intelligence Purged from system.", icon="🗑")
+                    if st.button("Move to Trash", key=f"del_rev_{i}_{video.video_id}", use_container_width=True):
+                        if db.delete_video_data(video.video_id, reason="Manual triage rejection"):
+                            st.toast(f"Moved to Trash: {video.title[:20]}...", icon="🗑")
+                            # Add a temporary session state for undo
+                            st.session_state.last_deleted_id = video.video_id
+                            st.rerun()
+                        st.toast("Intelligence moved to Recycle Bin.", icon="🗑")
                         st.rerun()
 
     except Exception as e:

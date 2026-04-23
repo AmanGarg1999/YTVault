@@ -13,12 +13,12 @@ app:
 #   deep_model (8b): summarization, RAG synthesis, claims, quotes, entities — quality-critical
 ollama:
   host: "http://localhost:11434"
-  triage_model: "llama3.2:3b"          # Fast: triage classification
+  triage_model: "llama3.1:8b"          # Upgraded for E2E verification robustness
   normalizer_model: "llama3.2:3b"      # Fast: transcript cleanup
   deep_model: "llama3.1:8b"            # Quality: summaries, claims, entities, blueprints
   rag_model: "llama3.1:8b"             # Quality: RAG synthesis, research reports
   embedding_model: "nomic-embed-text:latest"
-  triage_max_tokens: 150               # Increased for content_type field
+  triage_max_tokens: 400               # Increased for content_type field and better reasoning
   normalizer_max_tokens: 2048
   map_max_tokens: 800                  # Map phase: structured category bullets (was 500)
   reduce_max_tokens: 2000              # Reduce phase: complex JSON synthesis (was 1000)

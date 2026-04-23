@@ -78,7 +78,7 @@ def render(db: SQLiteStore, vs: VectorStore, run_pipeline_background):
                         if "." in query:
                             # Use session state to ensure toast persists through re-render
                             st.session_state.harvest_fallback_hint = True
-                    elif not query:
+                    elif not query.strip():
                         st.toast("Input Required", icon="⚠️")
 
         if st.session_state.get("harvest_fallback_hint"):

@@ -234,13 +234,13 @@ class GraphStore:
             )
 
     @with_retry("neo4j_query")
-    def upsert_claim(self, claim_text: str, speaker: str, video_id: str,
-                     topic: str = "") -> None:
+    def upsert_claim(self, text: str, speaker: str, video_id: str,
+                     topic: str = "", claim_id: str = "") -> None:
         """Create a Claim node with ASSERTED, SOURCED_FROM, and ABOUT relationships."""
         with self.driver.session() as session:
             session.run(
                 """MERGE (cl:Claim {text: $text})
-                   SET cl.speaker = $speaker
+                   SET cl.speaker = $speaker, cl.claim_id = $claim_id
                    WITH cl
                    MATCH (v:Video {video_id: $video_id})
                    MERGE (cl)-[:SOURCED_FROM]->(v)
@@ -249,7 +249,7 @@ class GraphStore:
                    FOREACH (_ IN CASE WHEN g IS NOT NULL THEN [1] ELSE [] END |
                        MERGE (g)-[:ASSERTED]->(cl)
                    )""",
-                text=claim_text[:500], speaker=speaker, video_id=video_id,
+                text=text[:1000], speaker=speaker, video_id=video_id, claim_id=claim_id,
             )
             # Link to topic if provided
             if topic:

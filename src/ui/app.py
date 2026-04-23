@@ -11,6 +11,7 @@ from pathlib import Path
 import streamlit as st
 import logging
 import time
+from datetime import datetime
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,8 @@ def inject_custom_css():
         --text-stellar: {"#f8fafc" if theme == "dark" else "#0f172a"};
         --text-muted: {"#64748b" if theme == "dark" else "#475569"};
         --text-contrast: {"#ffffff" if theme == "dark" else "#f8fafc"};
+        --nav-text: {"#ffffff" if theme == "dark" else "#1e293b"};
+        --nav-shadow: {"0 1px 3px rgba(0,0,0,0.8)" if theme == "dark" else "none"};
     }}
     """
     
@@ -115,23 +118,21 @@ def inject_custom_css():
        ENHANCED COMPONENTS - GLASSMORPHISM
        ===================================================================== */
     
-    .metric-card, .glass-card {
-        background: var(--glass-bg);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        border: 1px solid var(--glass-border);
-        border-radius: 20px;
-        padding: 1.75rem;
-        transition: all 0.3s ease;
-        position: relative;
-        overflow: hidden;
+    .metric-card, [data-testid="stVerticalBlockBordered"] {
+        background: var(--glass-bg) !important;
+        backdrop-filter: blur(16px) !important;
+        -webkit-backdrop-filter: blur(16px) !important;
+        border: 1px solid var(--glass-border) !important;
+        border-radius: 20px !important;
+        padding: 1.75rem !important;
+        transition: all 0.3s ease !important;
     }
     
-    .metric-card:hover, .glass-card:hover {
-        background: var(--glass-active);
-        border-color: var(--primary-glow);
-        transform: translateY(-2px);
-        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+    .metric-card:hover, [data-testid="stVerticalBlockBordered"]:hover {
+        background: var(--glass-active) !important;
+        border-color: var(--primary-glow) !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25) !important;
     }
 
     @media (max-width: 768px) {
@@ -234,15 +235,16 @@ def inject_custom_css():
     }
     
     /* Buttons */
-    .stButton > button, .stButton > button div p, .stButton > button p {
+    .stButton > button:not([kind="secondary"]):not([kind="tertiary"]), 
+    .stButton > button:not([kind="secondary"]):not([kind="tertiary"]) div p, 
+    .stButton > button:not([kind="secondary"]):not([kind="tertiary"]) p {
         border-radius: 14px;
         background: linear-gradient(135deg, var(--primary-glow) 0%, var(--primary-active) 100%);
         border: 1px solid rgba(255, 255, 255, 0.1);
-        color: #ffffff !important;
+        color: var(--text-contrast) !important;
         text-shadow: 0 1px 2px rgba(0,0,0,0.2);
         font-weight: 700 !important;
         font-size: 1rem;
-        padding: 0.75rem 1.75rem;
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         text-transform: none;
         letter-spacing: 0.02em;
@@ -276,10 +278,10 @@ def inject_custom_css():
 
     /* Secondary Buttons */
     div[data-testid="stButton"] button[kind="secondary"] {
-        background: rgba(15, 23, 42, 0.9) !important;
-        border: 1px solid rgba(99, 102, 241, 0.4) !important;
+        background: var(--glass-bg) !important;
+        border: 1px solid var(--glass-border) !important;
         backdrop-filter: blur(12px) !important;
-        color: #f8fafc !important;
+        color: var(--text-stellar) !important;
     }
     
     div[data-testid="stButton"] button[kind="secondary"]:hover {
@@ -404,14 +406,15 @@ def inject_custom_css():
     div[data-testid="stSidebar"] button, 
     div[data-testid="stSidebar"] button div p,
     div[data-testid="stSidebar"] button p {
-        color: #ffffff !important;
+        color: var(--nav-text) !important;
         font-weight: 600 !important;
+        text-shadow: var(--nav-shadow) !important;
     }
 
     div[data-testid="stSidebar"] button[kind="primary"],
     div[data-testid="stSidebar"] button[kind="primary"] div p {
         background-color: var(--primary-glow) !important;
-        color: #ffffff !important;
+        color: var(--text-contrast) !important;
         font-weight: 700 !important;
         border: 1px solid rgba(255, 255, 254, 0.2) !important;
     }
@@ -495,13 +498,15 @@ def inject_custom_css():
     /* Responsive Header: Show on mobile for sidebar expansion, hide on desktop for immersion */
     header {
         visibility: visible !important; 
-        background: transparent !important;
+        background: rgba(15, 23, 42, 0.1) !important;
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     }
     
     @media (min-width: 1024px) {
         header { 
-            visibility: hidden !important; 
-            height: 0 !important; 
+            visibility: visible !important; 
+            height: 3rem !important; 
         }
     }
     
@@ -561,6 +566,38 @@ def inject_custom_css():
     .session-active {
         background: var(--glass-active);
         border-left: 3px solid var(--primary-glow);
+    }
+    /* =====================================================================
+       MOBILE RESPONSIVENESS
+       ===================================================================== */
+    @media (max-width: 768px) {
+        .stApp {
+            padding: 0.5rem !important;
+        }
+        div[data-testid="stSidebar"] {
+            width: 80vw !important;
+        }
+        .metric-card {
+            margin-bottom: 1rem !important;
+        }
+        h1 { font-size: 2rem !important; }
+        h2 { font-size: 1.5rem !important; }
+    }
+
+    @keyframes pulse-live {
+        0% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.7); }
+        70% { box-shadow: 0 0 0 10px rgba(34, 211, 238, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0); }
+    }
+    .live-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        background: #22d3ee;
+        border-radius: 50%;
+        margin-right: 8px;
+        vertical-align: middle;
+        animation: pulse-live 2s infinite;
     }
 </style>
 <script>
@@ -677,9 +714,8 @@ def check_service_health():
 
     # Check Vector Store (ChromaDB)
     try:
-        from src.storage.vector_store import VectorStore
-        vs = VectorStore()
-        if vs.is_ready():
+        vs_internal = init_vs()
+        if vs_internal and vs_internal.is_ready():
             health_status["vector_store"] = True
     except Exception as e:
         health_status["errors"].append(f"Vector Store: {str(e)[:50]}")
@@ -1019,13 +1055,25 @@ page = st.session_state.get("current_page", "Intelligence Center")
 st.sidebar.markdown("---")
 with st.sidebar:
     active_scans = db.get_active_scans()
-    st.markdown("<p style='font-size:0.75rem; color:#475569; font-weight:800; margin-top:1.5rem; margin-bottom:0.5rem;'>TASK QUEUE MONITOR</p>", unsafe_allow_html=True)
+    
+    # Live Monitor Control
+    col_m1, col_m2 = st.columns([1.2, 1])
+    with col_m1:
+        live_mon = st.toggle("Live Monitor", value=st.session_state.get("live_mon", False), help="Auto-refresh when tasks are active.")
+        st.session_state.live_mon = live_mon
+    with col_m2:
+        if live_mon:
+            st.caption(f"⏱ {datetime.now().strftime('%H:%M:%S')}")
+
+    st.markdown("<p style='font-size:0.75rem; color:#475569; font-weight:800; margin-top:0.5rem; margin-bottom:0.5rem;'>SYSTEM PIPELINE MONITOR</p>", unsafe_allow_html=True)
     if active_scans:
-        with st.expander(f"⚙️ {len(active_scans)} Active Scans", expanded=True):
-            for scan in active_scans[:3]:
+        label = f"⚙️ {len(active_scans)} ACTIVE HARVESTS"
+        with st.expander(label, expanded=True):
+            st.markdown("<span class='live-dot'></span> **Live Pipeline Trace Active**", unsafe_allow_html=True)
+            for scan in active_scans[:5]:
                 progress = (scan.total_processed / max(scan.total_discovered, 1))
                 safe_progress = max(0.0, min(1.0, progress))
-                display_name = scan.channel_name if scan.channel_name else f"Scan {scan.scan_id[-4:]}"
+                display_name = getattr(scan, 'channel_name', None) or f"Scan {scan.scan_id[-4:]}"
                 st.caption(f"{display_name}")
                 st.progress(safe_progress, text=f"{safe_progress:.0%}")
             if len(active_scans) > 3:
@@ -1078,4 +1126,7 @@ PAGE_MAP = {
 }
 
 PAGE_MAP[page]()
-# Reload trigger
+# Reload trigger for Live Monitor
+if st.session_state.get("live_mon") and active_scans:
+    time.sleep(10) # Revert to 10s to prevent UI thrashing
+    st.rerun()

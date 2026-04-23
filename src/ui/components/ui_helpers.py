@@ -171,24 +171,15 @@ def inline_status(status: str, text: str = "") -> None:
 # ===========================================================================
 
 @contextmanager
-def glass_card(title: Optional[str] = None, border_accent: Optional[str] = None):
+def glass_card(title: str = None):
     """
-    Create a context manager for a glassmorphic container.
+    Render a high-fidelity glassmorphism card container.
+    Uses Streamlit native border with CSS enhancement for stability.
     """
-    accent_style = f"border-left: 4px solid {border_accent};" if border_accent else ""
-    st.markdown(f"""
-<div class="glass-card" style="background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 16px; padding: 1.5rem; margin: 1rem 0; {accent_style}" tabindex="0">
-""", unsafe_allow_html=True)
-    if title:
-        st.markdown(f"<strong style='color: var(--text-stellar); display: block; margin-bottom: 1rem; font-size: 1.1rem;'>{title}</strong>", unsafe_allow_html=True)
-    
-    try:
-        # We don't return st.container() because we want the content to be 
-        # rendered between the start and end div tags in the Streamlit flow.
+    with st.container(border=True):
+        if title:
+            st.markdown(f"### {title}")
         yield
-    finally:
-        st.markdown("</div>", unsafe_allow_html=True)
-
 
 def info_card(title: str, content: str) -> None:
     st.markdown(f"""

@@ -146,9 +146,9 @@ def render_guest_network(db: SQLiteStore):
                 nodes.append(Node(
                     id=g, 
                     label=g, 
-                    size=20, 
+                    size=15, 
                     color="#22d3ee", 
-                    font={'size': 24, 'color': 'white', 'face': 'Inter, sans-serif'}
+                    font={'size': 14, 'color': 'white', 'face': 'Inter, sans-serif', 'strokeWidth': 2, 'strokeColor': 'rgba(15, 23, 42, 0.8)'}
                 ))
                 seen.add(g)
         edges.append(Edge(source=r['guest_a'], target=r['guest_b'], color="rgba(71, 85, 105, 0.4)"))
@@ -158,14 +158,14 @@ def render_guest_network(db: SQLiteStore):
         width=1000,
         height=700,
         directed=False,
-        physics=True,
         hierarchical=False,
         collapsible=True,
         nodeHighlightBehavior=True,
         highlightColor="#22d3ee",
         staticGraph=False,
-        # Enhance label visibility
-        scaling={'enabled': True, 'label': {'enabled': True, 'min': 14, 'max': 30}}
+        # Enhance label visibility and prevent overlap via physics tuning
+        physics={'enabled': True, 'stabilization': True, 'barnesHut': {'gravitationalConstant': -2000, 'centralGravity': 0.3, 'springLength': 150}},
+        scaling={'enabled': True, 'label': {'enabled': True, 'min': 12, 'max': 24}}
     )
     st.markdown("<div style='background: rgba(15, 23, 42, 0.2); border-radius: 16px; padding: 1rem;'>", unsafe_allow_html=True)
     agraph(nodes=nodes, edges=edges, config=config)

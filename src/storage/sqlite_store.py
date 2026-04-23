@@ -84,6 +84,8 @@ class Video:
     thumbnail_url: str = ""
     heatmap_json: str = "[]"
     is_tutorial: bool = False
+    is_deleted: bool = False
+    channel_name: str = "" # Populated via JOIN when needed
 
     def __post_init__(self):
         """Handle potential data migration or extra fields."""
@@ -712,6 +714,11 @@ SCHEMA_MIGRATIONS = [
     (27, """
         ALTER TABLE actionable_blueprints ADD COLUMN progress_json TEXT DEFAULT '{}';
     """),
+    # Version 28: Soft-delete support for videos
+    (28, """
+        ALTER TABLE videos ADD COLUMN is_deleted BOOLEAN DEFAULT 0;
+        CREATE INDEX IF NOT EXISTS idx_videos_deleted ON videos(is_deleted);
+    """),
 ]
 
 
@@ -904,11 +911,16 @@ class SQLiteStore:
             self.conn.rollback()
             return False
 
-    def get_video(self, video_id: str) -> Optional[Video]:
-        """Get a video by ID."""
-        row = self.conn.execute(
-            "SELECT * FROM videos WHERE video_id = ?", (video_id,)
-        ).fetchone()
+    def get_video(self, video_id: str, include_deleted: bool = False) -> Optional[Video]:
+        """Get a video by ID with channel metadata."""
+        deleted_filter = "" if include_deleted else "AND v.is_deleted = 0"
+        sql = f"""
+            SELECT v.*, c.name as channel_name 
+            FROM videos v
+            LEFT JOIN channels c ON v.channel_id = c.channel_id
+            WHERE v.video_id = ? {deleted_filter}
+        """
+        row = self.conn.execute(sql, (video_id,)).fetchone()
         if row is None:
             return None
         return Video.from_row(row)
@@ -1065,7 +1077,7 @@ class SQLiteStore:
             result.append(Video.from_row(r))
         return result
 
-    def get_videos_by_status(self, status: str | list[str], limit: int = 500) -> list[Video]:
+    def get_videos_by_status(self, status: str | list[str], limit: int = 500, include_deleted: bool = False) -> list[Video]:
         """
         Get all videos with a specific triage_status or list of statuses.
         Hardened implementation supporting list-based filters.
@@ -1076,7 +1088,14 @@ class SQLiteStore:
             status_list = list(status)
 
         placeholders = ",".join(["?"] * len(status_list))
-        query = f"SELECT * FROM videos WHERE triage_status IN ({placeholders}) ORDER BY created_at DESC LIMIT ?"
+        deleted_filter = "" if include_deleted else "AND v.is_deleted = 0"
+        query = f"""
+            SELECT v.*, c.name as channel_name 
+            FROM videos v
+            LEFT JOIN channels c ON v.channel_id = c.channel_id
+            WHERE v.triage_status IN ({placeholders}) {deleted_filter} 
+            ORDER BY v.created_at DESC LIMIT ?
+        """
         
         # Explicit parameters to avoid driver-specific list-binding issues
         flat_params = []
@@ -2858,19 +2877,49 @@ class SQLiteStore:
     # Data Deletion with Cascade
     # -------------------------------------------------------------------
 
-    def delete_video_data(self, video_id: str, reason: str = "") -> dict:
+    def delete_video_data(self, video_id: str, reason: str = "") -> bool:
         """
-        Delete all data associated with a video.
+        Perform a SOFT DELETE on a video. 
+        Sets is_deleted = 1 and records the reason in deletion_history.
+        """
+        try:
+            self.conn.execute(
+                "UPDATE videos SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE video_id = ?",
+                (video_id,)
+            )
+            
+            # Record in history
+            self.conn.execute(
+                """INSERT INTO deletion_history (deletion_type, video_id, reason)
+                   VALUES ('SOFT_DELETE', ?, ?)""",
+                (video_id, reason)
+            )
+            self.conn.commit()
+            logger.info(f"Soft-deleted video: {video_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Soft-delete failed for {video_id}: {e}")
+            return False
+
+    def restore_video(self, video_id: str) -> bool:
+        """Restore a soft-deleted video."""
+        try:
+            self.conn.execute(
+                "UPDATE videos SET is_deleted = 0, updated_at = CURRENT_TIMESTAMP WHERE video_id = ?",
+                (video_id,)
+            )
+            self.conn.commit()
+            logger.info(f"Restored video: {video_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Restore failed for {video_id}: {e}")
+            return False
+
+    def purge_video_data(self, video_id: str, reason: str = "") -> dict:
+        """
+        PERMANENTLY delete all data associated with a video.
         
-        Returns dict with:
-        - chunks_deleted: count
-        - guests_removed: count  
-        - appearances_removed: count
-        - claims_deleted: count
-        - quotes_deleted: count
-        - video_deleted: bool
-        
-        Note: Video WILL be reprocessable after deletion - just upload same URL again
+        Returns dict with deletion statistics.
         """
         deleted = {
             "chunks_deleted": 0,
@@ -2883,7 +2932,7 @@ class SQLiteStore:
         
         try:
             # Get video details before deletion
-            video = self.get_video(video_id)
+            video = self.get_video(video_id, include_deleted=True)
             if not video:
                 return deleted
             
@@ -2941,7 +2990,8 @@ class SQLiteStore:
                 """UPDATE videos 
                    SET checkpoint_stage = 'METADATA_HARVESTED',
                        triage_status = 'DISCOVERED',
-                       triage_reason = 'Re-discoverable after data deletion',
+                       is_deleted = 0,
+                       triage_reason = 'Re-discoverable after permanent purge',
                        updated_at = CURRENT_TIMESTAMP
                    WHERE video_id = ?""",
                 (video_id,),

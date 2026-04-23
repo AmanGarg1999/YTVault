@@ -117,6 +117,7 @@ class TextNormalizer:
         self.ollama_cfg = self.settings["ollama"]
         self.refinement_cfg = self.settings["refinement"]
         self.system_prompt = load_prompt("text_normalizer")
+        self.diarizer_prompt = load_prompt("speaker_diarizer")
 
     def normalize(self, text: str) -> str:
         """Normalize a transcript text through the LLM.
@@ -165,6 +166,51 @@ class TextNormalizer:
         # Merge chunks (overlap handling: use the first chunk's version)
         return self._merge_overlapping_chunks(chunks, overlap)
 
+    def diarize(self, text: str) -> str:
+        """Diarize transcript text to identify speakers.
+        
+        Returns a string with [Speaker Name]: prefixes.
+        """
+        if not text.strip():
+            return ""
+
+        # Use same chunking strategy as normalization but smaller to avoid JSON overflow
+        chunk_size = self.refinement_cfg.get("diarizer_chunk_size", 1000)
+        overlap = self.refinement_cfg.get("diarizer_chunk_overlap", 100)
+
+        words = text.split()
+        if len(words) <= chunk_size:
+            return self._diarize_chunk(text)
+
+        from src.utils.llm_pool import LLMPool, LLMTask, LLMPriority
+        pool = LLMPool()
+        
+        tasks = []
+        start = 0
+        while start < len(words):
+            end = min(start + chunk_size, len(words))
+            chunk_text = " ".join(words[start:end])
+            
+            tasks.append(LLMTask(
+                task_id=f"diarize_{start}",
+                fn=self._diarize_chunk,
+                args=(chunk_text,),
+                priority=LLMPriority.MEDIUM
+            ))
+            start += chunk_size - overlap
+
+        results = pool.submit_batch(tasks)
+        
+        sorted_results = sorted(results, key=lambda r: int(r.task_id.split("_")[1]))
+        chunks = [r.result for r in sorted_results if r.success and r.result]
+        
+        if not chunks:
+            logger.warning("All diarization chunks failed, returning original text.")
+            return text
+
+        # For diarization, we just join chunks with double newline as they contain speaker labels
+        return "\n\n".join(chunks)
+
     def _normalize_chunk(self, text: str) -> str:
         """Normalize a single chunk of text via Ollama."""
         start_time = time.perf_counter()
@@ -186,6 +232,67 @@ class TextNormalizer:
             # Fallback: return original text (better than losing content)
             return text
 
+    def _diarize_chunk(self, text: str) -> str:
+        """Diarize a single chunk of text."""
+        start_time = time.perf_counter()
+        try:
+            response = self._call_ollama_diarize(text)
+            content = response["message"]["content"].strip()
+            
+            # Clean up JSON if LLM added markdown fluff
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].strip()
+
+            try:
+                # Add check for truncation before parsing
+                data = self._robust_json_parse(content)
+                formatted = []
+                for entry in data:
+                    speaker = entry.get("speaker", "Unknown")
+                    dialogue = entry.get("text", "")
+                    formatted.append(f"{speaker}: {dialogue}")
+                
+                result = "\n\n".join(formatted)
+                latency = (time.perf_counter() - start_time) * 1000
+                logger.debug(f"Diarized chunk in {latency:.0f}ms")
+                return result
+            except Exception as e:
+                logger.error(f"Failed to parse diarization JSON: {e}")
+                return text
+
+        except Exception as e:
+            logger.error(f"Diarization chunk failed: {e}")
+            return text
+
+    def _robust_json_parse(self, content: str) -> list:
+        """Attempt to parse JSON, repairing common truncation issues."""
+        try:
+            return _json.loads(content)
+        except (_json.JSONDecodeError, TypeError) as e:
+            # Simple repair strategy for truncated arrays of objects
+            # 1. Close open string if any
+            repaired = content.strip()
+            if repaired.count('"') % 2 != 0:
+                repaired += '"'
+            
+            # 2. Close open object if any
+            if repaired.endswith('"'): # Likely truncated inside a string value
+                if repaired.count('{') > repaired.count('}'):
+                    repaired += '}'
+            
+            # 3. Close open array
+            if repaired.count('[') > repaired.count(']'):
+                repaired += ']'
+            
+            try:
+                logger.info("Attempting to parse repaired diarization JSON")
+                return _json.loads(repaired)
+            except:
+                logger.warning(f"JSON repair failed: {e}")
+                raise e
+
     @with_retry("ollama_inference")
     def _call_ollama_normalize(self, text: str) -> dict:
         """Call Ollama for text normalization with retry."""
@@ -200,6 +307,24 @@ class TextNormalizer:
                 options={
                     "num_predict": self.ollama_cfg.get("normalizer_max_tokens", 2048),
                     "temperature": 0.05,
+                },
+            )
+
+    @with_retry("ollama_inference")
+    def _call_ollama_diarize(self, text: str) -> dict:
+        """Call Ollama for diarization (uses deep_model if available)."""
+        from src.utils.llm_pool import get_llm_semaphore
+        deep_model = self.ollama_cfg.get("deep_model", self.ollama_cfg["normalizer_model"])
+        with get_llm_semaphore():
+            return ollama.chat(
+                model=deep_model,
+                messages=[
+                    {"role": "system", "content": self.diarizer_prompt},
+                    {"role": "user", "content": text},
+                ],
+                options={
+                    "num_predict": 3000, # Increased to avoid truncation
+                    "temperature": 0.1,
                 },
             )
 

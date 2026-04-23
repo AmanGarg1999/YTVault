@@ -1010,7 +1010,7 @@ class PipelineOrchestrator:
             return False
 
     def _stage_normalize(self, video, scan_id: str = None) -> bool:
-        """Stage 6: Normalize transcript text via LLM."""
+        """Stage 6: Normalize transcript text and apply Speaker Diarization via LLM."""
         sid = scan_id or getattr(self, "current_scan_id", None) or "manual_scan"
         try:
             with StageTimer(self.metrics, "TEXT_NORMALIZED", video.video_id, sid):
@@ -1022,11 +1022,19 @@ class PipelineOrchestrator:
                 text_to_normalize = state.get("translated_text") or state.get("raw_text")
                 if not text_to_normalize:
                     return True
-                    
+                
+                # 1. Standard Normalization (Removes fillers, fixes punctuation)
                 cleaned = self.normalizer.normalize(text_to_normalize)
                 if not cleaned:
                     logger.warning(f"Normalization returned empty for {video.video_id}")
                     cleaned = text_to_normalize # Safe fallback
+                
+                # 2. Speaker Diarization (Identifies and labels speakers)
+                # This is critical for accurate claim/quote attribution in the Joe Rogan test
+                logger.info(f"Running speaker diarization for {video.video_id}...")
+                diarized = self.normalizer.diarize(cleaned)
+                if diarized:
+                    cleaned = diarized
                     
                 self.db.save_temp_state(
                     video_id=video.video_id,
@@ -1037,7 +1045,7 @@ class PipelineOrchestrator:
                 )
                 return True
         except Exception as e:
-            logger.error(f"Normalization stage failed for {video.video_id}: {e}")
+            logger.error(f"Normalization/Diarization stage failed for {video.video_id}: {e}")
             return False
 
     def _stage_chunk(self, video, scan_id: str = None) -> bool:

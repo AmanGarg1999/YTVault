@@ -7,7 +7,7 @@ import logging
 import json
 import difflib
 from typing import List, Dict, Set, Optional
-from src.storage.sqlite_store import SQLiteStore
+from src.storage.sqlite_store import SQLiteStore, Guest
 from src.storage.graph_store import GraphStore
 
 logger = logging.getLogger(__name__)
@@ -26,6 +26,17 @@ class EntityResolver:
     def __init__(self, db: SQLiteStore, graph: Optional[GraphStore] = None):
         self.db = db
         self.graph = graph
+
+    def resolve(self, name: str) -> Optional[Guest]:
+        """
+        Deduplicates and canonicalizes a guest name.
+        Used during the live pipeline run to ensure entities are mapped correctly.
+        """
+        if not name or name.strip() in NOISE_GUEST_BLACKLIST:
+            return None
+            
+        # SQLite store handles the complex fuzzy matching/creation logic in upsert_guest
+        return self.db.upsert_guest(name.strip())
 
     def sanitize_expert_network(self) -> Dict[str, int]:
         """

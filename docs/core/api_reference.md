@@ -204,6 +204,18 @@ Central configuration loader for the application.
 | `get_active_scans() → list` | In-progress scans |
 | **Stats** | |
 | `get_pipeline_stats() → dict` | Aggregate dashboard metrics |
+| **Saved Discoveries** | |
+| `save_discovery(query, v_id, snippet, r_type)` | Persist a search result |
+| `get_saved_discoveries(limit) → list` | Fetch recent bookmarked insights |
+| `delete_saved_discovery(id)` | Remove a bookmark |
+| **Pinned Searches** | |
+| `pin_search(query)` | Pin query to command bar |
+| `get_pinned_searches() → list` | Fetch all active pins |
+| `unpin_search(id)` | Remove a pin |
+| **Data Lifecycle** | |
+| `delete_video_data(id, reason) → bool` | Atomic soft-delete (Recycle Bin) |
+| `restore_video(id) → bool` | Restore from soft-delete |
+| `get_deletion_history(limit) → list` | Audit log of purges/trashes |
 
 ---
 
@@ -312,8 +324,11 @@ Central configuration loader for the application.
 | `export_rag_response(response, fmt) → str` | Format RAG answer |
 | `export_guests(fmt) → str` | Export guest registry |
 | `export_pipeline_stats() → str` | Pipeline statistics |
+| `create_vault_snapshot() → str` | Generate full `.kvvault` ZIP archive |
+| `export_mission_package(session_ids) → str` | Export chat sessions for collaboration |
+| `import_mission_package(json_data) → dict` | Validate and import collaborative intel |
 
-Formats: `"markdown"`, `"json"`, `"csv"`
+**Formats:** `"markdown"`, `"json"`, `"csv"`, `"kvvault"`
 
 ---
 

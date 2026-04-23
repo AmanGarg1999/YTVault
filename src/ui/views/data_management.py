@@ -174,15 +174,17 @@ def render_delete_single_section(db):
                     st.write(f"**Status:** {selected_video.triage_status}")
                 
                 if st.button("MOVE TO RECYCLE BIN", type="secondary", use_container_width=True):
-                    def on_confirm():
-                        db.delete_video_data(selected_video.video_id, "Manual management")
+                    def on_confirm_trash_single():
+                        db.delete_video_data(selected_video.video_id, "Manual management cleanup")
+                        st.session_state.last_deleted_id = selected_video.video_id
                         st.toast("Intelligence moved to Recycle Bin.", icon="🗑")
                         st.rerun()
+
                     destructive_action_dialog(
                         title="Move to Recycle Bin",
-                        message=f"Are you sure you want to move '{selected_video.title[:40]}...' to the Recycle Bin?",
-                        on_confirm=on_confirm,
-                        confirm_label="SOFT DELETE"
+                        message=f"Are you sure you want to trash '{selected_video.title[:40]}...'?",
+                        on_confirm=on_confirm_trash_single,
+                        confirm_label="CONFIRM TRASH"
                     )
 
 def render_recycle_bin(db):

@@ -69,18 +69,21 @@ def render(db: SQLiteStore, vs: VectorStore, run_pipeline_background):
                         key="intel_center_command"
                     )
                 with col_btn:
-                    # Contextual Button
-                    is_url = "youtube.com" in query or "youtu.be" in query
+                    # Contextual Button with Robust Validation
+                    import re
+                    yt_pattern = r"^(https?://)?(www\.)?(youtube\.com|youtu\.be)/.+$"
+                    is_url = bool(re.match(yt_pattern, query))
+                    
                     if st.button("Harvest" if is_url else "Search", type="primary", use_container_width=True):
                         if is_url:
                             run_pipeline_background(query, db)
-                            st.toast("Harvest Started", icon="✦")
+                            st.toast("Intelligence Harvest Started", icon="✦")
                         elif query:
                             if "." in query:
                                 # Use session state to ensure toast persists through re-render
                                 st.session_state.harvest_fallback_hint = True
                         elif not query.strip():
-                            st.toast("Input Required", icon="⚠️")
+                            st.toast("Search Query Required", icon="⚠️")
 
             if st.session_state.get("harvest_fallback_hint"):
                 st.toast("Note: YouTube only supported for Harvest. Searching instead.", icon="🔍")
@@ -186,28 +189,40 @@ def render_search_results(db, vs, query):
     
     vector_online = vs is not None and hasattr(vs, 'is_ready') and vs.is_ready()
     
-    # Simplified Hybrid Search logic
+    # Hybrid Search logic with progress indicators
     try:
-        kw_results = db.fulltext_search(query, limit=10)
-        vector_results = vs.search(query, top_k=10) if vector_online else []
-        
-        # Merge for display
-        seen_ids = set()
-        all_results = []
-        
-        # Process Keyword
-        for res in kw_results:
-            v_id = res.get("video_id")
-            if v_id not in seen_ids:
-                all_results.append((v_id, res.get("snippet", ""), "Keyword"))
-                seen_ids.add(v_id)
-        
-        # Process Vector
-        for res in vector_results:
-            v_id = res.get("metadata", {}).get("video_id")
-            if v_id and v_id not in seen_ids:
-                all_results.append((v_id, res.get("text", "")[:200], "Semantic"))
-                seen_ids.add(v_id)
+        with st.status("✦ Hybrid Intelligence Discovery...", expanded=True) as status:
+            st.write("✦ Scanning relational archives (SQL)...")
+            kw_results = db.fulltext_search(query, limit=10)
+            
+            if vector_online:
+                st.write("✦ Activating neural retrieval (Vector DB)...")
+                vector_results = vs.search(query, top_k=10)
+            else:
+                st.write("✦ Neural store offline, skipping semantic pass.")
+                vector_results = []
+            
+            st.write("✦ Synthesizing and ranking results...")
+            
+            # Merge for display
+            seen_ids = set()
+            all_results = []
+            
+            # Process Keyword
+            for res in kw_results:
+                v_id = res.get("video_id")
+                if v_id not in seen_ids:
+                    all_results.append((v_id, res.get("snippet", ""), "Keyword"))
+                    seen_ids.add(v_id)
+            
+            # Process Vector
+            for res in vector_results:
+                v_id = res.get("metadata", {}).get("video_id")
+                if v_id and v_id not in seen_ids:
+                    all_results.append((v_id, res.get("text", "")[:200], "Semantic"))
+                    seen_ids.add(v_id)
+            
+            status.update(label=f"✦ Found {len(all_results)} Relevant Matches", state="complete", expanded=False)
 
         if not all_results:
             info_card("No Results", "Try broader keywords.")

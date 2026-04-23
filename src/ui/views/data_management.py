@@ -133,10 +133,21 @@ def render_explorer_section(db):
                             st.rerun()
                     with col_act2:
                         if st.button("Move to Recycle Bin", type="secondary", use_container_width=True, key="explorer_mark_del"):
-                            if db.delete_video_data(selected_video.video_id, "Manual explorer management"):
-                                st.toast(f"Moved to Trash: {selected_video.video_id[:8]}", icon="🗑")
-                                st.session_state.last_deleted_id = selected_video.video_id
-                                st.rerun()
+                            def on_confirm_trash():
+                                if db.delete_video_data(selected_video.video_id, "Manual explorer management"):
+                                    st.toast(f"Moved to Trash: {selected_video.video_id[:8]}", icon="🗑")
+                                    st.session_state.last_deleted_id = selected_video.video_id
+                                    st.rerun()
+                            
+                            destructive_action_dialog(
+                                title="Move to Recycle Bin",
+                                message=f"Are you sure you want to move '{selected_video.title[:40]}...' to the Recycle Bin?",
+                                on_confirm=on_confirm_trash,
+                                confirm_label="TRASH INTEL"
+                            )
+        
+        st.divider()
+        render_delete_single_section(db)
     else:
         st.info("No indexed sources found in the intelligence vault yet.")
 
@@ -263,9 +274,11 @@ def render_store_health(db):
         # Try to get Vector/Graph counts if possible
         try:
             from src.storage.vector_store import VectorStore
-            vs = VectorStore()
-            vec_count = vs.count_unique_videos()
-        except: vec_count = "N/A"
+            vs_internal = VectorStore()
+            vec_count = vs_internal.count_unique_videos()
+        except Exception as e:
+            logger.warning(f"Vector store count failed: {e}")
+            vec_count = "OFFLINE"
         
         try:
             from src.storage.graph_store import GraphStore
@@ -273,12 +286,18 @@ def render_store_health(db):
             res = gs.run_query("MATCH (v:Video) RETURN count(v) as cnt")
             graph_count = res[0]["cnt"]
             gs.close()
-        except: graph_count = "N/A"
+        except Exception as e:
+            logger.warning(f"Graph store count failed: {e}")
+            graph_count = "OFFLINE"
 
         c1, c2, c3 = st.columns(3)
         c1.metric("SQL (Active)", sql_count)
-        c2.metric("ChromaDB", vec_count)
-        c3.metric("Neo4j", graph_count)
+        c2.metric("ChromaDB", vec_count, help="Vector store connectivity status" if vec_count == "OFFLINE" else None)
+        c3.metric("Neo4j", graph_count, help="Graph engine connectivity status" if graph_count == "OFFLINE" else None)
+        
+        if vec_count == "OFFLINE" or graph_count == "OFFLINE":
+            st.warning("One or more auxiliary stores are offline. Intelligence synthesis may be limited.")
         
     except Exception as e:
         st.error(f"Sync monitor error: {e}")
+        logger.error(f"Sync monitor error: {e}", exc_info=True)

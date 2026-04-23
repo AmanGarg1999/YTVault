@@ -86,7 +86,8 @@ def render_blueprint_card(db, bp):
             steps = json.loads(steps_raw)
         else:
             steps = steps_raw
-    except:
+    except Exception as e:
+        logger.error(f"Failed to parse steps for blueprint {video_id}: {e}")
         steps = []
 
     # Parse progress
@@ -96,7 +97,8 @@ def render_blueprint_card(db, bp):
             progress_state = json.loads(progress_raw)
         else:
             progress_state = progress_raw
-    except:
+    except Exception as e:
+        logger.error(f"Failed to parse progress for blueprint {video_id}: {e}")
         progress_state = {}
 
     with glass_card():

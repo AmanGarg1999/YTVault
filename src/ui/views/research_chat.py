@@ -71,11 +71,16 @@ def process_chat_input(engine, db, session_id, prompt):
         st.markdown(prompt)
     
     with st.chat_message("assistant"):
-        with st.spinner("Synthesizing Vault intelligence..."):
+        with st.status("✦ Synthesizing Vault intelligence...", expanded=True) as status:
+            st.write("✦ Initializing Neural Search...")
+            st.write("✦ Retrieving Context from Triple-Store...")
             response = engine.get_conversation_response(session_id, prompt)
-            st.markdown(response["answer"])
-            if response["citations"]:
-                render_citations_list([engine._cit_to_dict(c) for c in response["citations"]])
+            st.write("✦ Formulating Response...")
+            status.update(label="✦ Synthesis Complete", state="complete", expanded=False)
+            
+        st.markdown(response["answer"])
+        if response["citations"]:
+            render_citations_list([engine._cit_to_dict(c) for c in response["citations"]])
 
 def render_citations_list(citations):
     """Helper to render standardized citation cards."""

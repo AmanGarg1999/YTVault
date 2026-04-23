@@ -192,7 +192,8 @@ def render_thematic_bridges(db: SQLiteStore, run_repair_background=None):
                 elif isinstance(data, list) and len(data) > 0:
                     item = data[0]
                     return item.get("name", str(item)) if isinstance(item, dict) else str(item)
-            except: 
+            except Exception as e: 
+                logger.warning(f"Failed to parse topic JSON '{t[:30]}...': {e}")
                 pass
         # Case 3: Raw string
         return str(t)

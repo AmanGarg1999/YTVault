@@ -76,18 +76,37 @@ def render_pending_section(db):
             b_col1, b_col2, b_col3 = st.columns([1, 1, 2])
             with b_col1:
                 if st.button("Fast-Track Selection", type="primary", use_container_width=True):
-                    for vid_id in list(selected_vids):
-                        db.update_triage_status(vid_id, "ACCEPTED", "batch_accept", 1.0)
-                    st.toast(f"Admitted {len(selected_vids)} intelligence targets.", icon="🚀")
-                    selected_vids.clear()
-                    st.rerun()
+                    def on_confirm_batch_accept():
+                        for vid_id in list(selected_vids):
+                            db.update_triage_status(vid_id, "ACCEPTED", "batch_accept", 1.0)
+                        st.toast(f"Admitted {len(selected_vids)} intelligence targets.", icon="🚀")
+                        selected_vids.clear()
+                        st.rerun()
+                    
+                    from src.ui.components.ui_helpers import destructive_action_dialog
+                    destructive_action_dialog(
+                        title="Bulk Intelligence Admission",
+                        message=f"Are you sure you want to ACCEPT {len(selected_vids)} videos into the knowledge vault?",
+                        on_confirm=on_confirm_batch_accept,
+                        confirm_label="FAST-TRACK ALL"
+                    )
+
             with b_col2:
                 if st.button("Suppress Selection", use_container_width=True):
-                    for vid_id in list(selected_vids):
-                        db.update_triage_status(vid_id, "REJECTED", "batch_reject", 1.0)
-                    st.toast(f"Suppressed {len(selected_vids)} intelligence targets.", icon="✖")
-                    selected_vids.clear()
-                    st.rerun()
+                    def on_confirm_batch_reject():
+                        for vid_id in list(selected_vids):
+                            db.update_triage_status(vid_id, "REJECTED", "batch_reject", 1.0)
+                        st.toast(f"Suppressed {len(selected_vids)} intelligence targets.", icon="✖")
+                        selected_vids.clear()
+                        st.rerun()
+
+                    from src.ui.components.ui_helpers import destructive_action_dialog
+                    destructive_action_dialog(
+                        title="Bulk Intelligence Suppression",
+                        message=f"Are you sure you want to REJECT {len(selected_vids)} videos?",
+                        on_confirm=on_confirm_batch_reject,
+                        confirm_label="SUPPRESS ALL"
+                    )
             with b_col3:
                 if st.button("Reset Selection", type="secondary", use_container_width=True):
                     selected_vids.clear()
@@ -157,18 +176,35 @@ def render_rejected_section(db):
             if cols:
                 with cols[0]:
                     if st.button("Override", key=f"ov_rev_{i}_{video.video_id}", type="primary", use_container_width=True):
-                        db.manual_override_rejected_video(video.video_id)
-                        st.toast("Override Complete: Automated filter bypassed.", icon="🔓")
-                        st.rerun()
+                        def on_confirm_override():
+                            db.manual_override_rejected_video(video.video_id)
+                            st.toast("Override Complete: Automated filter bypassed.", icon="🔓")
+                            st.rerun()
+                        
+                        from src.ui.components.ui_helpers import destructive_action_dialog
+                        destructive_action_dialog(
+                            title="Intelligence Override",
+                            message=f"Bypass automated filters for '{video.title[:40]}...'? This will admit the content to the knowledge vault.",
+                            on_confirm=on_confirm_override,
+                            confirm_label="FORCE ADMIT"
+                        )
                 with cols[1]:
                     if st.button("Move to Trash", key=f"del_rev_{i}_{video.video_id}", use_container_width=True):
-                        if db.delete_video_data(video.video_id, reason="Manual triage rejection"):
-                            st.toast(f"Moved to Trash: {video.title[:20]}...", icon="🗑")
-                            # Add a temporary session state for undo
-                            st.session_state.last_deleted_id = video.video_id
+                        def on_confirm_trash():
+                            if db.delete_video_data(video.video_id, reason="Manual triage rejection"):
+                                st.toast(f"Moved to Trash: {video.title[:20]}...", icon="🗑")
+                                st.session_state.last_deleted_id = video.video_id
+                                st.rerun()
+                            st.toast("Intelligence moved to Recycle Bin.", icon="🗑")
                             st.rerun()
-                        st.toast("Intelligence moved to Recycle Bin.", icon="🗑")
-                        st.rerun()
+                        
+                        from src.ui.components.ui_helpers import destructive_action_dialog
+                        destructive_action_dialog(
+                            title="Move to Recycle Bin",
+                            message=f"Are you sure you want to move '{video.title[:40]}...' to the Recycle Bin?",
+                            on_confirm=on_confirm_trash,
+                            confirm_label="TRASH INTEL"
+                        )
 
     except Exception as e:
         st.error(f"Audit engine error: {e}")

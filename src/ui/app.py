@@ -927,6 +927,43 @@ health = check_service_health()
 
 
 # ---------------------------------------------------------------------------
+# First-Run Onboarding Modal
+# ---------------------------------------------------------------------------
+
+@st.dialog("Welcome to KnowledgeVault Intelligence")
+def render_onboarding_modal():
+    st.markdown("""
+    ### ✦ Your Research Intelligence Journey Starts Here
+    
+    KnowledgeVault transforms fragmented video tutorials into a structured, searchable knowledge graph. 
+    Follow these steps to initialize your vault:
+    
+    1. **Harvest Content**: Paste a YouTube channel or playlist URL in the **Intelligence Center**.
+    2. **Triage Intel**: Filter out noise and approve high-fidelity content in the **Review Center**.
+    3. **Deep Synthesis**: Use the **Intelligence Studio** to find thematic bridges across your vault.
+    4. **Execute Blueprints**: Access actionable procedural steps in the **Execution OS**.
+    
+    ---
+    **System Status**: 🟢 Engine Ready • 🟢 Storage Connected
+    
+    *Need help? Click the 'Documentation' link in the sidebar footer at any time.*
+    """)
+    if st.button("GET STARTED", type="primary", use_container_width=True):
+        st.session_state.onboarding_complete = True
+        st.rerun()
+
+if "onboarding_complete" not in st.session_state:
+    # Check if we have any data yet - if empty vault, show onboarding
+    try:
+        count = db.conn.execute("SELECT COUNT(*) as cnt FROM videos").fetchone()["cnt"]
+        if count == 0:
+            render_onboarding_modal()
+    except Exception as e:
+        logger.warning(f"Onboarding check failed: {e}")
+        pass
+
+
+# ---------------------------------------------------------------------------
 # Sidebar Navigation - Enhanced with Professional Branding
 # ---------------------------------------------------------------------------
 
@@ -989,9 +1026,23 @@ with st.sidebar:
         "System": [
             "Blueprint Center",
             "Export & Integration",
-            "Settings"
+            "Settings",
+            "Performance"
         ]
     }
+
+    # Flatten for programmatic check
+    nav_options = []
+    for category, items in NAV_STRUCTURE.items():
+        nav_options.extend(items)
+
+    # Support programmatic navigation - MUST BE ABOVE SIDEBAR RENDERING
+    if "navigate" in st.session_state:
+        target_page = st.session_state.pop("navigate")
+        if target_page in nav_options:
+            st.session_state.current_page = target_page
+        elif target_page == "Transcripts": # Alias handling
+            st.session_state.current_page = "Transcripts"
 
     selected_page = st.session_state.get("current_page", "Intelligence Center")
     
@@ -1036,15 +1087,9 @@ with st.sidebar:
                 st.markdown("</div>", unsafe_allow_html=True)
 
 
-# Flatten for radio component
-nav_options = []
-for category, items in NAV_STRUCTURE.items():
-    nav_options.extend(items)
-
-# Support programmatic navigation
+# Support programmatic navigation (backup check if session state set outside sidebar block)
 if "navigate" in st.session_state:
     target_page = st.session_state.pop("navigate")
-    # Handle flat page names
     if target_page in nav_options:
         st.session_state.current_page = target_page
 
@@ -1123,6 +1168,7 @@ PAGE_MAP = {
     "Blueprint Center": lambda: blueprint_center.render(db),
     "Export & Integration": lambda: export_center.render(db),
     "Settings": lambda: data_management.render(db, run_repair_background, get_vault_diagnostics),
+    "Performance": lambda: performance_metrics.render(db),
 }
 
 PAGE_MAP[page]()

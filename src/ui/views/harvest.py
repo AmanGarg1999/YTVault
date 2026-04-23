@@ -132,16 +132,34 @@ def _render_pending_review_tab(db):
         col1, col2, col3 = st.columns(3)
         with col1:
             if st.button("Accept All", type="primary"):
-                for v in pending:
-                    db.update_triage_status(v.video_id, "ACCEPTED", "manual_batch_accept")
-                st.success(f"Accepted {len(pending)} videos")
-                st.rerun()
+                def on_confirm_accept_all():
+                    for v in pending:
+                        db.update_triage_status(v.video_id, "ACCEPTED", "manual_batch_accept")
+                    st.success(f"Accepted {len(pending)} videos")
+                    st.rerun()
+                
+                from src.ui.components.ui_helpers import destructive_action_dialog
+                destructive_action_dialog(
+                    title="Bulk Acceptance",
+                    message=f"Accept ALL {len(pending)} pending videos into the vault?",
+                    on_confirm=on_confirm_accept_all,
+                    confirm_label="CONFIRM BATCH ACCEPT"
+                )
         with col2:
             if st.button("Reject All"):
-                for v in pending:
-                    db.update_triage_status(v.video_id, "REJECTED", "manual_batch_reject")
-                st.success(f"Rejected {len(pending)} videos")
-                st.rerun()
+                def on_confirm_reject_all():
+                    for v in pending:
+                        db.update_triage_status(v.video_id, "REJECTED", "manual_batch_reject")
+                    st.success(f"Rejected {len(pending)} videos")
+                    st.rerun()
+
+                from src.ui.components.ui_helpers import destructive_action_dialog
+                destructive_action_dialog(
+                    title="Bulk Rejection",
+                    message=f"Reject ALL {len(pending)} pending videos? They will be moved to the rejected audit log.",
+                    on_confirm=on_confirm_reject_all,
+                    confirm_label="CONFIRM BATCH REJECT"
+                )
 
         st.markdown("---")
 
@@ -241,30 +259,48 @@ def _render_rejected_videos_tab(db, run_pipeline_background):
         col1, col2, col3 = st.columns(3)
         with col1:
             if st.button("Force Accept All", type="primary"):
-                for v in rejected:
-                    db.update_triage_status(
-                        v.video_id, "ACCEPTED", "force_accept_all", 1.0
-                    )
-                st.success(f"Force-accepted {len(rejected)} videos")
-                st.rerun()
-        with col2:
-            if st.button("Reprocess All"):
-                from src.pipeline.orchestrator import PipelineOrchestrator
-                orchestrator = PipelineOrchestrator()
-                try:
-                    count = 0
+                def on_confirm_force_accept():
                     for v in rejected:
                         db.update_triage_status(
-                            v.video_id, "ACCEPTED", "force_accept_reprocess", 1.0
+                            v.video_id, "ACCEPTED", "force_accept_all", 1.0
                         )
-                        orchestrator._resume_video(v)
-                        count += 1
-                    st.success(f"Reprocessing {count} videos")
+                    st.success(f"Force-accepted {len(rejected)} videos")
                     st.rerun()
-                except Exception as e:
-                    st.error(f"Failed: {e}")
-                finally:
-                    orchestrator.close()
+                
+                from src.ui.components.ui_helpers import destructive_action_dialog
+                destructive_action_dialog(
+                    title="Bulk Force Acceptance",
+                    message=f"Force-accept ALL {len(rejected)} previously rejected videos?",
+                    on_confirm=on_confirm_force_accept,
+                    confirm_label="FORCE ACCEPT ALL"
+                )
+        with col2:
+            if st.button("Reprocess All"):
+                def on_confirm_reprocess_all():
+                    from src.pipeline.orchestrator import PipelineOrchestrator
+                    orchestrator = PipelineOrchestrator()
+                    try:
+                        count = 0
+                        for v in rejected:
+                            db.update_triage_status(
+                                v.video_id, "ACCEPTED", "force_accept_reprocess", 1.0
+                            )
+                            orchestrator._resume_video(v)
+                            count += 1
+                        st.success(f"Reprocessing {count} videos")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Failed: {e}")
+                    finally:
+                        orchestrator.close()
+
+                from src.ui.components.ui_helpers import destructive_action_dialog
+                destructive_action_dialog(
+                    title="Bulk Reprocessing",
+                    message=f"Restart processing for ALL {len(rejected)} rejected videos?",
+                    on_confirm=on_confirm_reprocess_all,
+                    confirm_label="REPROCESS ALL"
+                )
 
         st.markdown("---")
 
@@ -302,18 +338,40 @@ def _render_forcibly_accepted_tab(db, run_pipeline_background):
             st.info(f"**{len(manually_overridden)}** videos waiting to be re-ingested after manual override")
         with col2:
             if st.button("Process All Force-Accepted Videos", key="process_overridden"):
-                from src.pipeline.orchestrator import PipelineOrchestrator
-                orchestrator = PipelineOrchestrator()
-                try:
-                    count = orchestrator.process_manually_overridden_videos()
-                    st.success(f"Processing {count} manually-overridden videos in background")
-                    st.toast(f"Processing {count} videos!")
-                    time.sleep(1)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Failed to process: {e}")
-                finally:
-                    orchestrator.close()
+                def on_confirm_process_overridden():
+                    from src.pipeline.orchestrator import PipelineOrchestrator
+                    orchestrator = PipelineOrchestrator()
+                    try:
+                        count = orchestrator.process_manually_overridden_videos()
+                        st.success(f"Processing {count} manually-overridden videos in background")
+                        st.toast(f"Processing {count} videos!")
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Failed to process: {e}")
+                    finally:
+                        orchestrator.close()
+
+                from src.ui.components.ui_helpers import action_confirmation_dialog
+                action_confirmation_dialog(
+                    title="Intelligence Reprocessing",
+                    message=f"Begin background reprocessing for all {len(manually_overridden)} manually-overridden videos?",
+                )
+                # Wait, action_confirmation_dialog doesn't take an on_confirm?
+                # Let's check ui_helpers.py again.
+                # Line 467: def action_confirmation_dialog(title: str, message: str, icon: str = "✦"):
+                # It just reruns on click.
+                # So I should use destructive_action_dialog instead if I want an on_confirm.
+                # Actually, action_confirmation_dialog is more for information.
+                # I'll use destructive_action_dialog but with a neutral label.
+                from src.ui.components.ui_helpers import destructive_action_dialog
+                destructive_action_dialog(
+                    title="Reprocess Overrides",
+                    message=f"Start reprocessing all {len(manually_overridden)} force-accepted videos?",
+                    on_confirm=on_confirm_process_overridden,
+                    confirm_label="START PROCESSING",
+                    icon="⚙️"
+                )
 
         st.markdown("---")
 

@@ -62,17 +62,23 @@ def render(db):
                 from datetime import datetime
                 
                 buf = io.BytesIO()
+                progress_bar = st.progress(0, text="Initializing export bundle...")
                 with zipfile.ZipFile(buf, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
-                    for v in selected_vids:
+                    total = len(selected_vids)
+                    for i, v in enumerate(selected_vids):
+                        progress_bar.progress((i + 1) / total, text=f"Packaging intelligence ({i+1}/{total}): {v.title[:30]}...")
                         content = exporter.export_video_package(v.video_id, fmt=bulk_fmt)
                         ext = "md" if bulk_fmt == "markdown" else "json"
                         zip_file.writestr(f"{v.video_id}.{ext}", content)
                 
+                progress_bar.empty()
+                st.success(f"Vault Export Ready! ({len(selected_vids)} items)")
                 st.download_button(
                     "Download Research Vault (.zip)",
                     buf.getvalue(),
                     f"vault_export_{datetime.now().strftime('%Y%m%d')}.zip",
-                    "application/zip"
+                    "application/zip",
+                    use_container_width=True
                 )
         
         st.markdown("---")
@@ -159,8 +165,12 @@ def render(db):
                 try:
                     from src.utils.obsidian_exporter import ObsidianExporter
                     writer = ObsidianExporter(db, obsidian_path)
-                    with st.spinner("Generating vault structure..."):
+                    with st.status("✦ Neural-to-Markdown Sync...", expanded=True) as status:
+                        st.write("✦ Mapping Knowledge Graph to Obsidian Structure...")
+                        st.write("✦ Generating Linked Notes for Videos & Channels...")
                         writer.export_all()
+                        st.write("✦ Finalizing Bidirectional Backlinks...")
+                        status.update(label="✦ Obsidian Sync Complete", state="complete", expanded=False)
                     st.success(f"Vault exported successfully to: `{obsidian_path}`")
                 except Exception as e:
                     st.error(f"Obsidian sync failed: {e}")

@@ -188,14 +188,12 @@ def inject_custom_css():
     
     .metric-card .value {
         font-family: 'Outfit', sans-serif;
-        font-size: 1.85rem;
+        font-size: clamp(1.2rem, 3vw, 1.85rem);
         font-weight: 800;
         color: var(--text-stellar);
         margin-bottom: 0.15rem;
         letter-spacing: -0.04em;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        word-break: break-word;
         line-height: 1.2;
     }
     

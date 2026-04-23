@@ -76,7 +76,7 @@ def render_command_center(db, run_pipeline_background, run_bulk_pipeline_backgro
                 )
         
         with col_stop:
-            if st.button("Halt Operations", type="secondary", use_container_width=True, key="global_halt"):
+            if st.button("Halt Operations", type="primary", use_container_width=True, key="global_halt"):
                 count = db.set_global_control_state("STOPPED", "Global stop requested")
                 action_confirmation_dialog(
                     "Operations Halted",

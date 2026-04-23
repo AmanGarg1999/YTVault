@@ -32,6 +32,22 @@ def render_research_chat(db: SQLiteStore, vs: VectorStore):
         messages = []
 
     # Display Chat History 
+    if not messages:
+        st.markdown("### Welcome to the Research Chat Hub")
+        st.info("Start by asking a question about your knowledge vault or choose a topic below to begin.")
+        suggestions = [
+            "What are the key insights from recent uploads?", 
+            "Summarize the latest research.", 
+            "What is the most frequently discussed topic?"
+        ]
+        selected_suggestion = discovery_chips(suggestions, key_prefix="welcome_chips")
+        if selected_suggestion:
+            if not session_id:
+                session_id = engine.create_session(selected_suggestion)
+                st.session_state.chat_session_id = session_id
+            process_chat_input(engine, db, session_id, selected_suggestion)
+            st.rerun()
+
     for msg in messages:
         role = "user" if msg.role == "user" else "assistant"
         with st.chat_message(role):

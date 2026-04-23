@@ -32,7 +32,7 @@ def render(db, run_pipeline_background):
         # =====================================================================
         # TAB 1: START NEW SCAN
         # =====================================================================
-        with tab_start:
+        with tab_intake:
             _render_start_scan_tab(db, run_pipeline_background)
 
         # =====================================================================
@@ -50,7 +50,7 @@ def render(db, run_pipeline_background):
         # =====================================================================
         # TAB 4: FORCE-ACCEPTED VIDEOS (MANUAL OVERRIDES)
         # =====================================================================
-        with tab_overrides:
+        with tab_forced:
             _render_forcibly_accepted_tab(db, run_pipeline_background)
 
     except Exception as e:

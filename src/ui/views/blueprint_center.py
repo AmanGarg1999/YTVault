@@ -176,7 +176,7 @@ def render_step(db, video_id, idx, step_data, progress_state):
 
     # UI for the step
     with st.container():
-        c1, c2, c3 = st.columns([0.1, 3, 1])
+        c1, c2, c3 = st.columns([0.1, 3.5, 0.8])
         
         with c1:
             # Checkbox for completion
@@ -221,7 +221,7 @@ def render_step(db, video_id, idx, step_data, progress_state):
                 # Convert timestamp (MM:SS or HH:MM:SS) to seconds
                 seconds = timestamp_to_seconds(timestamp)
                 jump_url = f"https://www.youtube.com/watch?v={video_id}&t={seconds}"
-                st.link_button("🕒 Jump to Step", jump_url, use_container_width=True)
+                st.link_button("🕒 Jump", jump_url, use_container_width=True)
 
     spacer("0.5rem")
 

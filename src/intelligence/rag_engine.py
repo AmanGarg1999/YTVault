@@ -324,7 +324,7 @@ class RAGEngine:
             graph = GraphStore()
 
             # Find videos discussing this topic
-            with graph.driver.session() as session:
+            with graph.get_session() as session:
                 result = session.run(
                     """MATCH (v:Video)-[r:DISCUSSES]->(t:Topic)
                        WHERE t.name CONTAINS $topic
@@ -334,8 +334,6 @@ class RAGEngine:
                     topic=topic.lower().strip(),
                 )
                 topic_videos = {r["video_id"]: r["relevance"] for r in result}
-
-            graph.close()
 
             if not topic_videos:
                 return None

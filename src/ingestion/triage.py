@@ -154,10 +154,11 @@ class TriageEngine:
 
         except Exception as e:
             latency = (time.perf_counter() - start) * 1000
-            logger.error(f"LLM triage failed for {video.video_id}: {e}")
+            err_msg = str(e) if str(e) else repr(e)
+            logger.error(f"LLM triage failed for {video.video_id}: {err_msg}")
             return TriageResult(
                 decision=TriageDecision.PENDING,
-                reason=f"llm_error: {str(e)[:100]}",
+                reason=f"llm_error: {err_msg[:100]}",
                 confidence=0.0,
                 phase="llm",
                 latency_ms=latency,
@@ -210,12 +211,13 @@ class TriageEngine:
             return results
 
         except Exception as e:
-            logger.error(f"Batch LLM triage failed for {len(videos)} videos: {e}")
+            err_msg = str(e) if str(e) else repr(e)
+            logger.error(f"Batch LLM triage failed for {len(videos)} videos: {err_msg}")
             latency = (time.perf_counter() - start) * 1000
             return {
                 v.video_id: TriageResult(
                     decision=TriageDecision.PENDING,
-                    reason=f"llm_batch_error: {str(e)[:50]}",
+                    reason=f"llm_batch_error: {err_msg[:50]}",
                     confidence=0.0,
                     phase="llm",
                     latency_ms=latency / len(videos)

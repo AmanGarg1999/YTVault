@@ -71,7 +71,7 @@ class GraphStore:
             "CREATE INDEX guest_name IF NOT EXISTS FOR (g:Guest) ON (g.canonical_name)",
             "CREATE INDEX topic_name IF NOT EXISTS FOR (t:Topic) ON (t.name)",
         ]
-        with self.driver.session() as session:
+        with self.get_session() as session:
             for stmt in constraints + indexes:
                 try:
                     session.run(stmt)
@@ -82,6 +82,37 @@ class GraphStore:
         """Close the Neo4j driver connection."""
         self.driver.close()
 
+    def _ensure_driver(self):
+        """Ensure the Neo4j driver is initialized and connected."""
+        with self._lock:
+            try:
+                if self.driver:
+                    self.driver.verify_connectivity()
+                    return
+            except Exception:
+                logger.info("GraphStore: Driver closed or unreachable. Re-initializing...")
+            
+            settings = get_settings()
+            cfg = settings["neo4j"]
+            self.driver = GraphDatabase.driver(
+                cfg["uri"],
+                auth=(cfg["user"], cfg["password"]),
+            )
+            # We don't re-init schema here to avoid overhead, 
+            # assuming it was done on first initialization.
+            GraphStore._initialized = True
+
+    def get_session(self):
+        """Get a new Neo4j session, re-initializing driver if necessary."""
+        self._ensure_driver()
+        return self.driver.session()
+
+    def run_query(self, query: str, **params) -> list[dict]:
+        """Execute a raw Cypher query and return results as a list of dicts."""
+        with self.get_session() as session:
+            result = session.run(query, **params)
+            return [dict(record) for record in result]
+
     # -------------------------------------------------------------------
     # Node Operations
     # -------------------------------------------------------------------
@@ -90,7 +121,7 @@ class GraphStore:
     def upsert_channel(self, channel_id: str, name: str, url: str = "",
                        category: str = "") -> None:
         """Create or update a Channel node."""
-        with self.driver.session() as session:
+        with self.get_session() as session:
             session.run(
                 """MERGE (c:Channel {channel_id: $channel_id})
                    SET c.name = $name, c.url = $url, c.category = $category""",
@@ -101,7 +132,7 @@ class GraphStore:
     def upsert_video(self, video_id: str, title: str, channel_id: str,
                      upload_date: str = "", duration: int = 0) -> None:
         """Create or update a Video node and link to its Channel."""
-        with self.driver.session() as session:
+        with self.get_session() as session:
             session.run(
                 """MERGE (v:Video {video_id: $video_id})
                    SET v.title = $title, v.upload_date = $upload_date,
@@ -116,7 +147,7 @@ class GraphStore:
     @with_retry("neo4j_query")
     def upsert_guest(self, canonical_name: str, entity_type: str = "PERSON") -> None:
         """Create or update a Guest node."""
-        with self.driver.session() as session:
+        with self.get_session() as session:
             session.run(
                 """MERGE (g:Guest {canonical_name: $name})
                    SET g.first_seen = COALESCE(g.first_seen, datetime()),
@@ -129,7 +160,7 @@ class GraphStore:
     @with_retry("neo4j_query")
     def upsert_topic(self, topic_name: str) -> None:
         """Create or update a Topic node."""
-        with self.driver.session() as session:
+        with self.get_session() as session:
             session.run(
                 "MERGE (t:Topic {name: $name})",
                 name=topic_name.lower().strip(),
@@ -138,7 +169,7 @@ class GraphStore:
     @with_retry("neo4j_query")
     def batch_upsert_videos(self, videos: list[dict]) -> None:
         """Batch upsert multiple Video nodes and link to their Channels."""
-        with self.driver.session() as session:
+        with self.get_session() as session:
             session.run(
                 """UNWIND $videos AS v_data
                    MERGE (v:Video {video_id: v_data.video_id})
@@ -153,7 +184,7 @@ class GraphStore:
     @with_retry("neo4j_query")
     def batch_link_topics(self, links: list[dict]) -> None:
         """Batch create DISCUSSES relationships between Videos and Topics."""
-        with self.driver.session() as session:
+        with self.get_session() as session:
             session.run(
                 """UNWIND $links AS link
                    MATCH (v:Video {video_id: link.video_id})
@@ -171,7 +202,7 @@ class GraphStore:
     def link_guest_to_video(self, guest_name: str, video_id: str,
                             timestamp: float = 0.0, context: str = "") -> None:
         """Create APPEARED_IN relationship between Guest and Video."""
-        with self.driver.session() as session:
+        with self.get_session() as session:
             session.run(
                 """MATCH (g:Guest {canonical_name: $guest_name})
                    MATCH (v:Video {video_id: $video_id})
@@ -185,7 +216,7 @@ class GraphStore:
     def link_video_to_topic(self, video_id: str, topic_name: str,
                             relevance: float = 1.0) -> None:
         """Create DISCUSSES relationship between Video and Topic."""
-        with self.driver.session() as session:
+        with self.get_session() as session:
             session.run(
                 """MATCH (v:Video {video_id: $video_id})
                    MERGE (t:Topic {name: $topic_name})
@@ -199,7 +230,7 @@ class GraphStore:
     def link_guest_to_topic(self, guest_name: str, topic_name: str,
                             mention_count: int = 1) -> None:
         """Create EXPERT_ON relationship between Guest and Topic."""
-        with self.driver.session() as session:
+        with self.get_session() as session:
             session.run(
                 """MATCH (g:Guest {canonical_name: $guest_name})
                    MERGE (t:Topic {name: $topic_name})
@@ -219,7 +250,7 @@ class GraphStore:
             relationship_type: Optional classification from Epiphany Engine:
                 CONSENSUS, CONTRADICTION, COMPLEMENTARY, EVOLUTION.
         """
-        with self.driver.session() as session:
+        with self.get_session() as session:
             session.run(
                 """MERGE (a:Topic {name: $a})
                    MERGE (b:Topic {name: $b})
@@ -237,7 +268,7 @@ class GraphStore:
     def upsert_claim(self, text: str, speaker: str, video_id: str,
                      topic: str = "", claim_id: str = "") -> None:
         """Create a Claim node with ASSERTED, SOURCED_FROM, and ABOUT relationships."""
-        with self.driver.session() as session:
+        with self.get_session() as session:
             session.run(
                 """MERGE (cl:Claim {text: $text})
                    SET cl.speaker = $speaker, cl.claim_id = $claim_id
@@ -257,7 +288,7 @@ class GraphStore:
                     """MATCH (cl:Claim {text: $text})
                        MERGE (t:Topic {name: $topic})
                        MERGE (cl)-[:ABOUT]->(t)""",
-                    text=claim_text[:500], topic=topic.lower().strip(),
+                    text=text[:1000], topic=topic.lower().strip(),
                 )
 
     @with_retry("neo4j_query")
@@ -267,7 +298,7 @@ class GraphStore:
         Preserves shared Guest and Topic nodes unless they become 
         completely orphaned (handled by separate cleanup if needed).
         """
-        with self.driver.session() as session:
+        with self.get_session() as session:
             # Delete claims sourced from this video AND the video itself
             result = session.run(
                 """MATCH (v:Video {video_id: $video_id})
@@ -288,7 +319,7 @@ class GraphStore:
         
         Used for purging noise entities detected during sanitization.
         """
-        with self.driver.session() as session:
+        with self.get_session() as session:
             result = session.run(
                 "MATCH (g:Guest {canonical_name: $name}) DETACH DELETE g RETURN count(g) as count",
                 name=canonical_name
@@ -304,7 +335,7 @@ class GraphStore:
         """
         if not mergee_names:
             return False
-        with self.driver.session() as session:
+        with self.get_session() as session:
             # 1. Ensure survival node exists
             session.run("MERGE (g:Guest {canonical_name: $name})", name=survivor_name)
             
@@ -341,7 +372,7 @@ class GraphStore:
     @with_retry("neo4j_query")
     def get_guest_appearances(self, guest_name: str) -> list[dict]:
         """Get all videos where a guest appeared, across channels."""
-        with self.driver.session() as session:
+        with self.get_session() as session:
             result = session.run(
                 """MATCH (g:Guest {canonical_name: $name})-[a:APPEARED_IN]->(v:Video)
                           <-[:PUBLISHED]-(c:Channel)
@@ -356,7 +387,7 @@ class GraphStore:
     @with_retry("neo4j_query")
     def get_cross_channel_topics(self, limit: int = 20) -> list[dict]:
         """Find topics discussed across multiple channels."""
-        with self.driver.session() as session:
+        with self.get_session() as session:
             result = session.run(
                 """MATCH (c1:Channel)-[:PUBLISHED]->(v1:Video)-[:DISCUSSES]->(t:Topic)
                           <-[:DISCUSSES]-(v2:Video)<-[:PUBLISHED]-(c2:Channel)
@@ -372,7 +403,7 @@ class GraphStore:
     @with_retry("neo4j_query")
     def get_guest_topic_evolution(self, guest_name: str) -> list[dict]:
         """Track how a guest's discussed topics evolved over time."""
-        with self.driver.session() as session:
+        with self.get_session() as session:
             result = session.run(
                 """MATCH (g:Guest {canonical_name: $name})-[:APPEARED_IN]->(v:Video)
                           -[:DISCUSSES]->(t:Topic)
@@ -393,7 +424,7 @@ class GraphStore:
         stats = {}
         allowed_labels = {"Video", "Channel", "Guest", "Topic"}
         
-        with self.driver.session() as session:
+        with self.get_session() as session:
             for label in allowed_labels:
                 # Defensively validate label even if hardcoded
                 if label not in allowed_labels:

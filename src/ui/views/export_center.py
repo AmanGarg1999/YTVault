@@ -144,7 +144,7 @@ def render(db):
                         result = exporter.import_mission_package(import_data)
                         if result["success"]:
                             st.success(f"Successfully validated Mission Package! Found {result['missions_count']} missions ready for synchronization.")
-                            st.toast("Collaboration Sync: Integrity Verified.", icon="✦")
+                            st.toast("Collaboration Sync: Integrity Verified.", icon="✨")
                         else:
                             st.error(f"Import Failed: {result['error']}")
 

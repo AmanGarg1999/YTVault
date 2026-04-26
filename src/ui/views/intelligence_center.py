@@ -77,7 +77,7 @@ def render(db: SQLiteStore, vs: VectorStore, run_pipeline_background):
                     if st.button("Harvest" if is_url else "Search", type="primary", use_container_width=True):
                         if is_url:
                             run_pipeline_background(query, db)
-                            st.toast("Intelligence Harvest Started", icon="✦")
+                            st.toast("Intelligence Harvest Started", icon="✨")
                         elif query:
                             if "." in query:
                                 # Use session state to ensure toast persists through re-render
@@ -244,6 +244,6 @@ def render_search_results(db, vs, query):
                 with c_act2:
                     if st.button("Save Discovery", key=f"src_save_{v_id}", use_container_width=True):
                         db.save_discovery(query, v_id, snippet, r_type)
-                        st.toast("Intelligence Saved to Vault", icon="🛡")
+                        st.toast("Intelligence Saved to Vault", icon="✅")
     except Exception as e:
         st.error(f"Search failed: {e}")

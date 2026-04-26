@@ -128,7 +128,7 @@ def render_guest_network(db: SQLiteStore):
             resolver = EntityResolver(db, GraphStore())
             if hasattr(resolver, "sanitize_expert_network"):
                 stats = resolver.sanitize_expert_network()
-                st.toast(f"Network Hardened: Purged {stats['purged']}, Merged {stats['merged']} (Synced to Graph)", icon="🛡")
+                st.toast(f"Network Hardened: Purged {stats['purged']}, Merged {stats['merged']} (Synced to Graph)", icon="✅")
             else:
                 st.error("Intelligence Error: Sanitization engine out of sync. Please refresh.")
             st.rerun()

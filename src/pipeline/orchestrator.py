@@ -209,7 +209,6 @@ class PipelineOrchestrator:
         """Release all resources."""
         self.db.close()
         if self._graph_store is not None:
-            self._graph_store.close()
             self._graph_store = None
 
     def __del__(self):
@@ -1245,16 +1244,19 @@ class PipelineOrchestrator:
                 guests = []
                 for name in entity_names:
                     guest = resolver.resolve(name)
-                    guests.append(guest)
-                    graph.upsert_guest(guest.canonical_name)
-                    graph.link_guest_to_video(guest.canonical_name, video.video_id)
+                    if guest:
+                        guests.append(guest)
+                        graph.upsert_guest(guest.canonical_name)
+                        graph.link_guest_to_video(guest.canonical_name, video.video_id)
+                
                 # Create Topic nodes and relationships
                 for topic in topics:
                     graph.link_video_to_topic(
                         video.video_id, topic["name"], topic.get("relevance", 1.0)
                     )
                     for guest in guests:
-                        graph.link_guest_to_topic(guest.canonical_name, topic["name"])
+                        if guest:
+                            graph.link_guest_to_topic(guest.canonical_name, topic["name"])
 
                 # Create RELATED_TO between co-occurring topics
                 topic_names = [t["name"] for t in topics]

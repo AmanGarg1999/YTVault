@@ -64,7 +64,7 @@ def render_explorer_section(db):
             if col_u2.button("UNDO DELETION", type="primary", use_container_width=True, key="undo_dm"):
                 db.restore_video(last_id)
                 st.session_state.last_deleted_id = None
-                st.toast("Intelligence Restored", icon="↩")
+                st.toast("Intelligence Restored", icon="🔄")
                 st.rerun()
             if st.button("Dismiss", key="dismiss_undo_dm"):
                 st.session_state.last_deleted_id = None
@@ -135,7 +135,7 @@ def render_explorer_section(db):
                         if st.button("Move to Recycle Bin", type="secondary", use_container_width=True, key="explorer_mark_del"):
                             def on_confirm_trash():
                                 if db.delete_video_data(selected_video.video_id, "Manual explorer management"):
-                                    st.toast(f"Moved to Trash: {selected_video.video_id[:8]}", icon="🗑")
+                                    st.toast(f"Moved to Trash: {selected_video.video_id[:8]}", icon="🗑️")
                                     st.session_state.last_deleted_id = selected_video.video_id
                                     st.rerun()
                             
@@ -177,7 +177,7 @@ def render_delete_single_section(db):
                     def on_confirm_trash_single():
                         db.delete_video_data(selected_video.video_id, "Manual management cleanup")
                         st.session_state.last_deleted_id = selected_video.video_id
-                        st.toast("Intelligence moved to Recycle Bin.", icon="🗑")
+                        st.toast("Intelligence moved to Recycle Bin.", icon="🗑️")
                         st.rerun()
 
                     destructive_action_dialog(
@@ -287,7 +287,6 @@ def render_store_health(db):
             gs = GraphStore()
             res = gs.run_query("MATCH (v:Video) RETURN count(v) as cnt")
             graph_count = res[0]["cnt"]
-            gs.close()
         except Exception as e:
             logger.warning(f"Graph store count failed: {e}")
             graph_count = "OFFLINE"

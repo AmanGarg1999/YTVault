@@ -96,7 +96,7 @@ def render_pending_section(db):
                     def on_confirm_batch_reject():
                         for vid_id in list(selected_vids):
                             db.update_triage_status(vid_id, "REJECTED", "batch_reject", 1.0)
-                        st.toast(f"Suppressed {len(selected_vids)} intelligence targets.", icon="✖")
+                        st.toast(f"Suppressed {len(selected_vids)} intelligence targets.", icon="❌")
                         selected_vids.clear()
                         st.rerun()
 
@@ -137,7 +137,7 @@ def render_pending_section(db):
                     st.markdown('<div class="danger-btn">', unsafe_allow_html=True)
                     if st.button("Reject", key=f"rej_rev_{i}_{video.video_id}", use_container_width=True):
                         db.update_triage_status(video.video_id, "REJECTED", "manual_reject", 1.0)
-                        st.toast(f"Target Suppressed: {video.title[:30]}...", icon="✖")
+                        st.toast(f"Target Suppressed: {video.title[:30]}...", icon="❌")
                         st.session_state.needs_rerun = True
                     st.markdown('</div>', unsafe_allow_html=True)
                     if st.session_state.get("needs_rerun"):
@@ -165,7 +165,7 @@ def render_rejected_section(db):
                 if col_u2.button("UNDO DELETION", type="primary", use_container_width=True):
                     db.restore_video(last_id)
                     st.session_state.last_deleted_id = None
-                    st.toast("Intelligence Restored", icon="↩")
+                    st.toast("Intelligence Restored", icon="🔄")
                     st.rerun()
                 if st.button("Dismiss", key="dismiss_undo"):
                     st.session_state.last_deleted_id = None
@@ -192,10 +192,10 @@ def render_rejected_section(db):
                     if st.button("Move to Trash", key=f"del_rev_{i}_{video.video_id}", use_container_width=True):
                         def on_confirm_trash():
                             if db.delete_video_data(video.video_id, reason="Manual triage rejection"):
-                                st.toast(f"Moved to Trash: {video.title[:20]}...", icon="🗑")
+                                st.toast(f"Moved to Trash: {video.title[:20]}...", icon="🗑️")
                                 st.session_state.last_deleted_id = video.video_id
                                 st.rerun()
-                            st.toast("Intelligence moved to Recycle Bin.", icon="🗑")
+                            st.toast("Intelligence moved to Recycle Bin.", icon="🗑️")
                             st.rerun()
                         
                         from src.ui.components.ui_helpers import destructive_action_dialog

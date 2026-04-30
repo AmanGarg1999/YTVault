@@ -16,6 +16,31 @@ from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+import time
+from functools import wraps
+
+def with_retry(max_retries: int = 3, initial_delay: float = 0.1):
+    """Decorator to retry SQLite operations on 'database is locked' errors."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_err = None
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except sqlite3.OperationalError as e:
+                    if "database is locked" in str(e).lower():
+                        last_err = e
+                        delay = initial_delay * (2 ** attempt)
+                        logger.warning(f"Database locked in {func.__name__} (attempt {attempt+1}/{max_retries}). Retrying in {delay}s...")
+                        time.sleep(delay)
+                    else:
+                        raise e
+            logger.error(f"Failed {func.__name__} after {max_retries} attempts: {last_err}")
+            raise last_err
+        return wrapper
+    return decorator
+
 
 @dataclass
 class ChatSession:
@@ -930,6 +955,7 @@ class SQLiteStore:
     # Videos
     # -------------------------------------------------------------------
 
+    @with_retry()
     def insert_video(self, video: Video) -> bool:
         """Insert a video, returns True if inserted, False if duplicate."""
         try:
@@ -1444,6 +1470,7 @@ class SQLiteStore:
     # Transcript Chunks
     # -------------------------------------------------------------------
 
+    @with_retry()
     def insert_chunks(self, chunks: list[TranscriptChunk]) -> int:
         """Bulk insert transcript chunks. Returns count inserted."""
         inserted = 0
@@ -2316,6 +2343,7 @@ class SQLiteStore:
     # Video Summaries
     # -------------------------------------------------------------------
 
+    @with_retry()
     def upsert_video_summary(self, summary: VideoSummary) -> None:
         """Insert or update a video summary."""
         self.conn.execute(
@@ -2651,6 +2679,7 @@ class SQLiteStore:
             FROM videos v
             JOIN channels c ON v.channel_id = c.channel_id
             WHERE v.duration_seconds > 0 
+              AND v.is_deleted = 0
               AND v.checkpoint_stage IN ('CHUNK_ANALYZED', 'EMBEDDED', 'GRAPH_SYNCED', 'DONE')
             """
         ).fetchall()
@@ -2795,6 +2824,7 @@ class SQLiteStore:
         rows = self.conn.execute(
             """SELECT video_id, title, view_count, channel_id, upload_date
                FROM videos
+               WHERE is_deleted = 0
                ORDER BY view_count DESC
                LIMIT ?""",
             (limit,),
@@ -2807,7 +2837,7 @@ class SQLiteStore:
             """SELECT video_id, title, view_count, like_count, comment_count,
                       (CAST(like_count + comment_count AS REAL) / NULLIF(view_count, 0)) as engagement_rate
                FROM videos
-               WHERE view_count >= ?
+               WHERE view_count >= ? AND is_deleted = 0
                ORDER BY engagement_rate DESC
                LIMIT ?""",
             (min_views, limit),

@@ -35,19 +35,19 @@ class OllamaEmbeddingFunction:
         """Return the name of this embedding function (callable method for ChromaDB)."""
         return self._name
 
-    def __call__(self, texts: list[str]) -> list[list[float]]:
+    def __call__(self, input: list[str]) -> list[list[float]]:
         """Generate embeddings for a list of texts.
 
         Attempts batch embedding first, falls back to sequential.
         Respects the global LLM concurrency semaphore.
         """
-        if not texts:
+        if not input:
             return []
 
         # Validate input
-        if not isinstance(texts, list):
-            logger.error(f"Invalid input type to __call__: expected list, got {type(texts)}")
-            raise TypeError(f"Expected list of strings, got {type(texts)}")
+        if not isinstance(input, list):
+            logger.error(f"Invalid input type to __call__: expected list, got {type(input)}")
+            raise TypeError(f"Expected list of strings, got {type(input)}")
 
         from src.utils.llm_pool import get_llm_semaphore
         semaphore = get_llm_semaphore()
@@ -58,7 +58,7 @@ class OllamaEmbeddingFunction:
                 if hasattr(ollama_client, "embed"):
                     response = ollama_client.embed(
                         model=self.model_name,
-                        input=texts,
+                        input=input,
                     )
                     embeddings = response.get("embeddings", [])
                     logger.debug(f"Batch embed succeeded: {len(embeddings)} embeddings")
@@ -69,7 +69,7 @@ class OllamaEmbeddingFunction:
             # Sequential fallback for older Ollama versions (.embeddings)
             embeddings = []
             try:
-                for text in texts:
+                for text in input:
                     if hasattr(ollama_client, "embeddings"):
                         response = ollama_client.embeddings(
                             model=self.model_name,
@@ -85,6 +85,15 @@ class OllamaEmbeddingFunction:
 
             logger.debug(f"Sequential embed succeeded: {len(embeddings)} embeddings")
             return embeddings
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """Proxy for __call__ to support LangChain-style interfaces."""
+        return self.__call__(input=texts)
+
+    def embed_query(self, text: str) -> list[float]:
+        """Embed a single query string."""
+        embeddings = self.__call__(input=[text])
+        return embeddings[0] if embeddings else []
 
 
 

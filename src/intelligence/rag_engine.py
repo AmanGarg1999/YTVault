@@ -594,14 +594,11 @@ class RAGEngine:
             response = future.result(timeout=120) 
             return response["message"]["content"]
         except Exception as e:
-            logger.error(f"RAG synthesis failed via PriorityPool: {e}")
-            return f"Error: {e}"
-        except Exception as e:
             logger.error(f"RAG synthesis failed: {e}")
             return (
                 f"Error generating synthesis: {str(e)}. "
                 "The context chunks were retrieved successfully — "
-                "please check that Ollama is running."
+                "please check that Ollama is running and the model is loaded."
             )
 
     # -------------------------------------------------------------------

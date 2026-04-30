@@ -33,6 +33,7 @@ class GraphStore:
     """
     _instance = None
     _initialized = False
+    _schema_initialized = False
     _lock = threading.RLock()
 
     def __new__(cls):
@@ -54,8 +55,9 @@ class GraphStore:
                 cfg["uri"],
                 auth=(cfg["user"], cfg["password"]),
             )
-            self._init_schema()
             GraphStore._initialized = True
+            if self._init_schema():
+                GraphStore._schema_initialized = True
             logger.info(f"GraphStore connected: {cfg['uri']}")
 
     def _init_schema(self):
@@ -71,12 +73,15 @@ class GraphStore:
             "CREATE INDEX guest_name IF NOT EXISTS FOR (g:Guest) ON (g.canonical_name)",
             "CREATE INDEX topic_name IF NOT EXISTS FOR (t:Topic) ON (t.name)",
         ]
+        success = True
         with self.get_session() as session:
             for stmt in constraints + indexes:
                 try:
                     session.run(stmt)
                 except Exception as e:
-                    logger.debug(f"Schema statement skipped: {e}")
+                    logger.warning(f"Schema statement failed: {e}")
+                    success = False
+        return success
 
     def close(self):
         """Close the Neo4j driver connection."""
@@ -98,9 +103,12 @@ class GraphStore:
                 cfg["uri"],
                 auth=(cfg["user"], cfg["password"]),
             )
-            # We don't re-init schema here to avoid overhead, 
-            # assuming it was done on first initialization.
             GraphStore._initialized = True
+            
+            # Re-attempt schema if it was never successful
+            if not GraphStore._schema_initialized:
+                if self._init_schema():
+                    GraphStore._schema_initialized = True
 
     def get_session(self):
         """Get a new Neo4j session, re-initializing driver if necessary."""

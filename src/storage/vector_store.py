@@ -35,19 +35,19 @@ class OllamaEmbeddingFunction:
         """Return the name of this embedding function (callable method for ChromaDB)."""
         return self._name
 
-    def __call__(self, input: list[str]) -> list[list[float]]:
+    def __call__(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for a list of texts.
 
         Attempts batch embedding first, falls back to sequential.
         Respects the global LLM concurrency semaphore.
         """
-        if not input:
+        if not texts:
             return []
 
         # Validate input
-        if not isinstance(input, list):
-            logger.error(f"Invalid input type to __call__: expected list, got {type(input)}")
-            raise TypeError(f"Expected list of strings, got {type(input)}")
+        if not isinstance(texts, list):
+            logger.error(f"Invalid input type to __call__: expected list, got {type(texts)}")
+            raise TypeError(f"Expected list of strings, got {type(texts)}")
 
         from src.utils.llm_pool import get_llm_semaphore
         semaphore = get_llm_semaphore()
@@ -58,7 +58,7 @@ class OllamaEmbeddingFunction:
                 if hasattr(ollama_client, "embed"):
                     response = ollama_client.embed(
                         model=self.model_name,
-                        input=input,
+                        input=texts,
                     )
                     embeddings = response.get("embeddings", [])
                     logger.debug(f"Batch embed succeeded: {len(embeddings)} embeddings")
@@ -69,7 +69,7 @@ class OllamaEmbeddingFunction:
             # Sequential fallback for older Ollama versions (.embeddings)
             embeddings = []
             try:
-                for text in input:
+                for text in texts:
                     if hasattr(ollama_client, "embeddings"):
                         response = ollama_client.embeddings(
                             model=self.model_name,
@@ -522,22 +522,15 @@ class VectorStore:
         from the formatted chunk IDs ({video_id}__chunk_{index}).
         """
         try:
-            # Fetch only IDs, excluding metadatas and documents for memory efficiency
-            results = self.collection.get(include=[])
-            if not results or not results.get("ids"):
+            # OPTIMIZATION: Instead of fetching all IDs, we fetch unique video_ids 
+            # directly from the metadatas if ChromaDB supports it, or use SQLite.
+            # Since ChromaDB doesn't support SELECT DISTINCT, we fetch only the 'video_id' 
+            # field from metadatas which is often smaller than the full ID string.
+            results = self.collection.get(include=['metadatas'])
+            if not results or not results.get("metadatas"):
                 return 0
             
-            # Extract video_id prefix from formatted chunk IDs
-            # Pattern: video_id__chunk_0001
-            unique_vids = set()
-            for cid in results["ids"]:
-                if "__chunk_" in cid:
-                    unique_vids.add(cid.split("__chunk_")[0])
-                else:
-                    # Fallback for non-standard IDs (if any)
-                    unique_vids.add(cid)
-            
-            unique_vids.discard("")
+            unique_vids = {m.get("video_id") for m in results["metadatas"] if m.get("video_id")}
             return len(unique_vids)
         except Exception as e:
             logger.warning(f"count_unique_videos failed: {e}")

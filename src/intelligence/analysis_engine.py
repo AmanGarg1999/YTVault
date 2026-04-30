@@ -316,11 +316,29 @@ class AnalysisEngine:
                 options={"temperature": 0.1}
             )
             content = response["message"]["content"]
-            # Basic JSON extraction
-            import re
-            json_match = re.search(r'\{.*\}', content, re.DOTALL)
-            if json_match:
-                return json.loads(json_match.group())
+            
+            # Robust JSON extraction
+            import json
+            def parse_json(text):
+                try:
+                    # Clean markdown
+                    if "```json" in text:
+                        text = text.split("```json")[1].split("```")[0]
+                    elif "```" in text:
+                        text = text.split("```")[1].split("```")[0]
+                    
+                    # Find boundaries
+                    start = text.find("{")
+                    end = text.rfind("}")
+                    if start != -1 and end != -1:
+                        return json.loads(text[start:end+1])
+                    return None
+                except Exception:
+                    return None
+
+            data = parse_json(content)
+            if data:
+                return data
             return {"stance": "Inconclusive", "consensus_score": 0.5}
         except Exception as e:
             logger.error(f"Stance analysis failed: {e}")

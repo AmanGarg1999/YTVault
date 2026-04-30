@@ -2724,6 +2724,12 @@ class SQLiteStore:
     # Pipeline Statistics
     # -------------------------------------------------------------------
 
+    def get_indexed_video_count(self) -> int:
+        """Return the number of unique videos that have at least one indexed chunk."""
+        query = "SELECT COUNT(DISTINCT video_id) FROM transcript_chunks"
+        result = self.conn.execute(query).fetchone()
+        return result[0] if result else 0
+
     def get_pipeline_stats(self) -> dict:
         """Get aggregate pipeline statistics for the dashboard with intuitive mapping."""
         stats = {}

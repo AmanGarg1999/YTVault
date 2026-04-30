@@ -150,8 +150,8 @@ def render(db, vs):
                                     })
 
                         # Step 13: Enrich with raw transcript data for verification
-                        raw_chunks = self._enrich_citations_with_raw(citations)
-                        full_transcripts = self._get_full_transcripts_for_citations(citations)
+                        raw_chunks = response.raw_chunks
+                        full_transcripts = response.full_transcripts
 
                         # Phase 1 Enhancement: Intelligence Dashboard
                         if hasattr(response, "quantitative_metrics") and response.quantitative_metrics:

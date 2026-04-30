@@ -137,8 +137,8 @@ class GraphStore:
                 """MERGE (v:Video {video_id: $video_id})
                    SET v.title = $title, v.upload_date = $upload_date,
                        v.duration = $duration
-                   WITH v
-                   MATCH (c:Channel {channel_id: $channel_id})
+                    WITH v
+                   MERGE (c:Channel {channel_id: $channel_id})
                    MERGE (c)-[:PUBLISHED]->(v)""",
                 video_id=video_id, title=title, channel_id=channel_id,
                 upload_date=upload_date, duration=duration,
@@ -175,8 +175,8 @@ class GraphStore:
                    MERGE (v:Video {video_id: v_data.video_id})
                    SET v.title = v_data.title, v.upload_date = v_data.upload_date,
                        v.duration = v_data.duration
-                   WITH v, v_data
-                   MATCH (c:Channel {channel_id: v_data.channel_id})
+                    WITH v, v_data
+                   MERGE (c:Channel {channel_id: v_data.channel_id})
                    MERGE (c)-[:PUBLISHED]->(v)""",
                 videos=videos,
             )
@@ -339,9 +339,27 @@ class GraphStore:
             # 1. Ensure survival node exists
             session.run("MERGE (g:Guest {canonical_name: $name})", name=survivor_name)
             
-            # 2. Use APOC to merge nodes and relationships
+            # 2. Use APOC to merge nodes and relationships (if available)
             # properties: 'overwrite' means take from the last node in the list (the survivor)
             # mention_count: 'combine' sums them up
+            
+            # Check for APOC availability
+            apoc_check = session.run("RETURN apoc.version() as version").single()
+            if not apoc_check:
+                logger.warning("APOC plugin not detected. Falling back to basic property merge.")
+                # Fallback: simple property copy for mention_count sum
+                session.run(
+                    """
+                    MATCH (s:Guest {canonical_name: $survivor})
+                    MATCH (m:Guest) WHERE m.canonical_name IN $mergees AND m <> s
+                    SET s.mention_count = s.mention_count + m.mention_count
+                    WITH s, m
+                    DETACH DELETE m
+                    """,
+                    survivor=survivor_name, mergees=mergee_names
+                )
+                return True
+
             session.run(
                 """
                 MATCH (s:Guest {canonical_name: $survivor})

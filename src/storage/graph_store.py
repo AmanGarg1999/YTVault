@@ -33,7 +33,7 @@ class GraphStore:
     """
     _instance = None
     _initialized = False
-    _lock = threading.Lock()
+    _lock = threading.RLock()
 
     def __new__(cls):
         """Singleton pattern: return existing instance if available (thread-safe)."""
@@ -436,3 +436,63 @@ class GraphStore:
             stats["total_relationships"] = result.single()["count"]
 
         return stats
+
+    @with_retry("neo4j_query")
+    def get_central_authorities(self, label: str = "Channel", limit: int = 10) -> list[dict]:
+        """Find central nodes (Channels/Guests) using degree centrality as a proxy for authority."""
+        with self.get_session() as session:
+            # For Channels, we measure incoming 'PUBLISHED' and outgoing 'DISCUSSES' via Videos
+            if label == "Channel":
+                result = session.run(
+                    """MATCH (c:Channel)
+                       OPTIONAL MATCH (c)-[:PUBLISHED]->(v:Video)-[:DISCUSSES]->(t:Topic)
+                       RETURN c.name AS name, count(DISTINCT t) AS authority_score
+                       ORDER BY authority_score DESC
+                       LIMIT $limit""",
+                    limit=limit
+                )
+            else:
+                result = session.run(
+                    f"""MATCH (n:{label})
+                       OPTIONAL MATCH (n)-[r]-()
+                       RETURN COALESCE(n.name, n.canonical_name) AS name, count(r) AS authority_score
+                       ORDER BY authority_score DESC
+                       LIMIT $limit""",
+                    limit=limit
+                )
+            return [dict(record) for record in result]
+
+    @with_retry("neo4j_query")
+    def get_echo_chambers(self, limit: int = 5) -> list[dict]:
+        """Identify clusters of channels that share a high volume of topics."""
+        with self.get_session() as session:
+            result = session.run(
+                """MATCH (c1:Channel)-[:PUBLISHED]->(v1:Video)-[:DISCUSSES]->(t:Topic)
+                          <-[:DISCUSSES]-(v2:Video)<-[:PUBLISHED]-(c2:Channel)
+                   WHERE id(c1) < id(c2)
+                   WITH c1, c2, count(DISTINCT t) AS shared_topics
+                   WHERE shared_topics > 2
+                   RETURN c1.name AS channel_a, c2.name AS channel_b, shared_topics
+                   ORDER BY shared_topics DESC
+                   LIMIT $limit""",
+                limit=limit
+            )
+            return [dict(record) for record in result]
+
+    @with_retry("neo4j_query")
+    def get_contradiction_matrix(self, topic: str = "") -> list[dict]:
+        """Find topics with CONTRADICTION relationship types between sources."""
+        query = """
+            MATCH (t1:Topic)-[r:RELATED_TO {relationship_type: 'CONTRADICTION'}]-(t2:Topic)
+            RETURN t1.name AS topic_a, t2.name AS topic_b, r.co_occurrence AS intensity
+            ORDER BY intensity DESC
+        """
+        if topic:
+            query = """
+                MATCH (t1:Topic {name: $topic})-[r:RELATED_TO {relationship_type: 'CONTRADICTION'}]-(t2:Topic)
+                RETURN t1.name AS topic_a, t2.name AS topic_b, r.co_occurrence AS intensity
+                ORDER BY intensity DESC
+            """
+        with self.get_session() as session:
+            result = session.run(query, topic=topic.lower().strip())
+            return [dict(record) for record in result]

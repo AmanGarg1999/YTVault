@@ -1496,6 +1496,40 @@ class SQLiteStore:
                     names.add(name)
         return sorted(names)
 
+    def get_topic_mentions_over_time(self, topic_name: str) -> list[dict]:
+        """Get timeline data for a specific topic across all videos.
+        Returns a list of dicts with upload_date and mention_count.
+        """
+        # We use LIKE on topics_json for simplicity. 
+        # For precision, we parse the JSON in Python.
+        rows = self.conn.execute(
+            """SELECT v.upload_date, v.video_id, c.topics_json
+               FROM transcript_chunks c
+               JOIN videos v ON c.video_id = v.video_id
+               WHERE c.topics_json LIKE ?
+               ORDER BY v.upload_date ASC""",
+            (f"%{topic_name}%",)
+        ).fetchall()
+        
+        timeline = {}
+        for r in rows:
+            upload_date = r["upload_date"]
+            if not upload_date:
+                continue
+            
+            # Ensure the topic is actually in the JSON (prevent substring false positives)
+            try:
+                topics = json.loads(r["topics_json"])
+                has_topic = any(topic_name.lower() in t.get("name", "").lower() for t in topics)
+                if has_topic:
+                    # Keep it at a daily or monthly granularity, let's just use the upload_date string
+                    date_key = upload_date.split("T")[0] if "T" in upload_date else upload_date.split(" ")[0]
+                    timeline[date_key] = timeline.get(date_key, 0) + 1
+            except Exception:
+                continue
+                
+        # Convert to sorted list of dicts
+        return [{"date": k, "mentions": v} for k, v in sorted(timeline.items())]
     # -------------------------------------------------------------------
     # Claims
     # -------------------------------------------------------------------

@@ -18,6 +18,9 @@ from typing import Optional
 
 from src.intelligence.rag_engine import RAGResponse
 from src.storage.sqlite_store import SQLiteStore
+from src.storage.graph_store import GraphStore
+from src.intelligence.analysis_engine import AnalysisEngine
+from src.intelligence.dossier_engine import DossierEngine
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +30,36 @@ class ExportEngine:
 
     def __init__(self, db: SQLiteStore):
         self.db = db
+        # Lazy initialization for expensive analytical components
+        self._graph = None
+        self._analysis = None
+        self._dossier = None
+
+    @property
+    def graph(self):
+        if self._graph is None:
+            self._graph = GraphStore()
+        return self._graph
+
+    @property
+    def analysis(self):
+        if self._analysis is None:
+            self._analysis = AnalysisEngine(self.db)
+        return self._analysis
+
+    @property
+    def dossier(self):
+        if self._dossier is None:
+            self._dossier = DossierEngine(self.db, self.graph, self.analysis)
+        return self._dossier
+
+    def export_topic_dossier(self, topic: str, fmt: str = "markdown") -> str:
+        """Generate and export a full intelligence dossier for a topic."""
+        data = self.dossier.generate_topic_dossier(topic)
+        if fmt == "json":
+            return json.dumps(data, indent=2)
+        else:
+            return self.dossier.format_dossier_markdown(data)
 
     def create_vault_snapshot(self) -> str:
         """

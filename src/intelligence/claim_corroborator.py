@@ -64,8 +64,9 @@ class ClaimCorroborator:
             claim = Claim(**dict(row))
             
             # 2. Search for existing clusters (claims with cluster_id)
+            query_embeddings = self.vs.embedding_fn([claim.claim_text])
             results = self.vs.claims_collection.query(
-                query_texts=[claim.claim_text],
+                query_embeddings=query_embeddings,
                 n_results=5,
                 where={"video_id": {"$ne": claim.video_id}}  # Don't match self or same video
             )

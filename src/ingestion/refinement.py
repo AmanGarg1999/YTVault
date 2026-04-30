@@ -41,42 +41,52 @@ def fetch_sponsor_segments(video_id: str) -> list[SponsorSegment]:
     settings = get_settings()
     cfg = settings["refinement"]
 
-    try:
-        response = requests.get(
-            cfg["sponsorblock_api"],
-            params={
-                "videoID": video_id,
-                "categories": _json.dumps(cfg["sponsorblock_categories"]),
-            },
-            timeout=cfg.get("sponsorblock_timeout", 5),
-        )
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(
+                cfg["sponsorblock_api"],
+                params={
+                    "videoID": video_id,
+                    "categories": _json.dumps(cfg["sponsorblock_categories"]),
+                },
+                timeout=cfg.get("sponsorblock_timeout", 15), # Increased default timeout to 15s
+            )
 
-        if response.status_code == 200:
-            segments = [
-                SponsorSegment(
-                    start=s["segment"][0],
-                    end=s["segment"][1],
-                    category=s["category"],
+            if response.status_code == 200:
+                segments = [
+                    SponsorSegment(
+                        start=s["segment"][0],
+                        end=s["segment"][1],
+                        category=s["category"],
+                    )
+                    for s in response.json()
+                ]
+                logger.info(
+                    f"SponsorBlock: {len(segments)} segments for {video_id} "
+                    f"({', '.join(s.category for s in segments)})"
                 )
-                for s in response.json()
-            ]
-            logger.info(
-                f"SponsorBlock: {len(segments)} segments for {video_id} "
-                f"({', '.join(s.category for s in segments)})"
-            )
-            return segments
-        elif response.status_code == 404:
-            logger.debug(f"SponsorBlock: no data for {video_id}")
-            return []
-        else:
-            logger.warning(
-                f"SponsorBlock API returned {response.status_code} for {video_id}"
-            )
+                return segments
+            elif response.status_code == 404:
+                logger.debug(f"SponsorBlock: no data for {video_id}")
+                return []
+            else:
+                logger.warning(
+                    f"SponsorBlock API returned {response.status_code} for {video_id}"
+                )
+                return []
+
+        except requests.exceptions.ReadTimeout as e:
+            logger.warning(f"SponsorBlock API timeout (attempt {attempt+1}/{max_retries}) for {video_id}: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)  # Exponential backoff
+            else:
+                return []
+        except requests.RequestException as e:
+            logger.warning(f"SponsorBlock API error for {video_id}: {e}")
             return []
 
-    except requests.RequestException as e:
-        logger.warning(f"SponsorBlock API error for {video_id}: {e}")
-        return []
+    return []
 
 
 def strip_sponsored_segments(
@@ -245,6 +255,16 @@ class TextNormalizer:
             elif "```" in content:
                 content = content.split("```")[1].strip()
 
+            if not content.strip():
+                raise ValueError("LLM returned empty diarization content")
+
+            # Extract JSON block if surrounded by conversational text
+            if not (content.startswith("[") or content.startswith("{")):
+                import re
+                match = re.search(r'\[.*\]', content, re.DOTALL)
+                if match:
+                    content = match.group(0)
+
             try:
                 # Add check for truncation before parsing
                 data = self._robust_json_parse(content)
@@ -268,6 +288,18 @@ class TextNormalizer:
 
     def _robust_json_parse(self, content: str) -> list:
         """Attempt to parse JSON, repairing common truncation issues."""
+        import re
+        content = content.strip()
+        if not content:
+            raise ValueError("Empty JSON string")
+
+        # Clean trailing commas before closing braces/brackets
+        content = re.sub(r',\s*\]', ']', content)
+        content = re.sub(r',\s*\}', '}', content)
+
+        # Attempt to fix concatenated objects like }{ or } { missing commas
+        content = re.sub(r'\}\s*\{', '}, {', content)
+
         try:
             return _json.loads(content)
         except (_json.JSONDecodeError, TypeError) as e:
@@ -278,7 +310,7 @@ class TextNormalizer:
                 repaired += '"'
             
             # 2. Close open object if any
-            if repaired.endswith('"'): # Likely truncated inside a string value
+            if repaired.endswith('"') or repaired.endswith(' '): # Likely truncated inside a string value
                 if repaired.count('{') > repaired.count('}'):
                     repaired += '}'
             

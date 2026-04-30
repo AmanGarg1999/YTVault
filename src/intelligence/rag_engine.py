@@ -12,10 +12,11 @@ V3 Upgrades:
     - Topic-aware Neo4j graph enrichment
 """
 
+import json
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 import ollama as ollama_api
 
@@ -23,6 +24,7 @@ from src.config import get_settings, load_prompt
 from src.intelligence.query_parser import QueryPlan, parse_query
 from src.storage.sqlite_store import SQLiteStore
 from src.storage.vector_store import VectorStore
+from src.intelligence.quantitative_context import QuantitativeContextAssembler, QuantitativeMetrics
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +114,9 @@ class RAGResponse:
     full_transcripts: list[dict] = field(default_factory=list)  # Full video transcripts
     verification_notes: str = ""  # How to verify answer
 
+    # Phase 1: Quantitative Intelligence
+    quantitative_metrics: Optional[QuantitativeMetrics] = None
+
 
 class RAGEngine:
     """Retrieval-Augmented Generation engine for research queries.
@@ -128,13 +133,20 @@ class RAGEngine:
         9. Calculate confidence score and return
     """
 
-    def __init__(self, db: SQLiteStore, vector_store: VectorStore):
+    def __init__(self, db: SQLiteStore, vector_store: VectorStore, graph: Optional[Any] = None):
         self.db = db
         self.vector_store = vector_store
+        self.graph = graph
         self.settings = get_settings()
         self.rag_cfg = self.settings["rag"]
         self.ollama_cfg = self.settings["ollama"]
         self.system_prompt = load_prompt("rag_synthesizer")
+
+        # Phase 1: Quantitative Context Assembler
+        if not self.graph:
+            from src.storage.graph_store import GraphStore
+            self.graph = GraphStore()
+        self.quant_assembler = QuantitativeContextAssembler(self.db, self.graph)
 
     def query(
         self,
@@ -200,22 +212,48 @@ class RAGEngine:
         if self.rag_cfg.get("chunk_overlap_dedup", True):
             fused_results = self._deduplicate_chunks(fused_results)
 
-        # Step 6: Take top-K after dedup
+        # Step 6: Heatmap Reranking (Phase 1 Enhancement)
+        heatmap_boost_applied = False
+        try:
+            fused_results, heatmap_boost_applied = self._rerank_by_heatmap(fused_results)
+        except Exception as e:
+            logger.debug(f"Heatmap reranking failed: {e}")
+
+        # Step 7: Take top-K after dedup and rerank
         fused_results = fused_results[:rerank_k]
 
-        # Step 7: Enrich with video metadata
+        # Step 8: Enrich with video metadata
         distances = [r.get("distance", 0.0) for r in fused_results]
         citations = self._build_citations(fused_results)
 
-        # Step 8: Build LLM context (with conversation history if present)
+        # Step 9: Assemble Quantitative Context (Phase 1 Enhancement)
+        quant_context = ""
+        quant_metrics = None
+        if plan.topic_filter or citations:
+            # Prefer explicit topic filter, fallback to dominant citation topic
+            target_topic = plan.topic_filter
+            if not target_topic and citations:
+                # Simple majority vote on topics
+                topics = [c.topic for c in citations if c.topic]
+                if topics:
+                    target_topic = max(set(topics), key=topics.count)
+            
+            if target_topic:
+                quant_context, quant_metrics = self.quant_assembler.assemble(
+                    search_text, target_topic
+                )
+                if quant_metrics:
+                    quant_metrics.heatmap_boost_applied = heatmap_boost_applied
+
+        # Step 10: Build LLM context (with conversation history and quantitative metrics)
         context_prompt = self._build_context(
-            search_text, citations, conversation_history
+            search_text, citations, conversation_history, quant_context
         )
 
-        # Step 9: LLM synthesis
+        # Step 11: LLM synthesis
         answer = self._synthesize(context_prompt)
 
-        # Step 10: Confidence scoring
+        # Step 12: Confidence scoring
         query_terms = [w for w in search_text.split() if len(w) > 2]
         confidence = ConfidenceScore()
         confidence.compute(citations, query_terms, distances)
@@ -227,7 +265,6 @@ class RAGEngine:
             f"(confidence: {confidence.overall:.2f})"
         )
 
-        # Step 11: Enrich with raw transcript data for verification (Week 1 enhancement)
         raw_chunks = self._enrich_citations_with_raw(citations)
         full_transcripts = self._get_full_transcripts_for_citations(citations)
 
@@ -243,8 +280,63 @@ class RAGEngine:
             raw_chunks=raw_chunks,
             full_transcripts=full_transcripts,
             verification_notes=f"Answer based on {len(citations)} citations from {len(set(c.channel_name for c in citations))} channels. "
-                              f"View raw chunks and full transcripts to verify.",
+                              f"View quantitative metrics and raw data to verify.",
+            quantitative_metrics=quant_metrics
         )
+
+    # -------------------------------------------------------------------
+    # Heatmap Reranking (Phase 1)
+    # -------------------------------------------------------------------
+
+    def _rerank_by_heatmap(self, results: list[dict]) -> tuple[list[dict], bool]:
+        """Boost relevance of chunks that overlap with heatmap peaks."""
+        boosted = False
+        if not results:
+            return results, boosted
+
+        # Extract unique video IDs
+        video_ids = list(set(r["metadata"].get("video_id") for r in results))
+        
+        # Load heatmaps for these videos
+        heatmaps = {}
+        for vid in video_ids:
+            video = self.db.get_video(vid)
+            if video and video.heatmap_json:
+                try:
+                    heatmaps[vid] = json.loads(video.heatmap_json)
+                except Exception:
+                    pass
+
+        if not heatmaps:
+            return results, boosted
+
+        # Apply boost to chunks that overlap with high-engagement segments
+        for r in results:
+            vid = r["metadata"].get("video_id")
+            if vid not in heatmaps:
+                continue
+
+            chunk_start = r["metadata"].get("start_timestamp", 0.0)
+            chunk_end = r["metadata"].get("end_timestamp", 0.0)
+            
+            # Find max heatmap score for this chunk
+            max_engagement = 0.0
+            for entry in heatmaps[vid]:
+                score = entry.get("score") if "score" in entry else entry.get("value", 0)
+                start = entry.get("start_time") if "start_time" in entry else entry.get("start", 0)
+                end = entry.get("end_time") if "end_time" in entry else entry.get("end", 0)
+                
+                if (start <= chunk_end and end >= chunk_start):
+                    max_engagement = max(max_engagement, score)
+            
+            # If engagement > 0.7, boost distance (reduce it to improve rank)
+            if max_engagement >= 0.7:
+                # Reduce distance by 20% if it's a high-interest moment
+                r["distance"] = r.get("distance", 0.5) * 0.8
+                boosted = True
+
+        # Re-sort after boosting
+        return sorted(results, key=lambda x: x.get("distance", 1.0)), boosted
 
     # -------------------------------------------------------------------
     # Hybrid Search: Reciprocal Rank Fusion
@@ -436,6 +528,7 @@ class RAGEngine:
         question: str,
         citations: list[Citation],
         conversation_history: Optional[str] = None,
+        quantitative_context: str = "",
     ) -> str:
         """Build the full prompt with context chunks, history, and question."""
         parts = []
@@ -445,6 +538,10 @@ class RAGEngine:
             parts.append(
                 f"PREVIOUS CONVERSATION:\n{conversation_history}\n\n---\n"
             )
+
+        # Quantitative context (Phase 1 Enhancement)
+        if quantitative_context:
+            parts.append(f"{quantitative_context}\n\n---\n")
 
         # Context chunks
         context_parts = []

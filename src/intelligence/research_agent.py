@@ -37,8 +37,6 @@ class ResearchAgent:
         summary_results = []
         if self.vs.is_ready():
             summary_results = self.vs.search_summaries(query, top_k=5)
-        else:
-            logger.warning("VectorStore not ready, skipping semantic search for summaries.")
             
         rag_response = self.rag.query(query)
         
@@ -63,20 +61,9 @@ class ResearchAgent:
         if rag_response.citations:
             context_blocks.append("### GRANULAR EVIDENCE (Transcript Chunks)")
             for cit in rag_response.citations:
-                # Fetch full video stats for metadata expansion
-                video = self.db.get_video(cit.video_id)
-                stats_info = ""
-                
-                # Fetch sentiment for this chunk if available
-                sentiment = self.db.execute(
-                    "SELECT label, score FROM video_sentiment WHERE video_id = ? AND (chunk_id = ? OR chunk_id IS NULL) LIMIT 1",
-                    (cit.video_id, cit.chunk_id)
-                ).fetchone()
-                sentiment_info = f", Sentiment: {sentiment['label']} ({sentiment['score']:.2f})" if sentiment else ""
-                
                 context_blocks.append(
                     f"SOURCE: {cit.video_title} (Channel: {cit.channel_name}, "
-                    f"Timestamp: {cit.timestamp_str}{stats_info}{sentiment_info})\n"
+                    f"Timestamp: {cit.timestamp_str})\n"
                     f"EXCERPT: {cit.text_excerpt}"
                 )
                 if not any(s["video_id"] == cit.video_id for s in sources):
@@ -84,8 +71,21 @@ class ResearchAgent:
 
         context_str = "\n\n---\n\n".join(context_blocks)
 
+        # Phase 2: Inject Quantitative Intelligence into Synthesis
+        quant_info = ""
+        if hasattr(rag_response, "quantitative_metrics") and rag_response.quantitative_metrics:
+            qm = rag_response.quantitative_metrics
+            quant_info = f"""
+### QUANTITATIVE INTELLIGENCE SUMMARY
+- Consensus Score: {qm.claim_stats.get('avg_corroboration', 1.0):.2f}
+- Vault Coverage: {qm.topic_coverage.get('video_count', 0)} videos from {qm.topic_coverage.get('channel_count', 0)} channels.
+- Sentiment: {qm.sentiment_distribution.get('label', 'Neutral')} ({qm.sentiment_distribution.get('average_sentiment', 0.0):.2f})
+- Top Authorities: {', '.join([a['name'] for a in qm.authorities[:3]])}
+- Trend: {qm.claim_stats.get('trend', 'stable')}
+"""
+
         # 3. Synthesis Phase: LLM Writing
-        paper_content = self._synthesize_paper(query, context_str)
+        paper_content = self._synthesize_paper(query, context_str, quant_info)
         
         if not paper_content:
             return None
@@ -107,11 +107,6 @@ class ResearchAgent:
         
         if bib_items:
             paper_content += "\n".join(bib_items)
-        else:
-            for i, res in enumerate(summary_results):
-                video = self.db.get_video(res["video_id"])
-                if video:
-                    paper_content += f"- {video.title} ([Video Link]({video.url}))\n"
 
         # 6. Persistence
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -126,16 +121,17 @@ class ResearchAgent:
             query=query,
             title=f"Research: {query}",
             file_path=str(file_path),
-            summary=paper_content[:500] + "...",
+            summary=paper_content[:2000] + "...",
             sources_json=json.dumps(sources)
         )
         
         self.db.insert_research_report(report)
         return report
 
-    def _synthesize_paper(self, query: str, context: str) -> Optional[str]:
+    def _synthesize_paper(self, query: str, context: str, quant_info: str = "") -> Optional[str]:
         """Synthesize the collected context into a structured white paper."""
-        prompt = self.synthesis_prompt.format(query=query, context=context)
+        full_context = f"{quant_info}\n\n{context}"
+        prompt = self.synthesis_prompt.format(query=query, context=full_context)
         
         from src.utils.llm_pool import get_llm_semaphore
         try:

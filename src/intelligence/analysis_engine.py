@@ -7,9 +7,102 @@ audience interest correlation, and trend detection.
 import json
 import logging
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.storage.sqlite_store import SQLiteStore
 
 logger = logging.getLogger(__name__)
+
+class CoverageAnalyzer:
+    """Analyzes vault coverage and identifies knowledge gaps."""
+
+    def __init__(self, db: "SQLiteStore"):
+        self.db = db
+
+    def analyze_topic_coverage(self, topic: str) -> dict:
+        """Detailed analysis of how well a topic is covered in the vault."""
+        stats = self.db.get_topic_coverage_stats(topic)
+        if stats.get("video_count", 0) == 0:
+            return {"score": 0.0, "status": "No coverage", "gaps": ["No data in vault"]}
+
+        # Compute depth score (0-1)
+        # Factors: video count, channel count, temporal spread
+        video_weight = min(stats.get("video_count", 0) / 10, 1.0) * 0.4
+        channel_weight = min(stats.get("channel_count", 0) / 3, 1.0) * 0.4
+        
+        # Temporal spread
+        temporal_weight = 0.0
+        if stats.get("earliest") and stats.get("latest"):
+            try:
+                from datetime import datetime
+                d1 = datetime.strptime(stats["earliest"], "%Y-%m-%d")
+                d2 = datetime.strptime(stats["latest"], "%Y-%m-%d")
+                days = (d2 - d1).days
+                temporal_weight = min(days / 365, 1.0) * 0.2
+            except Exception:
+                pass
+        
+        score = video_weight + channel_weight + temporal_weight
+        
+        gaps = []
+        if stats.get("channel_count", 0) < 2:
+            gaps.append("Single-source risk: Perspectives may be biased")
+        if stats.get("video_count", 0) < 5:
+            gaps.append("Thin evidence: Low citation density")
+        
+        # Check for staleness
+        if stats.get("latest"):
+            try:
+                from datetime import datetime
+                latest = datetime.strptime(stats["latest"], "%Y-%m-%d")
+                days_old = (datetime.now() - latest).days
+                if days_old > 180:
+                    gaps.append(f"Stale data: Last update was {days_old} days ago")
+            except Exception:
+                pass
+
+        return {
+            "score": score,
+            "status": "High" if score > 0.8 else ("Moderate" if score > 0.4 else "Thin"),
+            "gaps": gaps,
+            "video_count": stats.get("video_count", 0),
+            "channel_count": stats.get("channel_count", 0)
+        }
+
+    def get_vault_gaps(self) -> list[dict]:
+        """Identifies topics with weak coverage across the entire vault."""
+        # Get all topics and their stats
+        # For simplicity, we'll use consolidated topics if the method exists
+        if hasattr(self.db, "get_consolidated_topics"):
+            topics = self.db.get_consolidated_topics()
+            gaps = []
+            for t in topics:
+                name = t.get("topic")
+                if not name: continue
+                analysis = self.analyze_topic_coverage(name)
+                if analysis["score"] < 0.6:
+                    gaps.append({
+                        "topic": name,
+                        "score": analysis["score"],
+                        "primary_gap": analysis["gaps"][0] if analysis["gaps"] else "General thinness",
+                        "status": analysis["status"]
+                    })
+            return sorted(gaps, key=lambda x: x["score"])
+        return []
+
+    def suggest_ingestions(self, topic: str) -> list[str]:
+        """Suggests channel categories or keywords to ingest based on gaps."""
+        analysis = self.analyze_topic_coverage(topic)
+        suggestions = []
+        if any("Single-source risk" in g for g in analysis["gaps"]):
+            suggestions.append(f"Search for 2-3 additional channels discussing {topic}")
+        if any("Stale data" in g for g in analysis["gaps"]):
+            suggestions.append(f"Search for recent videos on {topic} from the last 30 days")
+        if analysis["score"] < 0.3:
+            suggestions.append(f"Broaden research by ingesting subtopics of {topic}")
+        return suggestions
+
 
 @dataclass
 class HeatmapPeak:
@@ -146,53 +239,44 @@ class AnalysisEngine:
             return []
 
     def get_topic_velocity(self, topic_name: str) -> dict:
-        """Calculate the 'velocity' of a topic (mentions over time)."""
+        """Calculate mention velocity and trend for a topic."""
         mentions = self.db.get_topic_mentions_over_time(topic_name)
         if not mentions:
-            return {"velocity": 0.0, "timeline": []}
+            return {"velocity": 0.0, "trend": "stable", "timeline": []}
             
-        # Basic velocity: mentions in the last 30 days vs total average
-        # (This is a simplified implementation)
+        # Compute trend (last 3 entries vs prior)
+        total_mentions = sum(m["mentions"] for m in mentions)
+        if len(mentions) >= 4:
+            recent = sum(m["mentions"] for m in mentions[-2:])
+            prior = sum(m["mentions"] for m in mentions[:-2]) / (len(mentions) - 2)
+            
+            recent_avg = recent / 2
+            velocity = recent_avg / prior if prior > 0 else 1.0
+            
+            if velocity > 1.5:
+                trend = "rising"
+            elif velocity < 0.5:
+                trend = "declining"
+            else:
+                trend = "stable"
+        else:
+            velocity = 1.0
+            trend = "stable"
+
         return {
-            "total_mentions": sum(m["mentions"] for m in mentions),
-            "timeline": mentions,
-            "unique_dates": len(mentions)
+            "velocity": velocity,
+            "trend": trend,
+            "total_mentions": total_mentions,
+            "timeline": mentions
         }
 
     def get_topic_sentiment_summary(self, topic_name: str) -> dict:
-        """Aggregate sentiment scores for a topic across all videos."""
-        # For now, we'll fetch claims related to the topic and their associated video sentiment
-        # This is an approximation.
+        """Aggregate sentiment scores for a topic using new storage layer methods."""
         try:
-            # We'd ideally have a way to get sentiment directly for a topic.
-            # For now, let's look at claims about this topic.
-            # Note: We need a search_claims_by_topic in SQLiteStore or similar.
-            # Let's assume we can filter locally for now if not too many.
-            all_claims = self.db.search_claims(topic_name, limit=100)
-            
-            sentiments = []
-            for claim in all_claims:
-                if topic_name.lower() in claim.topic.lower():
-                    # Fetch video sentiment for the video where this claim appears
-                    v_sentiment = self.db.execute(
-                        "SELECT score FROM video_sentiment WHERE video_id = ? LIMIT 1",
-                        (claim.video_id,)
-                    ).fetchone()
-                    if v_sentiment:
-                        sentiments.append(v_sentiment["score"])
-            
-            if not sentiments:
-                return {"average_sentiment": 0.0, "count": 0}
-                
-            avg = sum(sentiments) / len(sentiments)
-            return {
-                "average_sentiment": avg,
-                "label": "Positive" if avg > 0.2 else ("Negative" if avg < -0.2 else "Neutral"),
-                "count": len(sentiments)
-            }
+            return self.db.get_topic_sentiment_aggregated(topic_name)
         except Exception as e:
             logger.error(f"Failed to get topic sentiment for {topic_name}: {e}")
-            return {"average_sentiment": 0.0, "count": 0}
+            return {"average_sentiment": 0.0, "label": "Neutral", "distribution": {}, "total_count": 0}
 
     def analyze_claim_stances(self, topic: str, claims: list) -> dict:
         """Use LLM to determine the overall 'stance' or 'narrative' on a topic based on claims."""

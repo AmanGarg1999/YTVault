@@ -16,22 +16,9 @@ import ollama
 from src.config import get_settings, load_prompt
 from src.intelligence.rag_engine import RAGEngine
 from src.storage.graph_store import GraphStore
-from src.storage.sqlite_store import SQLiteStore
+from src.storage.sqlite_store import SQLiteStore, InsightBriefing
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class InsightBriefing:
-    """A generated daily/weekly briefing of new connections."""
-    topic: str
-    channels_involved: list[str]
-    summary_markdown: str
-    confidence_score: float
-    relationship_type: str = ""  # CONSENSUS, CONTRADICTION, COMPLEMENTARY, EVOLUTION
-    key_differences: list[str] = field(default_factory=list)
-    key_agreements: list[str] = field(default_factory=list)
-    insight: str = ""
 
 
 class EpiphanyEngine:
@@ -87,7 +74,7 @@ class EpiphanyEngine:
                     relationship_type=rel_type,
                 )
 
-                briefings.append(InsightBriefing(
+                briefing = InsightBriefing(
                     topic=topic_name,
                     channels_involved=[c1, c2],
                     summary_markdown=classification.get("summary", response.answer),
@@ -96,11 +83,23 @@ class EpiphanyEngine:
                     key_differences=classification.get("key_differences", []),
                     key_agreements=classification.get("key_agreements", []),
                     insight=classification.get("insight", ""),
-                ))
-            except Exception as e:
-                logger.error(f"Failed to generate insight for '{topic_name}': {e}")
+                )
+                
+                # Step 4: Persist to SQLite (Phase 2 Enhancement)
+                try:
+                    self.db.insert_insight_briefing(briefing)
+                except Exception as e:
+                    logger.error(f"Failed to persist briefing: {e}")
 
+                briefings.append(briefing)
+            except Exception as e:
+                logger.error(f"Failed to generate insight for {topic_name}: {e}")
+        
         return briefings
+
+    def get_latest_briefings(self, limit: int = 5) -> list[InsightBriefing]:
+        """Fetch historical briefings from the vault."""
+        return self.db.get_insight_briefings(limit)
 
     def _classify_relationship(
         self, topic: str, channel_1: str, channel_2: str, rag_answer: str

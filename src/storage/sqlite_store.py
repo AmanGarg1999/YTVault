@@ -261,13 +261,26 @@ class MonitoredChannel:
 
 
 @dataclass
+class InsightBriefing:
+    """A generated daily/weekly briefing of new connections."""
+    topic: str
+    channels_involved: list[str]
+    summary_markdown: str
+    confidence_score: float
+    relationship_type: str = ""  # CONSENSUS, CONTRADICTION, COMPLEMENTARY, EVOLUTION
+    key_differences: list[str] = field(default_factory=list)
+    key_agreements: list[str] = field(default_factory=list)
+    insight: str = ""
+    briefing_id: Optional[int] = None
+    created_at: str = ""
+
+
+@dataclass
 class WeeklyBrief:
     brief_id: int = 0
     channel_ids_json: str = "[]"
     content: str = ""
     created_at: str = ""
-
-
 
 
 @dataclass
@@ -738,6 +751,22 @@ SCHEMA_MIGRATIONS = [
             query       TEXT NOT NULL UNIQUE,
             created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+    """),
+    # Version 31: Epiphany Engine Insight Briefing Persistence
+    (31, """
+        CREATE TABLE IF NOT EXISTS insight_briefings (
+            briefing_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            topic TEXT NOT NULL,
+            channels_involved TEXT,
+            summary_markdown TEXT,
+            confidence_score REAL,
+            relationship_type TEXT,
+            key_differences TEXT,
+            key_agreements TEXT,
+            insight TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_briefings_topic ON insight_briefings(topic);
     """),
 ]
 
@@ -1806,6 +1835,48 @@ class SQLiteStore:
         )
         self.conn.commit()
         return cursor.lastrowid
+
+    def insert_insight_briefing(self, briefing: InsightBriefing) -> int:
+        """Persist an automated cross-channel insight briefing."""
+        return self.execute(
+            """INSERT INTO insight_briefings 
+               (topic, channels_involved, summary_markdown, confidence_score, 
+                relationship_type, key_differences, key_agreements, insight)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                briefing.topic,
+                json.dumps(briefing.channels_involved),
+                briefing.summary_markdown,
+                briefing.confidence_score,
+                briefing.relationship_type,
+                json.dumps(briefing.key_differences),
+                json.dumps(briefing.key_agreements),
+                briefing.insight
+            )
+        ).lastrowid
+
+    def get_insight_briefings(self, limit: int = 10) -> list[InsightBriefing]:
+        """Fetch latest automated insight briefings."""
+        rows = self.execute(
+            "SELECT * FROM insight_briefings ORDER BY created_at DESC LIMIT ?",
+            (limit,)
+        ).fetchall()
+        
+        briefings = []
+        for row in rows:
+            d = dict(row)
+            d["channels_involved"] = json.loads(d.pop("channels_involved", "[]") or "[]")
+            d["key_differences"] = json.loads(d.pop("key_differences", "[]") or "[]")
+            d["key_agreements"] = json.loads(d.pop("key_agreements", "[]") or "[]")
+            briefings.append(InsightBriefing(**d))
+        return briefings
+
+    def search_research_reports(self, query: str, limit: int = 10) -> list[ResearchReport]:
+        """Get recent research reports."""
+        rows = self.conn.execute(
+            "SELECT * FROM research_reports ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
 
     def get_research_reports(self, limit: int = 20) -> list[ResearchReport]:
         """Get recent research reports."""
@@ -3207,6 +3278,74 @@ class SQLiteStore:
             (limit,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    # -------------------------------------------------------------------
+    # Quantitative Analysis Methods (Phase 1)
+    # -------------------------------------------------------------------
+
+    def get_claim_corroboration_stats(self, topic: str) -> dict:
+        """Aggregates claim clusters for a topic."""
+        query = """
+        SELECT 
+            COUNT(DISTINCT c.cluster_id) as claim_clusters,
+            COUNT(DISTINCT c.claim_id) as total_claims,
+            COUNT(DISTINCT v.channel_id) as unique_channels,
+            AVG(c.corroboration_count) as avg_corroboration
+        FROM claims c
+        JOIN videos v ON c.video_id = v.video_id
+        WHERE c.topic LIKE ? AND c.cluster_id IS NOT NULL
+        """
+        row = self.conn.execute(query, (f"%{topic}%",)).fetchone()
+        return dict(row) if row and row["total_claims"] > 0 else {
+            "claim_clusters": 0, "total_claims": 0, 
+            "unique_channels": 0, "avg_corroboration": 1.0
+        }
+
+    def get_topic_coverage_stats(self, topic: str) -> dict:
+        """Vault-wide coverage for a topic."""
+        query = """
+        SELECT 
+            COUNT(DISTINCT v.video_id) as video_count,
+            COUNT(DISTINCT v.channel_id) as channel_count,
+            MIN(v.upload_date) as earliest,
+            MAX(v.upload_date) as latest,
+            SUM(v.duration_seconds) as total_seconds
+        FROM transcript_chunks tc
+        JOIN videos v ON tc.video_id = v.video_id
+        WHERE tc.topics_json LIKE ?
+        """
+        row = self.conn.execute(query, (f"%{topic}%",)).fetchone()
+        return dict(row) if row and row["video_count"] > 0 else {
+            "video_count": 0, "channel_count": 0, 
+            "earliest": None, "latest": None, "total_seconds": 0
+        }
+
+    def get_topic_sentiment_aggregated(self, topic: str) -> dict:
+        """Aggregated sentiment for a topic using chunk-level sentiment."""
+        query = """
+        SELECT 
+            vs.label, COUNT(*) as count, AVG(vs.score) as avg_score
+        FROM video_sentiment vs
+        JOIN transcript_chunks tc ON vs.chunk_id = tc.chunk_id
+        WHERE tc.topics_json LIKE ?
+        GROUP BY vs.label
+        """
+        rows = self.conn.execute(query, (f"%{topic}%",)).fetchall()
+        results = [dict(r) for r in rows]
+        
+        total_count = sum(r["count"] for r in results)
+        if total_count == 0:
+            return {"average_sentiment": 0.0, "label": "Neutral", "distribution": {}}
+            
+        avg_score = sum(r["avg_score"] * r["count"] for r in results) / total_count
+        distribution = {r["label"]: r["count"] for r in results}
+        
+        return {
+            "average_sentiment": avg_score,
+            "label": "Positive" if avg_score > 0.2 else ("Negative" if avg_score < -0.2 else "Neutral"),
+            "distribution": distribution,
+            "total_count": total_count
+        }
 
     # -------------------------------------------------------------------
     # Research Chat Methods

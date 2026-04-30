@@ -340,13 +340,29 @@ class ExportEngine:
 
     def _rag_to_markdown(self, r: RAGResponse) -> str:
         lines = [
-            f"# Research Query\n",
-            f"**Question:** {r.query}\n",
+            f"# 📜 Research Intelligence Report\n",
+            f"**Query:** {r.query}\n",
             f"---\n",
-            f"## Answer\n\n{r.answer}\n",
-            f"---\n",
-            f"## Sources ({r.total_chunks_used} citations)\n",
+            f"## 🤖 Synthesized Intelligence\n\n{r.answer}\n",
         ]
+        
+        # Phase 1/2 Enhancement: Quantitative Intelligence in Export
+        if hasattr(r, "quantitative_metrics") and r.quantitative_metrics:
+            qm = r.quantitative_metrics
+            lines.extend([
+                f"---\n",
+                f"## 📊 Quantitative Context\n",
+                f"- **Consensus Score:** `{qm.claim_stats.get('avg_corroboration', 1.0):.2f}`",
+                f"- **Vault Coverage:** {qm.topic_coverage.get('video_count', 0)} videos across {qm.topic_coverage.get('channel_count', 0)} channels",
+                f"- **Sentiment:** {qm.sentiment_distribution.get('label', 'Neutral')} ({qm.sentiment_distribution.get('average_sentiment', 0.0):.2f})",
+                f"- **Top Authorities:** {', '.join([a['name'] for a in qm.authorities[:3]])}",
+                "\n"
+            ])
+
+        lines.extend([
+            f"---\n",
+            f"## 📑 Source Citations ({r.total_chunks_used})\n",
+        ])
         for c in r.citations:
             lines.append(
                 f"- **[{c.source_id}]** [{c.video_title}]({c.youtube_link}) "
@@ -359,7 +375,7 @@ class ExportEngine:
         return "\n".join(lines)
 
     def _rag_to_json(self, r: RAGResponse) -> str:
-        return json.dumps({
+        data = {
             "query": r.query,
             "answer": r.answer,
             "citations": [
@@ -369,17 +385,20 @@ class ExportEngine:
                     "video_title": c.video_title,
                     "channel": c.channel_name,
                     "timestamp": c.timestamp_str,
-                    "youtube_link": c.youtube_link,
-                    "excerpt": c.text_excerpt,
-                }
-                for c in r.citations
+                    "link": c.youtube_link
+                } for c in r.citations
             ],
-            "metrics": {
+            "metadata": {
                 "latency_ms": r.latency_ms,
                 "chunks_retrieved": r.total_chunks_retrieved,
-                "chunks_used": r.total_chunks_used,
-            },
-        }, indent=2)
+                "confidence": r.confidence.overall if r.confidence else 0.0
+            }
+        }
+        if hasattr(r, "quantitative_metrics") and r.quantitative_metrics:
+            from dataclasses import asdict
+            data["quantitative_metrics"] = asdict(r.quantitative_metrics)
+            
+        return json.dumps(data, indent=2)
 
     def _rag_to_csv(self, r: RAGResponse) -> str:
         output = io.StringIO()

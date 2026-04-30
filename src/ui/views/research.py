@@ -149,6 +149,55 @@ def render(db, vs):
                                         "topic": getattr(c, "topic", ""),
                                     })
 
+                        # Step 13: Enrich with raw transcript data for verification
+                        raw_chunks = self._enrich_citations_with_raw(citations)
+                        full_transcripts = self._get_full_transcripts_for_citations(citations)
+
+                        # Phase 1 Enhancement: Intelligence Dashboard
+                        if hasattr(response, "quantitative_metrics") and response.quantitative_metrics:
+                            qm = response.quantitative_metrics
+                            st.divider()
+                            section_header("Intelligence Dashboard")
+                            
+                            if qm.echo_chamber_warning:
+                                st.warning(qm.echo_chamber_warning)
+                                
+                            cols = st.columns(4)
+                            with cols[0]:
+                                st.metric("Consensus Score", f"{qm.claim_stats.get('avg_corroboration', 1.0):.1f}")
+                                st.caption(f"{qm.claim_stats.get('claim_clusters', 0)} clusters found")
+                            with cols[1]:
+                                st.metric("Vault Coverage", f"{qm.topic_coverage.get('video_count', 0)} videos")
+                                st.caption(f"Across {qm.topic_coverage.get('channel_count', 0)} channels")
+                            with cols[2]:
+                                st.metric("Sentiment", qm.sentiment_distribution.get('label', 'Neutral'))
+                                st.caption(f"Score: {qm.sentiment_distribution.get('average_sentiment', 0.0):.2f}")
+                            with cols[3]:
+                                if qm.heatmap_boost_applied:
+                                    st.metric("Engagement", "High")
+                                    st.caption("Heatmap-boosted results")
+                                else:
+                                    st.metric("Engagement", "Normal")
+                                    st.caption("Standard retrieval")
+                            
+                            c1, c2 = st.columns(2)
+                            with c1:
+                                if qm.authorities:
+                                    st.write("**Top Authorities:**")
+                                    for auth in qm.authorities[:3]:
+                                        st.markdown(f"- {auth['name']} ({auth['type']})")
+                            with c2:
+                                if qm.taxonomy_context.get('parent_topic'):
+                                    st.write("**Taxonomy:**")
+                                    st.markdown(f"Parent: `{qm.taxonomy_context['parent_topic']}`")
+                                    if qm.taxonomy_context.get('subtopics'):
+                                        st.markdown(f"Subtopics: {', '.join(qm.taxonomy_context['subtopics'][:3])}")
+
+                            if qm.contradictions:
+                                with st.expander(f"⚠️ Contradictions Detected ({len(qm.contradictions)})"):
+                                    for cont in qm.contradictions:
+                                        st.markdown(f"- **{cont['topic_a']}** vs **{cont['topic_b']}** (Intensity: {cont['intensity']})")
+
                         # Week 1 Enhancement: Show raw data for verification
                         st.divider()
                         section_header("Verification Layer")

@@ -496,3 +496,42 @@ class GraphStore:
         with self.get_session() as session:
             result = session.run(query, topic=topic.lower().strip())
             return [dict(record) for record in result]
+
+    @with_retry("neo4j_query")
+    def get_topic_authorities(self, topic: str, limit: int = 5) -> list[dict]:
+        """Channels + guests ranked by topic authority."""
+        query = """
+        MATCH (c:Channel)-[:PUBLISHED]->(v:Video)-[r:DISCUSSES]->(t:Topic)
+        WHERE t.name CONTAINS $topic
+        RETURN c.name AS name, 'Channel' AS type, 
+               count(v) AS mentions, avg(r.relevance) AS avg_relevance
+        ORDER BY mentions DESC LIMIT $limit
+        UNION
+        MATCH (g:Guest)-[:EXPERT_ON]->(t:Topic)
+        WHERE t.name CONTAINS $topic
+        RETURN g.canonical_name AS name, 'Guest' AS type,
+               g.mention_count AS mentions, 0.0 AS avg_relevance
+        ORDER BY mentions DESC LIMIT $limit
+        """
+        with self.get_session() as session:
+            result = session.run(query, topic=topic.lower().strip(), limit=limit)
+            return [dict(record) for record in result]
+
+    @with_retry("neo4j_query")
+    def get_topic_taxonomy_context(self, topic: str) -> dict:
+        """Leverages the SUBTOPIC_OF edges to find parents and children."""
+        query = """
+        MATCH (t:Topic) WHERE t.name = $topic
+        OPTIONAL MATCH (t)-[:SUBTOPIC_OF]->(parent:Topic)
+        OPTIONAL MATCH (child:Topic)-[:SUBTOPIC_OF]->(t)
+        RETURN parent.name AS parent_topic, collect(child.name) AS subtopics
+        """
+        with self.get_session() as session:
+            result = session.run(query, topic=topic.lower().strip())
+            record = result.single()
+            if record:
+                return {
+                    "parent_topic": record["parent_topic"],
+                    "subtopics": record["subtopics"]
+                }
+            return {"parent_topic": None, "subtopics": []}

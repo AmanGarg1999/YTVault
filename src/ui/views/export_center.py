@@ -149,6 +149,39 @@ def render(db):
                             st.error(f"Import Failed: {result['error']}")
 
         st.markdown("---")
+        section_header("Intelligence Dossiers", icon="📂")
+        st.info("Generate high-fidelity, 8-section research dossiers on any topic in your vault.")
+        
+        topics = db.get_consolidated_topics()
+        if topics:
+            col_d1, col_d2 = st.columns([3, 1])
+            with col_d1:
+                selected_topic = st.selectbox(
+                    "Select Research Topic", 
+                    topics, 
+                    format_func=lambda t: f"{t['name']} ({t['video_count']} videos)",
+                    key="dossier_topic_select"
+                )
+            with col_d2:
+                dossier_fmt = st.selectbox("Format", ["markdown", "json"], key="dossier_fmt")
+                
+            if st.button("Generate & Preview Dossier", type="primary", use_container_width=True):
+                with st.spinner(f"Compiling Dossier for {selected_topic['name']}..."):
+                    dossier_content = exporter.export_topic_dossier(selected_topic['name'], fmt=dossier_fmt)
+                    ext = "md" if dossier_fmt == "markdown" else "json"
+                    st.download_button(
+                        "Download Dossier", 
+                        dossier_content, 
+                        f"dossier_{selected_topic['name'].replace(' ', '_').lower()}.{ext}",
+                        use_container_width=True
+                    )
+                    if dossier_fmt == "markdown":
+                        with st.expander("Preview Intelligence Dossier", expanded=True):
+                            st.markdown(dossier_content)
+        else:
+            st.warning("No consolidated topics found. Please index more content to generate dossiers.")
+
+        st.markdown("---")
         section_header("Vault Maintenance & Portability", icon="📦")
         
         tab_snapshot, tab_obsidian = st.tabs(["Vault Snapshot", "Obsidian Wiki Sync"])

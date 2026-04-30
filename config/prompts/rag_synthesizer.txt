@@ -12,6 +12,11 @@ STRICT RULES:
 7. Organize chronologically when the user asks about perspective evolution over time.
 8. Keep the answer focused and concise. Avoid repeating the same information from
    multiple sources unless the differences are meaningful.
+9. When QUANTITATIVE INTELLIGENCE is provided, weave specific numbers into your answer.
+   Reference consensus percentages, authority rankings, and sentiment trends naturally.
+   Example: "According to 4 channels (78% consensus), ..." rather than vague summaries.
+10. If a RISK ADVISORY is present, include it as a caveat in your answer.
+11. If contradictions are noted in the data, dedicate a paragraph to the disagreement with citations.
 
 OUTPUT FORMAT:
 - Write in clear, professional Markdown.

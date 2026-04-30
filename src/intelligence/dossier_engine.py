@@ -26,108 +26,143 @@ class DossierEngine:
         self.analysis = analysis
 
     def generate_topic_dossier(self, topic: str) -> dict:
-        """Compile a full intelligence dossier for a specific topic."""
+        """Compile a full 8-section intelligence dossier for a specific topic."""
         logger.info(f"Generating comprehensive dossier for topic: {topic}")
         
-        # 1. Quantitative Timeline (Phase 1)
+        # 1. Quantitative Timeline & Velocity
         velocity_data = self.analysis.get_topic_velocity(topic)
-        sentiment_summary = self.analysis.get_topic_sentiment_summary(topic)
         
-        # 2. Graph Insights (Phase 2)
-        # Find top authorities for this topic (channels discussing it most)
-        try:
-            authorities = self.graph.run_query(
-                """MATCH (c:Channel)-[:PUBLISHED]->(v:Video)-[r:DISCUSSES]->(t:Topic {name: $topic})
-                   RETURN c.name AS name, count(v) AS mentions, avg(r.relevance) AS avg_relevance
-                   ORDER BY mentions DESC, avg_relevance DESC
-                   LIMIT 5""",
-                topic=topic.lower().strip()
-            )
-        except Exception as e:
-            logger.warning(f"Failed to fetch authorities for dossier: {e}")
-            authorities = []
+        # 2. Expert Network & Authority Matrix
+        authorities = self.graph.get_topic_authorities(topic)
         
-        # Find contradictions specifically for this topic
+        # 3. Knowledge Taxonomy
+        taxonomy = self.graph.get_topic_taxonomy_context(topic)
+        
+        # 4. Sentiment & Tone Distribution
+        sentiment = self.analysis.get_topic_sentiment_summary(topic)
+        
+        # 5. Contradiction Matrix
         contradictions = self.graph.get_contradiction_matrix(topic)
         
-        # 3. Consensus & Narrative Analysis
-        # Fetch a sample of claims to determine stance
-        claims = self.db.search_claims(topic, limit=20)
-        stance_analysis = self.analysis.analyze_claim_stances(topic, claims)
+        # 6. Consensus & Narrative Pillars
+        claims = self.db.search_claims(topic, limit=30)
+        stance = self.analysis.analyze_claim_stances(topic, claims)
         
-        # 4. Compile the report structure
+        # 7. Coverage Gap Analysis
+        from src.intelligence.analysis_engine import CoverageAnalyzer
+        coverage_analyzer = CoverageAnalyzer(self.db)
+        coverage = coverage_analyzer.analyze_topic_coverage(topic)
+        suggestions = coverage_analyzer.suggest_ingestions(topic)
+        
+        # 8. Compile the report structure
         dossier = {
             "metadata": {
                 "topic": topic,
                 "generated_at": datetime.now().isoformat(),
-                "version": "1.0"
+                "version": "2.0"
             },
-            "executive_summary": stance_analysis.get("prevailing_narrative", "No summary available."),
-            "quantitative_intelligence": {
-                "total_mentions": velocity_data.get("total_mentions", 0),
-                "timeline": velocity_data.get("timeline", []),
-                "average_sentiment": sentiment_summary.get("average_sentiment", 0.0),
-                "sentiment_label": sentiment_summary.get("label", "Neutral")
+            "sections": {
+                "executive_summary": stance.get("prevailing_narrative", "No summary available."),
+                "quantitative_timeline": velocity_data,
+                "authority_matrix": authorities,
+                "taxonomy": taxonomy,
+                "sentiment": sentiment,
+                "contradictions": contradictions,
+                "narrative_pillars": stance,
+                "coverage_gaps": {
+                    "analysis": coverage,
+                    "suggestions": suggestions
+                }
             },
-            "authority_matrix": authorities,
-            "contradictions": contradictions,
-            "stance_analysis": stance_analysis,
-            "sources": [
+            "raw_sources": [
                 {
                     "video_id": c.video_id,
                     "claim": c.claim_text,
                     "speaker": c.speaker
-                } for c in claims[:10]
+                } for c in claims[:15]
             ]
         }
         
         return dossier
 
     def format_dossier_markdown(self, dossier: dict) -> str:
-        """Format the dossier dict into a beautiful Markdown report."""
-        topic = dossier["metadata"]["topic"]
-        q = dossier["quantitative_intelligence"]
-        s = dossier["stance_analysis"]
+        """Format the dossier dict into a professional 8-section Markdown report."""
+        m = dossier["metadata"]
+        s = dossier["sections"]
+        topic = m["topic"]
         
         lines = [
-            f"# 📂 Intelligence Dossier: {topic.upper()}",
-            f"**Generated on:** {dossier['metadata']['generated_at']}\n",
+            f"# 📜 Intelligence Dossier: {topic.upper()}",
+            f"**Generated:** {datetime.fromisoformat(m['generated_at']).strftime('%Y-%m-%d %H:%M')}",
+            f"**Intelligence Version:** {m['version']}\n",
             "---",
-            "## 📝 Executive Summary",
-            dossier["executive_summary"],
+            "## 1. 📝 Executive Summary",
+            s["executive_summary"],
             "\n---",
-            "## 📈 Quantitative Insights",
-            f"- **Total Mentions in Vault:** {q['total_mentions']}",
-            f"- **Aggregate Sentiment:** {q['sentiment_label']} ({q['average_sentiment']:.2f})",
-            f"- **Narrative Stance:** {s['stance']}",
-            f"- **Consensus Score:** {s['consensus_score'] * 100:.0f}%\n",
-            "### 📅 Mentions Timeline",
-            "| Date | Mentions |",
-            "|---|---|",
+            "## 2. 📈 Quantitative Timeline",
+            f"**Mention Velocity:** `{s['quantitative_timeline']['velocity']:.2f}x` ({s['quantitative_timeline']['trend'].upper()})",
+            f"**Total Vault Mentions:** {s['quantitative_timeline']['total_mentions']}",
+            "\n*Timeline markers found in vault metadata across multiple videos.*",
+            "\n---",
+            "## 3. 🎓 Expert Network (Authority Matrix)",
         ]
         
-        for entry in q["timeline"][-10:]: # Show last 10 dates
-            lines.append(f"| {entry['date']} | {entry['mentions']} |")
-            
-        lines.append("\n---")
-        lines.append("## 🏆 Authority Matrix (Top Channels)")
-        lines.append("| Channel | Mentions | Avg. Relevance |")
-        lines.append("|---|---|---|")
-        for auth in dossier["authority_matrix"]:
-            lines.append(f"| {auth['name']} | {auth['mentions']} | {auth['avg_relevance']:.2f} |")
-            
-        lines.append("\n---")
-        lines.append("## ⚖️ Contradiction & Conflict Analysis")
-        if dossier["contradictions"]:
-            for con in dossier["contradictions"]:
-                lines.append(f"- **Conflict with {con['topic_b']}**: Intensity {con['intensity']}")
+        if s["authority_matrix"]:
+            lines.append("| Entity | Type | Relevance |")
+            lines.append("|--------|------|-----------|")
+            for auth in s["authority_matrix"][:5]:
+                lines.append(f"| {auth['name']} | {auth['type']} | {auth.get('relevance', auth.get('avg_relevance', 0.0)):.2f} |")
         else:
-            lines.append("_No direct topical contradictions detected in the graph._")
+            lines.append("_No specialized authorities identified for this specific topic._")
             
-        lines.append("\n---")
-        lines.append("## 📑 Supporting Evidence (Sample Claims)")
-        for src in dossier["sources"]:
-            lines.append(f"- **{src['speaker']}**: \"{src['claim']}\" ([View Source](https://www.youtube.com/watch?v={src['video_id']}))")
+        lines.extend([
+            "\n---",
+            "## 4. 🕸 Knowledge Taxonomy",
+            f"**Parent Topic:** `{s['taxonomy'].get('parent_topic', 'Root')}`",
+            f"**Subtopics:** {', '.join(s['taxonomy'].get('subtopics', [])) or 'None detected'}",
+            "\n---",
+            "## 5. 🎭 Sentiment & Tone Distribution",
+            f"**Overall Sentiment:** {s['sentiment'].get('label', 'Neutral')} ({s['sentiment'].get('average_sentiment', 0.0):.2f})",
+            "\n*Based on aggregated analysis of transcript segments and claim-level tone.*",
+            "\n---",
+            "## 6. ⚖️ Contradiction Matrix",
+        ])
+        
+        if s["contradictions"]:
+            lines.append("| Subject A | Subject B | Intensity | Status |")
+            lines.append("|-----------|-----------|-----------|--------|")
+            for c in s["contradictions"][:5]:
+                lines.append(f"| {c['topic_a']} | {c['topic_b']} | {c['intensity']:.2f} | CONFLICT |")
+        else:
+            lines.append("_No direct contradictions detected in current vault data._")
             
-        lines.append(f"\n---\n*Generated by KnowledgeVault-YT Dossier Engine*")
+        lines.extend([
+            "\n---",
+            "## 7. 🏛 Consensus & Narrative Pillars",
+            f"**Narrative Stance:** {s['narrative_pillars'].get('stance', 'Balanced')}",
+            f"**Consensus Score:** `{s['narrative_pillars'].get('consensus_score', 0.0) * 100:.1f}%`",
+            f"\n**Core Pillars:**\n{s['narrative_pillars'].get('prevailing_narrative', 'N/A')}",
+            "\n---",
+            "## 8. 🔍 Coverage Gaps & Suggested Ingestions",
+            f"**Vault Depth Score:** `{s['coverage_gaps']['analysis']['score'] * 100:.1f}%` ({s['coverage_gaps']['analysis']['status']})",
+        ])
+        
+        if s["coverage_gaps"]["analysis"]["gaps"]:
+            lines.append("\n**Identified Gaps:**")
+            for gap in s["coverage_gaps"]["analysis"]["gaps"]:
+                lines.append(f"- ⚠️ {gap}")
+                
+        if s["coverage_gaps"]["suggestions"]:
+            lines.append("\n**Recommended Next Actions:**")
+            for sug in s["coverage_gaps"]["suggestions"]:
+                lines.append(f"- [ ] {sug}")
+        
+        lines.extend([
+            "\n---",
+            "## 📑 Referenced Sources (Vault Sample)",
+        ])
+        
+        for i, src in enumerate(dossier["raw_sources"][:10], 1):
+            lines.append(f"{i}. **{src['speaker'] or 'Unknown'}**: \"{src['claim']}\" (Video: {src['video_id']})")
+            
         return "\n".join(lines)

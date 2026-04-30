@@ -52,11 +52,12 @@ def render(db: SQLiteStore, vs: VectorStore, run_repair_background=None):
 
 def render_analytical_lab(db, run_repair_background):
     """Knowledge Map, Clusters, Experts, Bridges."""
-    sub_tab1, sub_tab2, sub_tab3, sub_tab4 = st.tabs([
+    sub_tab1, sub_tab2, sub_tab3, sub_tab4, sub_tab5 = st.tabs([
         "Knowledge Map",
         "Topic Clusters",
         "Expert Network",
-        "Thematic Bridges"
+        "Thematic Bridges",
+        "Coverage Gaps"
     ])
     
     with sub_tab1:
@@ -70,6 +71,9 @@ def render_analytical_lab(db, run_repair_background):
         
     with sub_tab4:
         render_thematic_bridges(db, run_repair_background)
+
+    with sub_tab5:
+        render_coverage_gaps(db)
 
 
 # --- Analytical Lab Implementation ---
@@ -207,6 +211,36 @@ def render_thematic_bridges(db: SQLiteStore, run_repair_background=None):
             st.write(b.insight)
 
 
+def render_coverage_gaps(db: SQLiteStore):
+    """Detailed vault gap analysis."""
+    section_header("Intelligence Coverage Analysis", icon="🔍")
+    
+    from src.intelligence.analysis_engine import CoverageAnalyzer
+    analyzer = CoverageAnalyzer(db)
+    
+    gaps = analyzer.get_vault_gaps()
+    if not gaps:
+        info_card("No Gaps Detected", "Your vault has high citation density for indexed topics.")
+        return
+
+    st.markdown("### ⚠️ Identified Knowledge Gaps")
+    st.caption("Topics with thin evidence or single-source dependency.")
+    
+    for gap in gaps:
+        with glass_card():
+            c1, c2, c3 = st.columns([2, 1, 1])
+            with c1:
+                st.markdown(f"**{gap['topic']}**")
+                st.caption(gap['primary_gap'])
+            with c2:
+                st.progress(gap['score'], text=f"Depth: {gap['score']*100:.0f}%")
+            with c3:
+                if st.button("Suggest Ingest", key=f"sug_{gap['topic']}", use_container_width=True):
+                    suggestions = analyzer.suggest_ingestions(gap['topic'])
+                    for s in suggestions:
+                        st.info(s)
+
+
 # --- Comparative Studio Implementation ---
 
 def render_comparative_studio(db, vs):
@@ -258,12 +292,69 @@ def render_research_agent(db):
         st.info("The agent deep-scans your vault to synthesize formal briefs.")
 
     st.divider()
-    section_header("Recent Briefs")
-    reports = db.get_research_reports()
-    for report in reports:
-        with st.expander(f"{report.title} ({report.created_at})"):
-            st.markdown(report.summary)
-            if os.path.exists(report.file_path):
-                with open(report.file_path, "r") as f:
-                    content = f.read()
-                st.download_button("Download", content, os.path.basename(report.file_path), key=f"dl_{report.report_id}")
+    
+    tab_reports, tab_briefings = st.tabs(["Research Papers", "Automated Briefings"])
+    
+    with tab_reports:
+        section_header("Recent Reports", icon="📑")
+        reports = db.get_research_reports()
+        for report in reports:
+            with st.expander(f"{report.title} ({report.created_at})"):
+                content = report.summary
+                if os.path.exists(report.file_path):
+                    try:
+                        with open(report.file_path, "r") as f:
+                            content = f.read()
+                    except Exception as e:
+                        logger.error(f"Failed to read report file {report.file_path}: {e}")
+                
+                st.markdown(content)
+                
+                if os.path.exists(report.file_path):
+                    st.download_button("Download", content, os.path.basename(report.file_path), key=f"dl_{report.report_id}")
+                    
+    with tab_briefings:
+        render_epiphany_briefings(db)
+
+
+def render_epiphany_briefings(db: SQLiteStore):
+    """Cross-channel automated insights."""
+    section_header("Autonomous Briefings", icon="⚡")
+    
+    briefings = db.get_insight_briefings(limit=10)
+    if not briefings:
+        info_card("No Briefings Yet", "The Epiphany Engine is scanning for cross-channel patterns.")
+        if st.button("Trigger Analysis", type="primary"):
+            from src.intelligence.epiphany_engine import EpiphanyEngine
+            from src.intelligence.rag_engine import RAGEngine
+            from src.storage.graph_store import GraphStore
+            from src.storage.vector_store import VectorStore
+            
+            ee = EpiphanyEngine(db, GraphStore(), RAGEngine(db, VectorStore()))
+            with st.spinner("Finding connections..."):
+                new_briefs = ee.generate_daily_briefing()
+                if new_briefs:
+                    st.success(f"Discovered {len(new_briefs)} new insights.")
+                    st.rerun()
+                else:
+                    st.warning("No new cross-channel patterns detected.")
+        return
+
+    for b in briefings:
+        with glass_card():
+            st.markdown(f"### {b.topic}")
+            st.markdown(f"**Relationship:** `{b.relationship_type}` | **Confidence:** `{b.confidence_score*100:.0f}%`")
+            st.caption(f"Sources: {', '.join(b.channels_involved)}")
+            
+            with st.expander("Read Summary"):
+                st.markdown(b.summary_markdown)
+                if b.insight:
+                    st.info(f"**Pro-Tip:** {b.insight}")
+                
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.markdown("**Agreements**")
+                    for a in b.key_agreements: st.write(f"- {a}")
+                with c2:
+                    st.markdown("**Contradictions**")
+                    for d in b.key_differences: st.write(f"- {d}")

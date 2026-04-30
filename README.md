@@ -8,12 +8,23 @@ KnowledgeVault-YT is a specialized research intelligence system that autonomousl
 
 KnowledgeVault-YT delivers professional-grade intelligence through a robust multi-stage pipeline:
 
-*   **Autonomous Ingestion Hub**: Discovers and harvests metadata and transcripts from channels, playlists, or individual videos with robust URL validation.
-*   **Intelligent Triage Engine**: Uses a dual-phase LLM system to filter signal from noise, ensuring only knowledge-dense content enters the vault.
+*   **Intelligence Studio**: A deep synthesis hub featuring an Analytical Lab (Knowledge Maps, Topic Clusters), Comparative Studio (multi-source analysis), and a Research Agent for autonomous formal briefings.
+*   **Autonomous Ingestion Hub**: Discovers and harvests metadata and transcripts from channels, playlists, or individual videos with robust URL validation and bulk processing.
+*   **Research Chat (RAG)**: A conversational intelligence interface with session history, citation-backed answers, and one-click discovery bookmarking.
 *   **Hybrid Three-Layer Storage**: Combines relational (SQLite), vector (ChromaDB), and graph (Neo4j) databases for comprehensive retrieval and connection discovery.
-*   **Advanced Intelligence Center**: A unified command bar for hybrid semantic search, saved discoveries, and pinned research queries.
-*   **Operational Resilience**: 10-stage pipeline with atomic checkpoints, fleet monitoring, and automated repair utilities.
-*   **Atmospheric Design**: A premium "Nebula-Glass" aesthetic with native dark/light mode toggles and micro-animations.
+*   **Intelligent Triage Engine**: Uses a dual-phase LLM system (Rules + LLM Classifier) to filter signal from noise, ensuring only knowledge-dense content enters the vault.
+*   **Operational Resilience**: 10-stage pipeline with atomic checkpoints, fleet monitoring, and automated vault health repair utilities.
+*   **Atmospheric Design**: A premium "Nebula-Glass" aesthetic with native Dark (Void Nebula) and Light (Stellar Lab) mode toggles.
+
+---
+
+## 🎯 Use Cases
+
+*   **Cross-Channel Trend Analysis**: Identify how different experts discuss the same topic over time.
+*   **Technical Mastery**: Extract actionable "Execution Blueprints" from tutorials with timestamped steps.
+*   **Authority Discovery**: Map "Guest Networks" to find key opinion leaders and their appearances across different channels.
+*   **Knowledge Gap Identification**: Automatically detect topics in your vault that lack sufficient evidence or multi-source validation.
+*   **Autonomous Briefing**: Generate formal research papers and "Epiphany Briefings" on complex subjects using your private knowledge base.
 
 ---
 
@@ -36,8 +47,9 @@ KnowledgeVault-YT delivers professional-grade intelligence through a robust mult
 | Requirement | Purpose |
 |---|---|
 | **Python 3.11+** | Core Runtime |
-| **Ollama** | Local LLM inference (Llama 3.2 + Nomic Embed) |
+| **Ollama** | Local LLM inference (**Llama 3.2** + **Nomic Embed**) |
 | **Docker Compose** | Production-grade deployment (Recommended) |
+| **Neo4j** | Graph database (Included in Docker) |
 
 ### Installation (Docker)
 
@@ -62,9 +74,10 @@ The platform employs a modular architecture designed for failure isolation and c
 ```mermaid
 graph TB
     subgraph "Interface (Nebula-Glass)"
-        UI["Intelligence Center"]
-        OP["Operations Dashboard"]
-        EX["Execution OS"]
+        IC["Intelligence Center"]
+        IS["Intelligence Studio"]
+        RC["Research Chat"]
+        OD["Operations Dashboard"]
     end
 
     subgraph "Orchestration"
@@ -74,7 +87,8 @@ graph TB
 
     subgraph "Intelligence"
         RAG["Hybrid RAG Engine"]
-        ENT["Entity & Topic Resolver"]
+        AGENT["Research Agent"]
+        EE["Epiphany Engine (Graph)"]
     end
 
     subgraph "Storage"
@@ -83,11 +97,13 @@ graph TB
         GRA["Neo4j (Knowledge Graph)"]
     end
 
-    UI --> OR
+    IC --> OR
     OR --> SQL
     OR --> VEC
     OR --> GRA
-    UI --> RAG
+    RC --> RAG
+    IS --> AGENT
+    AGENT --> EE
 ```
 
 ---
@@ -95,8 +111,8 @@ graph TB
 ## 📦 Data Portability & Collaboration
 
 *   **Vault Snapshots**: Generate portable `.kvvault` ZIP packages containing your entire database and intelligence logs.
-*   **Mission Packages**: Export specific research missions or chat briefings for collaboration with other investigators.
 *   **Obsidian Sync**: One-click generation of a Markdown-based knowledge base for Obsidian.
+*   **Mission Packages**: Export specific research missions or chat briefings for collaboration with other investigators.
 
 ---
 

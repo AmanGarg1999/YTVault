@@ -21,9 +21,9 @@ The **Operations Dashboard** serves as the mission control for the intelligence 
 
 ### Vault Health Monitor
 A specialized utility to verify consistency across the triple-store architecture:
-- **SQL Archive**: Authoritative metadata record.
-- **Vector Index**: Semantic search reachability.
-- **Knowledge Graph**: Entity connection density.
+- **Consistency Scores**: Percentage of videos with matching records in SQL, Vector, and Graph stores.
+- **Automated Repair**: A background process that identifies missing chunks, embeddings, or graph nodes and re-syncs them without re-harvesting.
+- **Integrity Checks**: Verifies transcript reachability and summary validity.
 
 ---
 
@@ -58,6 +58,7 @@ A "Purge" operation is required to permanently remove intelligence from all stor
 The **Export Center** provides total data portability:
 - **Bundled Archive**: Contains a SQLite backup, chat mission briefings, and a system manifest.
 - **Independent Recovery**: Snapshots are designed to be imported into a fresh KnowledgeVault instance.
+- **Obsidian Sync**: Exports processed intelligence as a structured Markdown vault.
 
 ---
 
@@ -67,6 +68,6 @@ The **Export Center** provides total data portability:
 | :--- | :--- | :--- |
 | **Start Harvest** | Intelligence Center | As needed |
 | **Monitor Fleet** | Operations Dashboard | During active scans |
-| **Verify Store Health**| Operations Dashboard | Weekly |
-| **Generate Backup** | Export Center | Monthly |
+| **Repair Vault Health**| Operations Dashboard | When consistency < 100% |
+| **Generate Snapshot** | Export Center | Monthly |
 | **Clear Recycle Bin** | Settings | Monthly |
